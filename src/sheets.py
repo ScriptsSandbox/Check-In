@@ -6,7 +6,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 
 class Sheet:
-    CACHE_TIME = 60 * 30
+    CACHE_TIME = 60 
 
     def __init__(self, db):
         self.db = db

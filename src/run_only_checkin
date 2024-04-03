@@ -6,4 +6,4 @@ echo "" >> "$output_file"
 
 date "+%Y-%m-%d %H:%M:%S" >> "$output_file"
 source ../.venv/bin/activate
-python main.py >> log.txt
+python main_checkin_only.py >> log.txt
