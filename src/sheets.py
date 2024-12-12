@@ -53,7 +53,7 @@ class SheetManager:
             logging.info("User Database Loaded")
             self.activity_db = Sheet(
                 client.open_by_url(
-                    "https://docs.google.com/spreadsheets/d/10aI03U-RTyb2EJzu2R7Jx2QNVH5PGTzKJL4ZyzTscKM/edit?gid=1943412076#gid=1943412076"
+                    "https://docs.google.com/spreadsheets/d/1w--D-1_yhq9uTgcbClIEMo7Hon_wTiCtAbBbZRfCsyc/edit?gid=0#gid=0"
                 ).sheet1
             )
             logging.info("Activity Database Loaded")
