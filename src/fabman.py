@@ -44,7 +44,8 @@ class fabman:
             logging.info(f"{emailAddress} already had account. Using old account.")
         else:
             logging.warning(f"Account creation failed: {attempt_member.status_code}\n")
-            logging.info(attempt_member.json())
+            logging.info(attempt_member.json()
+                        )
             return
 
         actual_id = [user["id"] for user in member_id]
