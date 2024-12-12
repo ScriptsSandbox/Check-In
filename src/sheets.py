@@ -47,17 +47,17 @@ class SheetManager:
             )
             client = gspread.authorize(creds)
             self.user_db = Sheet(
-                client.open("User Database").sheet1
+                client.open("User Database SIO").sheet1
             )  # Open the spreadhseet
 
             logging.info("User Database Loaded")
             self.activity_db = Sheet(
                 client.open_by_url(
-                    "https://docs.google.com/spreadsheets/d/1aLBb1J2ifoUG2UAxHHbwxNO3KrIIWoI0pnZ14c5rpOM/edit?usp=drive_web&ouid=104398832910104737872"
+                    "https://docs.google.com/spreadsheets/d/10aI03U-RTyb2EJzu2R7Jx2QNVH5PGTzKJL4ZyzTscKM/edit?gid=1943412076#gid=1943412076"
                 ).sheet1
             )
             logging.info("Activity Database Loaded")
-            self.waiver_db = Sheet(client.open("Waiver Signatures").sheet1)
+            self.waiver_db = Sheet(client.open("Waiver Signatures SIO").sheet1)
             logging.info("Waiver Database Loaded")
         except Exception as e:
             logging.warning(
