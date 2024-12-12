@@ -5,9 +5,9 @@ import datetime
 fab_file = open("fabtoken.txt", "r")
 fabman_key = fab_file.readline()[:-1]
 base_url = "https://fabman.io/api/v1"
-fabman_space = 1742
+fabman_space = 2628
 fabman_account = 1046
-fabman_DIBUser = 5657
+fabman_DIBUser = 9464
 
 
 class fabman:
