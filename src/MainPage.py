@@ -58,16 +58,16 @@ class MainPage(Frame):
 
         canvas.create_text(
             67.0,
-            270.0,
+            170.0,
             anchor="nw",
-            text="UCSD Makerspace",
+            text="Scripps Sandbox\nMakerspace",
             fill="#F5F0E6",
             font=("Montserrat", 113 * -1, "bold"),
         )
 
         canvas.create_text(
             77.0,
-            377.66796875,
+            425,
             anchor="nw",
             text="Welcome Desk",
             fill="#F5F0E6",
