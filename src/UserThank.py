@@ -72,7 +72,7 @@ class UserThank(Frame):
             429.0,
             550.0,
             anchor="nw",
-            text="UCSD Makerspace",
+            text="Scripps Sandbox Makerspace",
             fill="#F5F0E6",
             font=("Montserrat", 45 * -1),
         )
