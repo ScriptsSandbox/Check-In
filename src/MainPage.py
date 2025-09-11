@@ -60,19 +60,20 @@ class MainPage(Frame):
             100.5,
             255.0,
             anchor="nw",
-
-            text="Scripps Sandbox",
-
+            text="SCRIPPS SANDBOX",
             fill="#F5F0E6",
             font=("Refrigerator Deluxe", 113 * -1, "bold"),
         )
 
         canvas.create_text(
+
             115.5,
             637.5,
             anchor="nw",
-            text="Welcome Desk",
+            text="MAKERSPACE",
             fill="#F5F0E6",
+
+
             font=("Refrigerator Deluxe", 73 * -1, "bold"),
         )
 
