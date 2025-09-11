@@ -66,12 +66,15 @@ class MainPage(Frame):
         )
 
         canvas.create_text(
-            100.5,
-            388.0,
+
+            115.5,
+            637.5,
             anchor="nw",
             text="MAKERSPACE",
             fill="#F5F0E6",
-            font=("Refrigerator Deluxe", 113 * -1, "bold"),
+
+
+            font=("Refrigerator Deluxe", 73 * -1, "bold"),
         )
 
         image_image_3 = PhotoImage(file=relative_to_assets("image_3.png"))
