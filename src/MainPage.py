@@ -27,8 +27,8 @@ class MainPage(Frame):
         canvas = Canvas(
             self,
             bg="#153246",
-            height=720,
-            width=1280,
+            height=1080,
+            width=1920,
             bd=0,
             highlightthickness=0,
             relief="ridge",
@@ -39,17 +39,17 @@ class MainPage(Frame):
 
         self.photoList.append(image_image_1)
 
-        image_1 = canvas.create_image(640.0, 360.0, image=image_image_1)
+        image_1 = canvas.create_image(960.0, 540.0, image=image_image_1)
 
         image_image_2 = PhotoImage(file=relative_to_assets("image_2.png"))
 
         self.photoList.append(image_image_2)
 
-        image_2 = canvas.create_image(639.333984375, 359.333984375, image=image_image_2)
+        image_2 = canvas.create_image(959.0, 539.0, image=image_image_2)
 
         canvas.create_text(
-            336.0,
-            602.0,
+            504.0,
+            903.0,
             anchor="nw",
             text="Please tap ID on the black box to start",
             fill="#F5F0E6",
@@ -57,30 +57,28 @@ class MainPage(Frame):
         )
 
         canvas.create_text(
-            67.0,
-            170.0,
+            100.5,
+            255.0,
             anchor="nw",
-
-            text="Scripps Sandbox",
-
+            text="SCRIPPS SANDBOX",
             fill="#F5F0E6",
             font=("Refrigerator Deluxe", 113 * -1, "bold"),
         )
 
         canvas.create_text(
-            77.0,
-            425,
+            100.5,
+            388.0,
             anchor="nw",
-            text="Welcome Desk",
+            text="MAKERSPACE",
             fill="#F5F0E6",
-            font=("Inter", 73 * -1),
+            font=("Refrigerator Deluxe", 113 * -1, "bold"),
         )
 
         image_image_3 = PhotoImage(file=relative_to_assets("image_3.png"))
 
         self.photoList.append(image_image_3)
 
-        image_3 = canvas.create_image(88.0, 90.0, image=image_image_3)
+        image_3 = canvas.create_image(132.0, 135.0, image=image_image_3)
 
         button_image_1 = PhotoImage(file=relative_to_assets("image_4.png"))
 
@@ -96,7 +94,7 @@ class MainPage(Frame):
             bd=0,
         )
 
-        button_1.place(x=53.0, y=55.0)
+        button_1.place(x=79.5, y=82.5)
 
         button_2 = Button(
             self,
@@ -112,4 +110,4 @@ class MainPage(Frame):
             font=("Inter", 36 * -1),
         )
 
-        button_2.place(x=1130.0, y=40.0)
+        button_2.place(x=1695.0, y=60.0)
