@@ -47,34 +47,32 @@ class MainPage(Frame):
 
         image_2 = canvas.create_image(959.0, 539.0, image=image_image_2)
 
+        font_heading = ("Refrigerator Deluxe", -160, "bold")
         canvas.create_text(
-            504.0,
-            903.0,
-            anchor="nw",
-            text="Please tap ID on the black box to start",
-            fill="#F5F0E6",
-            font=("Inter", 32 * -1),
-        )
-
-        canvas.create_text(
-            100.5,
-            255.0,
+            83,
+            380,
             anchor="nw",
             text="SCRIPPS SANDBOX",
+            font=font_heading,
             fill="#F5F0E6",
-            font=("Refrigerator Deluxe", 113 * -1, "bold"),
         )
-
         canvas.create_text(
-
-            115.5,
-            637.5,
+            83,
+            380 + 150,
             anchor="nw",
             text="MAKERSPACE",
+            font=font_heading,
             fill="#F5F0E6",
+        )
 
-
-            font=("Refrigerator Deluxe", 73 * -1, "bold"),
+        font_instr = ("Inter", -40)
+        canvas.create_text(
+            960,
+            969,
+            anchor="center",
+            text="Please tap ID on the black box to start",
+            font=font_instr,
+            fill="#F5F0E6",
         )
 
         image_image_3 = PhotoImage(file=relative_to_assets("image_3.png"))
@@ -97,7 +95,7 @@ class MainPage(Frame):
             bd=0,
         )
 
-        button_1.place(x=79.5, y=82.5)
+        button_1.place(x=51, y=54, width=65, height=65)
 
         button_2 = Button(
             self,
