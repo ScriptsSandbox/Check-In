@@ -82,3 +82,68 @@ class SheetManager:
 
     def get_waiver_db_data(self, force_update=False):
         return self.waiver_db.get_data(force_update)
+
+    # ------------------------------------------------------------------
+    # Helper methods for Option A linking workflow
+    # ------------------------------------------------------------------
+
+    def _user_header(self):
+        return [h.strip() for h in self.get_user_db().row_values(1)]
+
+    def get_user_by_card_uuid(self, card_uuid):
+        data = self.get_user_db_data()
+        for row in data:
+            if str(row.get("card_uuid") or row.get("Card UUID")) == card_uuid:
+                return row
+        return None
+
+    def get_user_by_email(self, email):
+        data = self.get_user_db_data()
+        matches = [
+            r
+            for r in data
+            if (r.get("email") or r.get("Email Address", "")).strip().lower() == email
+        ]
+        return matches if len(matches) > 1 else (matches[0] if matches else None)
+
+    def update_user_card_uuid(self, email, new_uuid):
+        sheet = self.get_user_db()
+        header = self._user_header()
+        email_col = (
+            header.index("email") + 1 if "email" in header else header.index("Email Address") + 1
+        )
+        uuid_col = (
+            header.index("card_uuid") + 1 if "card_uuid" in header else header.index("Card UUID") + 1
+        )
+        updated_col = header.index("updated_at") + 1 if "updated_at" in header else None
+        cell = sheet.find(email)
+        sheet.update_cell(cell.row, uuid_col, new_uuid)
+        if updated_col:
+            from datetime import datetime
+
+            sheet.update_cell(cell.row, updated_col, datetime.utcnow().isoformat())
+
+    def get_waiver_by_email(self, email):
+        data = self.get_waiver_db_data()
+        for row in data:
+            if (row.get("email") or row.get("Email", "")).strip().lower() == email:
+                return row
+        return None
+
+    def insert_user(self, user_row):
+        from datetime import datetime
+
+        sheet = self.get_user_db()
+        header = self._user_header()
+        now = datetime.utcnow().isoformat()
+        user_row.setdefault("created_at", now)
+        user_row.setdefault("updated_at", now)
+        row = [user_row.get(h, "") for h in header]
+        sheet.append_row(row)
+        self.get_user_db_data(force_update=True)
+
+    def append_activity(self, activity_row):
+        sheet = self.get_activity_db()
+        header = [h.strip() for h in sheet.row_values(1)]
+        row = [activity_row.get(h, "") for h in header]
+        sheet.append_row(row)
