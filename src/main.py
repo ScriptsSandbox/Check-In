@@ -8,6 +8,7 @@ from threading import Thread
 from UserWelcome import *
 from ManualFill import *
 from CheckInNoId import *
+from linking import UnlinkedCard, finish_checkin
 import global_
 import socket
 import logging
@@ -83,71 +84,25 @@ def myLoop(app, reader):
 
             global_.setRFID(tag)
 
-            # Get a list of all users
-            user_data = global_.sheets.get_user_db_data()
+            try:
+                curr_user = global_.sheets.get_user_by_card_uuid(tag)
+            except Exception:
+                logging.warning("Unable to lookup user by card", exc_info=True)
+                err = Label(
+                    app.get_frame(MainPage),
+                    text="We're having trouble linking right now. Please try again or see staff.",
+                    font=("Inter", 25 * -1),
+                )
+                err.pack(pady=40)
+                err.after(4000, lambda: err.destroy())
+                continue
 
-            # Get a list of all waiver signatures
-            waiver_data = global_.sheets.get_waiver_db_data()
-
-            curr_user = "None"
-            curr_user_w = "None"
-
-            for i in user_data:
-                if i["Card UUID"] == tag:
-                    curr_user = i
-
-            if curr_user != "None":
-                for i in waiver_data:
-                    waiver_id = i["A_Number"].lower()
-                    waiver_email = i["Email"].lower()
-                    user_id = curr_user["Student ID"].lower()
-                    user_email = curr_user["Email Address"].lower()
-
-                    user_id = user_id.replace("+e?", "")[:9]
-                    waiver_id = waiver_id.replace("+e?", "")[:9]
-
-                    if user_id[0] == "a":
-                        user_id = user_id[1:]
-
-                    if waiver_id[0] == "a":
-                        waiver_id = waiver_id[1:]
-
-                    if user_id == waiver_id or user_email == waiver_email:
-                        curr_user_w = i
-
-            ############################
-            # All scenarios for ID tap #
-            ############################
-
-            if curr_user == "None" and curr_user_w == "None":
-                logging.info("User was not found in the database")
-                global_.traffic_light.set_red()
-                app.show_frame(NoAccNoWaiver)
-                app.after(3000, lambda: app.show_frame(NoAccNoWaiverSwipe))
-            elif curr_user_w == "None":
-                logging.info("User does not have waiver")
-                global_.traffic_light.set_yellow()
-                app.show_frame(AccNoWaiver)
-                app.after(3000, lambda: app.show_frame(AccNoWaiverSwipe))
-            elif curr_user == "None":
-                logging.info("User has a waiver but no account")
-                app.show_frame(WaiverNoAcc)
-                app.after(3000, lambda: app.show_frame(WaiverNoAccSwipe))
+            if curr_user:
+                name = curr_user.get("first_name") or curr_user.get("Name") or ""
+                finish_checkin(name)
             else:
-                new_row = [
-                    util.getDatetime(),
-                    int(time.time()),
-                    curr_user["Name"],
-                    str(tag),
-                    "User Checkin",
-                    "",
-                    "",
-                    "",
-                ]
-                activity_log = global_.sheets.get_activity_db()
-                activity_log.append_row(new_row)
-                global_.traffic_light.set_green()
-                global_.app.get_frame(UserWelcome).displayName(curr_user["Name"])
+                logging.info("User was not found in the database")
+                app.show_frame(UnlinkedCard)
 
             last_time = time.time()
             last_tag = tag

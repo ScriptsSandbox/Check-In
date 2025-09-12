@@ -14,6 +14,7 @@ from UserThank import UserThank
 from UserWelcome import UserWelcome
 from WaiverNoAcc import WaiverNoAcc
 from WaiverNoAccSwipe import WaiverNoAccSwipe
+from linking import UnlinkedCard, EmailLookup, MinimalInfo
 
 
 TIMEOUT_DICT = {AccNoWaiverSwipe: 30000, QRCodes: 30000, NoAccNoWaiverSwipe: 30000}
@@ -54,6 +55,9 @@ class gui(tk.Tk):
             UserWelcome,
             WaiverNoAcc,
             WaiverNoAccSwipe,
+            UnlinkedCard,
+            EmailLookup,
+            MinimalInfo,
         ):
             frame = F(container, self)
             self.frames[F] = frame
