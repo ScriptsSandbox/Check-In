@@ -57,12 +57,19 @@ class NoAccNoWaiverSwipe(Frame):
         image_3 = canvas.create_image(640.0, 430.0, image=image_image_3)
 
         canvas.create_text(
+<<<<<<< ours
             303.0,
             350.0,
             anchor="nw",
+=======
+            640.0,
+            330.0,
+            anchor="center",
+>>>>>>> theirs
             text="Looks like you don't have an account, let's solve that.",
             fill="#F5F0E6",
             font=("Inter", 48 * -1),
+            width=760.0,
         )
 
         canvas.create_text(
