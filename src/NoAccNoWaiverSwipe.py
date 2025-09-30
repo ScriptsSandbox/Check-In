@@ -60,7 +60,7 @@ class NoAccNoWaiverSwipe(Frame):
             303.0,
             350.0,
             anchor="nw",
-            text="Please scan your ID barcode",
+            text="Looks like you don't have an account, let's solve that.",
             fill="#F5F0E6",
             font=("Inter", 48 * -1),
         )

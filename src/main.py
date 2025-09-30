@@ -122,8 +122,7 @@ def myLoop(app, reader):
             if curr_user == "None" and curr_user_w == "None":
                 logging.info("User was not found in the database")
                 global_.traffic_light.set_red()
-                app.show_frame(NoAccNoWaiver)
-                app.after(3000, lambda: app.show_frame(NoAccNoWaiverSwipe))
+                app.show_frame(NoAccNoWaiverSwipe)
             elif curr_user_w == "None":
                 logging.info("User does not have waiver")
                 global_.traffic_light.set_yellow()
