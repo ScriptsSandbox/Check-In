@@ -8,6 +8,12 @@ from config import API_BASE_URL
 SILENT_PATHS = frozenset(["/health", "/traffic-light"])
 
 
+class ExternalApiError(Exception):
+    def __init__(self, api: str):
+        self.api = api
+        super().__init__(f"External API error: {api}")
+
+
 class ApiController:
     @staticmethod
     def _req(method, path, **kwargs):
@@ -15,6 +21,8 @@ class ApiController:
         start = time.time()
         resp = requests.request(method, url, **kwargs)
         ms = (time.time() - start) * 1000
+        if resp.status_code == 502:
+            raise ExternalApiError(resp.json().get("api", "unknown"))
         if path not in SILENT_PATHS:
             logging.info(f"[CLIENT] {method.upper()} {url} -> {resp.status_code} ({ms:.0f}ms)")
         return resp

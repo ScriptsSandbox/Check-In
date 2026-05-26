@@ -16,7 +16,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     # Testing: check every 30 seconds
-    command: --interval 30
+#    command: --interval 30
     # Production: swap the line above for the two below to check every 5 minutes overnight only (midnight–6am)
-    # command: --schedule "0 */5 0-5 * * *"
+    command: --schedule "0 */5 0-5 * * *"
     restart: unless-stopped

@@ -5,7 +5,9 @@ import os
 from sys import stdout
 
 from PyQt6.QtWidgets import QApplication
+from PyQt6.QtCore import QTimer
 
+import health_server
 from window import CheckInWindow
 from dispatcher import MainThreadDispatcher
 from controllers.navigation_controller import NavigationController
@@ -48,41 +50,56 @@ if __name__ == "__main__":
 
     dev_mode = args.dev or os.environ.get("DEV_MODE") == "1"
 
-    # QApplication must be created before any QWidget or QObject subclass
-    app = QApplication(sys.argv)
+    health_server.start(port=int(os.environ.get("HEALTH_PORT", "8001")))
+    health_server.start_watchdog()
 
-    # Restore default SIGINT so Ctrl+C terminates the process
-    import signal
+    try:
+        # QApplication must be created before any QWidget or QObject subclass
+        app = QApplication(sys.argv)
 
-    signal.signal(signal.SIGINT, signal.SIG_DFL)
+        # Restore default SIGINT so Ctrl+C terminates the process
+        import signal
 
-    usb = get_usb_ids()
-    ApiController.check_api_health()
-    ctx = AppContext.create(usb.traffic_light)
-    ctx.dispatcher = MainThreadDispatcher()
+        signal.signal(signal.SIGINT, signal.SIG_DFL)
 
-    window = CheckInWindow()
-    nav = NavigationController(window, ctx, dev_mode=dev_mode)
-    ctx.window = window
-    ctx.nav = nav
-    ctx.check_in = CheckInController(ctx)
-    ctx.account = AccountController(ctx)
-    ctx.traffic_light.request_off()
+        usb = get_usb_ids()
+        ApiController.check_api_health()
+        ctx = AppContext.create(usb.traffic_light)
+        ctx.dispatcher = MainThreadDispatcher()
 
-    window.set_escape_handler(lambda: clear_and_return(ctx))
+        window = CheckInWindow()
+        nav = NavigationController(window, ctx, dev_mode=dev_mode)
+        ctx.window = window
+        ctx.nav = nav
+        ctx.check_in = CheckInController(ctx)
+        ctx.account = AccountController(ctx)
+        ctx.traffic_light.request_off()
 
-    reader = Reader(usb.reader)
-    card_reader = RfidReaderController(ctx)
-    card_reader.start(reader)
+        window.set_escape_handler(lambda: clear_and_return(ctx))
 
-    if usb.barcode:
-        ctx.has_barcode_scanner = True
-        barcode_scanner = BarcodeScanner(usb.barcode)
-        barcode_controller = BarcodeScannerController(ctx)
-        barcode_controller.start(barcode_scanner)
-    else:
-        logging.warning("no barcode scanner found, barcode scanning disabled")
+        reader = Reader(usb.reader)
+        card_reader = RfidReaderController(ctx)
+        card_reader.start(reader)
 
-    logging.info("made it to app start")
-    window.start()
-    sys.exit(0)
+        if usb.barcode:
+            ctx.has_barcode_scanner = True
+            barcode_scanner = BarcodeScanner(usb.barcode)
+            barcode_controller = BarcodeScannerController(ctx)
+            barcode_controller.start(barcode_scanner)
+        else:
+            logging.warning("no barcode scanner found, barcode scanning disabled")
+
+        heartbeat_timer = QTimer()
+        heartbeat_timer.setInterval(1000)
+        heartbeat_timer.timeout.connect(health_server.heartbeat)
+        heartbeat_timer.start()
+        QTimer.singleShot(0, health_server.mark_ui_ready)
+
+        logging.info("made it to app start")
+        window.start()
+        sys.exit(0)
+    except SystemExit:
+        raise
+    except BaseException:
+        logging.critical("fatal error during kiosk startup", exc_info=True)
+        sys.exit(1)

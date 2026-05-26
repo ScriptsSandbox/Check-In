@@ -3,7 +3,7 @@ from threading import Thread
 
 from PyQt6.QtCore import QTimer
 
-from controllers.api_controller import ApiController
+from controllers.api_controller import ApiController, ExternalApiError
 
 
 class AccountController:
@@ -16,7 +16,11 @@ class AccountController:
         Thread(target=self._lookup_barcode_worker, args=(barcode,), daemon=True).start()
 
     def _lookup_barcode_worker(self, barcode):
-        student = ApiController.lookup_by_barcode(barcode)
+        try:
+            student = ApiController.lookup_by_barcode(barcode)
+        except ExternalApiError as e:
+            self.ctx.dispatcher.call.emit(lambda: self._on_external_api_error(e.api))
+            return
         self.ctx.dispatcher.call.emit(lambda s=student: self._on_barcode_result(s))
 
     def _on_barcode_result(self, student):
@@ -38,7 +42,11 @@ class AccountController:
         Thread(target=self._lookup_pid_worker, args=(pid,), daemon=True).start()
 
     def _lookup_pid_worker(self, pid):
-        student = ApiController.lookup_by_pid(pid)
+        try:
+            student = ApiController.lookup_by_pid(pid)
+        except ExternalApiError as e:
+            self.ctx.dispatcher.call.emit(lambda: self._on_external_api_error(e.api))
+            return
         self.ctx.dispatcher.call.emit(lambda s=student: self._on_pid_result(s, pid))
 
     def _on_pid_result(self, student, pid):
@@ -69,15 +77,24 @@ class AccountController:
             daemon=True,
         ).start()
 
+    def _on_external_api_error(self, api: str):
+        self.ctx.nav.hide_status()
+        self.ctx.nav.show_status(f"system error ({api.upper()} api). please talk to a staff member.")
+        QTimer.singleShot(4000, self.ctx.nav.hide_status)
+
     def _create_worker(self, *, barcode, pid, first_name, last_name, email):
-        result = ApiController.create_account(
-            self.ctx.rfid,
-            barcode=barcode,
-            pid=pid,
-            first_name=first_name,
-            last_name=last_name,
-            email=email,
-        )
+        try:
+            result = ApiController.create_account(
+                self.ctx.rfid,
+                barcode=barcode,
+                pid=pid,
+                first_name=first_name,
+                last_name=last_name,
+                email=email,
+            )
+        except ExternalApiError as e:
+            self.ctx.dispatcher.call.emit(lambda: self._on_external_api_error(e.api))
+            return
         self.ctx.dispatcher.call.emit(lambda r=result: self._on_create_result(r))
 
     def _on_create_result(self, result):
