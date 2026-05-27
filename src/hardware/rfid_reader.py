@@ -2,7 +2,6 @@ from threading import Thread
 from os.path import exists
 import logging
 import serial
-import sys
 import time
 
 from adafruit_pn532.uart import PN532_UART
@@ -17,19 +16,12 @@ class Reader(Thread):
         self._pn532 = None
         self._pending_tag = None
         if not usb_id or not exists(usb_id):
-            logging.error("card reader not found at %s, exiting", usb_id)
-            sys.exit(1)
-        for attempt in range(1, 6):
-            try:
-                self._init_pn532()
-                logging.info("card reader init finished")
-                break
-            except Exception as e:
-                logging.warning("card reader init attempt %d/5 failed: %s", attempt, e)
-                if attempt == 5:
-                    logging.error("card reader failed to initialize after 5 attempts, exiting")
-                    sys.exit(1)
-                time.sleep(attempt * 0.5)
+            raise RuntimeError(f"Card reader not found at {usb_id!r}")
+        try:
+            self._init_pn532()
+            logging.info("card reader init finished")
+        except Exception as e:
+            raise RuntimeError(f"Card reader failed to initialize: {e}") from e
 
     def _init_pn532(self):
         if self._pn532 is not None:
@@ -85,3 +77,11 @@ class Reader(Thread):
 
     def can_scan_again(self, last_time):
         return time.time() - last_time > 3
+
+    def close(self):
+        if self._pn532 is not None:
+            try:
+                self._pn532._uart.close()
+            except Exception as e:
+                logging.warning("error closing card reader serial port: %s", e)
+            self._pn532 = None

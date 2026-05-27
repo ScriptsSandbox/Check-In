@@ -7,6 +7,8 @@ services:
     environment:
       - DISPLAY=:0
       - CHECK_IN_API_URL=http://10.8.0.1:8000
+    env_file:
+      - .env
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix
     restart: unless-stopped

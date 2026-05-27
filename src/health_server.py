@@ -5,6 +5,8 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import notifier
+
 
 class _State:
     started_at = time.monotonic()
@@ -72,11 +74,21 @@ def start_watchdog(startup_grace_s: float = 60.0, stall_threshold_s: float = 15.
             if not _state.ui_ready:
                 if now - _state.started_at > startup_grace_s:
                     logging.critical("UI not ready after %.0fs, exiting", startup_grace_s)
+                    notifier.notify_critical(
+                        "Kiosk UI failed to start",
+                        f"UI not ready after {startup_grace_s:.0f}s; process exiting for restart.",
+                        blocking=True,
+                    )
                     os._exit(2)
                 continue
             age = now - _state.last_heartbeat
             if age > stall_threshold_s:
                 logging.critical("Qt event loop stalled for %.1fs, exiting", age)
+                notifier.notify_critical(
+                    "Kiosk event loop stalled",
+                    f"Qt event loop stalled for {age:.1f}s; process exiting for restart.",
+                    blocking=True,
+                )
                 os._exit(3)
 
     threading.Thread(target=loop, daemon=True, name="health-watchdog").start()

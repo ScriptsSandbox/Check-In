@@ -1,5 +1,4 @@
 import logging
-import sys
 import time
 import requests
 
@@ -12,6 +11,10 @@ class ExternalApiError(Exception):
     def __init__(self, api: str):
         self.api = api
         super().__init__(f"External API error: {api}")
+
+
+class ApiUnreachableError(Exception):
+    pass
 
 
 class ApiController:
@@ -28,23 +31,13 @@ class ApiController:
         return resp
 
     @staticmethod
-    def check_api_health():
-        delay_seconds = 3
-        retries = 3
-
-        logging.info(API_BASE_URL)
-        for attempt in range(1, retries + 1):
-            try:
-                resp = ApiController._req("GET", "/health", timeout=5)
-                if resp.ok:
-                    logging.info(f"API reachable at {API_BASE_URL}")
-                    return
-            except Exception:
-                pass
-            logging.warning(f"API not reachable (attempt {attempt}/{retries}), retrying in {delay_seconds}s")
-            time.sleep(delay_seconds)
-        logging.critical(f"API at {API_BASE_URL} unreachable after {retries} attempts, exiting")
-        sys.exit(1)
+    def ping():
+        try:
+            resp = ApiController._req("GET", "/health", timeout=5)
+        except Exception as e:
+            raise ApiUnreachableError(str(e)) from e
+        if not resp.ok:
+            raise ApiUnreachableError(f"status {resp.status_code}")
 
     @staticmethod
     def checkin_by_uuid(uuid):
