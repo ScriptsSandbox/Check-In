@@ -63,6 +63,11 @@ class RfidReaderController:
         last_time = 0
 
         while not self._stop.is_set():
+            if not exists(reader._usb_id):
+                logging.error("card reader device node missing: %s", reader._usb_id)
+                self._fire_disconnect(f"Card reader at {reader._usb_id} no longer present")
+                return
+
             try:
                 in_waiting = reader.get_ser_in_waiting()
             except OSError as e:
