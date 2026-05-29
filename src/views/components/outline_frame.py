@@ -1,16 +1,16 @@
-from PyQt6.QtWidgets import QFrame
-from PyQt6.QtGui import QPainter, QPen, QColor, QPainterPath
+from PyQt6.QtWidgets import QFrame, QWidget
+from PyQt6.QtGui import QPainter, QPen, QColor, QPainterPath, QPaintEvent
 from PyQt6.QtCore import Qt, QRectF
 
 
 class OutlineFrame(QFrame):
 
-    def __init__(self, parent=None, radius=20):
+    def __init__(self, parent: QWidget | None = None, radius: int = 20) -> None:
         super().__init__(parent)
         self._radius = radius
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
-    def paintEvent(self, event):
+    def paintEvent(self, event: QPaintEvent | None) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 

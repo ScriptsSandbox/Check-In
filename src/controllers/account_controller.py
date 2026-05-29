@@ -1,21 +1,25 @@
+from __future__ import annotations
+
 import logging
 from threading import Thread
+from typing import Any
 
 from PyQt6.QtCore import QTimer
 
 from controllers.api_controller import ApiController, ExternalApiError
+from app_context import AppContext
 
 
 class AccountController:
-    def __init__(self, ctx):
+    def __init__(self, ctx: AppContext) -> None:
         self.ctx = ctx
 
-    def go_to_review_from_barcode(self, barcode):
+    def go_to_review_from_barcode(self, barcode: str) -> None:
         self.ctx.nav.show_status("Looking up student...")
         logging.info(f"looking up student by barcode: {barcode}")
         Thread(target=self._lookup_barcode_worker, args=(barcode,), daemon=True).start()
 
-    def _lookup_barcode_worker(self, barcode):
+    def _lookup_barcode_worker(self, barcode: str) -> None:
         try:
             student = ApiController.lookup_by_barcode(barcode)
         except ExternalApiError as e:
@@ -23,7 +27,7 @@ class AccountController:
             return
         self.ctx.dispatcher.call.emit(lambda s=student: self._on_barcode_result(s))
 
-    def _on_barcode_result(self, student):
+    def _on_barcode_result(self, student: dict[str, Any] | None) -> None:
         self.ctx.nav.hide_status()
         if student is None:
             self.ctx.nav.show_status("Student not found. Please enter your details manually.")
@@ -36,12 +40,12 @@ class AccountController:
             email=student["email"],
         )
 
-    def go_to_review_from_pid(self, pid):
+    def go_to_review_from_pid(self, pid: str) -> None:
         self.ctx.nav.show_status("Looking up student...")
         logging.info(f"looking up student by PID: {pid}")
         Thread(target=self._lookup_pid_worker, args=(pid,), daemon=True).start()
 
-    def _lookup_pid_worker(self, pid):
+    def _lookup_pid_worker(self, pid: str) -> None:
         try:
             student = ApiController.lookup_by_pid(pid)
         except ExternalApiError as e:
@@ -49,7 +53,7 @@ class AccountController:
             return
         self.ctx.dispatcher.call.emit(lambda s=student: self._on_pid_result(s, pid))
 
-    def _on_pid_result(self, student, pid):
+    def _on_pid_result(self, student: dict[str, Any] | None, pid: str) -> None:
         self.ctx.nav.hide_status()
         if student is None:
             self.ctx.nav.show_status("Student not found. Please check your PID.")
@@ -62,13 +66,21 @@ class AccountController:
             email=student["email"],
         )
 
-    def create_account_from_review(self, *, first_name, last_name, email, pid):
+    def create_account_from_review(self, *, first_name: str, last_name: str, email: str, pid: str) -> None:
         if pid:
             self._create(pid=pid)
         else:
             self._create(first_name=first_name, last_name=last_name, email=email)
 
-    def _create(self, *, barcode=None, pid=None, first_name=None, last_name=None, email=None):
+    def _create(
+        self,
+        *,
+        barcode: str | None = None,
+        pid: str | None = None,
+        first_name: str | None = None,
+        last_name: str | None = None,
+        email: str | None = None,
+    ) -> None:
         self.ctx.nav.show_status("Account creation in progress!")
         logging.info(f"creating account: pid={pid} barcode={barcode}")
         Thread(
@@ -77,12 +89,20 @@ class AccountController:
             daemon=True,
         ).start()
 
-    def _on_external_api_error(self, api: str):
+    def _on_external_api_error(self, api: str) -> None:
         self.ctx.nav.hide_status()
         self.ctx.nav.show_status(f"system error ({api.upper()} api). please talk to a staff member.")
         QTimer.singleShot(4000, self.ctx.nav.hide_status)
 
-    def _create_worker(self, *, barcode, pid, first_name, last_name, email):
+    def _create_worker(
+        self,
+        *,
+        barcode: str | None,
+        pid: str | None,
+        first_name: str | None,
+        last_name: str | None,
+        email: str | None,
+    ) -> None:
         try:
             result = ApiController.create_account(
                 self.ctx.rfid,
@@ -97,7 +117,7 @@ class AccountController:
             return
         self.ctx.dispatcher.call.emit(lambda r=result: self._on_create_result(r))
 
-    def _on_create_result(self, result):
+    def _on_create_result(self, result: dict[str, Any] | None) -> None:
         self.ctx.nav.hide_status()
         if result is None:
             self.ctx.nav.show_status("ERROR! Could not create account, please try manually.")

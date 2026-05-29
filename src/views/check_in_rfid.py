@@ -1,14 +1,22 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel
 from PyQt6.QtCore import Qt
 import qtawesome as qta
+
 from .base import Screen
 from .components.outline_frame import OutlineFrame
 from .components.styled_button import StyledButton, NAV_BTN_SIZE, NAV_ICON_SIZE, INNER_MARGIN, OUTER_MARGIN
 from .qr_codes import QRCodes
 
+if TYPE_CHECKING:
+    from controllers.navigation_controller import NavigationController
+
 
 class CheckInRFID(Screen):
-    def _build(self, controller):
+    def _build(self, controller: NavigationController) -> None:
         outer = QVBoxLayout(self)
         outer.setContentsMargins(OUTER_MARGIN, OUTER_MARGIN, OUTER_MARGIN, OUTER_MARGIN)
         outer.setSpacing(0)

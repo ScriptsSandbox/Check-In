@@ -1,6 +1,8 @@
+from collections.abc import Callable
 from pathlib import Path
+
 from PyQt6.QtWidgets import QMainWindow, QWidget, QStackedWidget, QLabel, QVBoxLayout
-from PyQt6.QtGui import QFontDatabase, QPainter, QPixmap, QColor
+from PyQt6.QtGui import QFontDatabase, QPainter, QPixmap, QColor, QPaintEvent, QKeyEvent
 from PyQt6.QtCore import QTimer, Qt
 import notifier
 from controllers.asset_controller import AssetController
@@ -8,11 +10,11 @@ from controllers.asset_controller import AssetController
 
 class _RootWidget(QWidget):
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._bg = QPixmap(AssetController.BACKGROUND.get_path())
 
-    def paintEvent(self, event):
+    def paintEvent(self, event: QPaintEvent | None) -> None:
         painter = QPainter(self)
         painter.fillRect(self.rect(), QColor("#153246"))
         if not self._bg.isNull():
@@ -22,7 +24,7 @@ class _RootWidget(QWidget):
 
 
 class CheckInWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Check-In")
         self.setFixedSize(1280, 720)
@@ -80,12 +82,12 @@ class CheckInWindow(QMainWindow):
         self._retry_timer = QTimer(self)
         self._retry_timer.setInterval(1000)
         self._retry_timer.timeout.connect(self._tick_retry)
-        self._retry_remaining = 0
-        self._retry_callback = None
+        self._retry_remaining: int = 0
+        self._retry_callback: Callable[[], None] | None = None
 
-        self._escape_handler = None
+        self._escape_handler: Callable[[], None] | None = None
 
-    def show_error(self, title, detail, *, retry_in=None, on_retry=None):
+    def show_error(self, title: str, detail: str, *, retry_in: int | None = None, on_retry: Callable[[], None] | None = None) -> None:
         self._error_title.setText(title)
         self._error_detail.setText(detail)
         self._retry_timer.stop()
@@ -102,16 +104,16 @@ class CheckInWindow(QMainWindow):
         self._error.raise_()
         notifier.notify_critical(title, detail)
 
-    def hide_error(self):
+    def hide_error(self) -> None:
         self._retry_timer.stop()
         self._retry_callback = None
         self._error.hide()
         notifier.notify_resolved()
 
-    def is_error_visible(self):
+    def is_error_visible(self) -> bool:
         return self._error.isVisible()
 
-    def _tick_retry(self):
+    def _tick_retry(self) -> None:
         self._retry_remaining -= 1
         if self._retry_remaining <= 0:
             self._retry_timer.stop()
@@ -123,11 +125,11 @@ class CheckInWindow(QMainWindow):
         else:
             self._error_countdown.setText(f"Retrying in {self._retry_remaining}s…")
 
-    def set_escape_handler(self, fn):
+    def set_escape_handler(self, fn: Callable[[], None]) -> None:
         self._escape_handler = fn
 
-    def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_Escape and self._escape_handler:
+    def keyPressEvent(self, event: QKeyEvent | None) -> None:
+        if event and event.key() == Qt.Key.Key_Escape and self._escape_handler:
             self._escape_handler()
         else:
             super().keyPressEvent(event)

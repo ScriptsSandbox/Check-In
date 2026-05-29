@@ -1,14 +1,22 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from PyQt6.QtWidgets import QVBoxLayout, QLabel
 from PyQt6.QtCore import Qt, QTimer
+
 from .base import Screen
 from .components.outline_frame import OutlineFrame
 from .components.theme import INNER_MARGIN, OUTER_MARGIN
 
+if TYPE_CHECKING:
+    from controllers.navigation_controller import NavigationController
+
 
 class UserWelcome(Screen):
-    def _build(self, controller):
-        self._last_name = None
-        self._active_labels: set = set()
+    def _build(self, controller: NavigationController) -> None:
+        self._last_name: str | None = None
+        self._active_labels: set[QLabel] = set()
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(OUTER_MARGIN, OUTER_MARGIN, OUTER_MARGIN, OUTER_MARGIN)
@@ -40,16 +48,16 @@ class UserWelcome(Screen):
 
         inner.addStretch()
 
-    def on_hide(self):
+    def on_hide(self) -> None:
         self._active_labels.clear()
         while self._names_layout.count():
             item = self._names_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+            if item.widget():  # type: ignore[union-attr]
+                item.widget().deleteLater()  # type: ignore[union-attr]
         self._msg_label.setText("Welcome back")
         self._last_name = None
 
-    def display_name(self, name, message="Welcome back"):
+    def display_name(self, name: str, message: str = "Welcome back") -> None:
         if name == self._last_name:
             return
 
@@ -68,7 +76,7 @@ class UserWelcome(Screen):
 
         QTimer.singleShot(3000, lambda: self._remove_name(label))
 
-    def _remove_name(self, label):
+    def _remove_name(self, label: QLabel) -> None:
         if label not in self._active_labels:
             return
         self._active_labels.discard(label)

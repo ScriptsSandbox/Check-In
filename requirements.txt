@@ -5,3 +5,6 @@ RPi.GPIO; sys_platform == 'linux'
 pyqt6==6.11.0
 qtawesome
 pyqt6-sip
+mypy==2.1.0
+types-pyserial
+types-requests

@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtCore import Qt
@@ -7,9 +11,12 @@ from .base import Screen
 from .components.outline_frame import OutlineFrame
 from .components.styled_button import home_button, INNER_MARGIN, OUTER_MARGIN
 
+if TYPE_CHECKING:
+    from controllers.navigation_controller import NavigationController
+
 
 class QRCodes(Screen):
-    def _build(self, controller):
+    def _build(self, controller: NavigationController) -> None:
         outer = QVBoxLayout(self)
         outer.setContentsMargins(OUTER_MARGIN, OUTER_MARGIN, OUTER_MARGIN, OUTER_MARGIN)
         outer.setSpacing(0)
@@ -31,7 +38,7 @@ class QRCodes(Screen):
         qr_row = QHBoxLayout()
         qr_row.setSpacing(80)
 
-        def _qr_col(image_path, caption):
+        def _qr_col(image_path: str, caption: str) -> QVBoxLayout:
             col = QVBoxLayout()
             col.setSpacing(12)
             img = QLabel()

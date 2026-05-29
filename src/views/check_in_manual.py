@@ -1,13 +1,21 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel
 from PyQt6.QtCore import Qt
+
 from .base import Screen
 from .components.outline_frame import OutlineFrame
 from .components.styled_button import StyledButton, home_button, INNER_MARGIN, OUTER_MARGIN
 from .components.styled_entry import StyledEntry
 
+if TYPE_CHECKING:
+    from controllers.navigation_controller import NavigationController
+
 
 class CheckInManual(Screen):
-    def _build(self, controller):
+    def _build(self, controller: NavigationController) -> None:
         outer = QVBoxLayout(self)
         outer.setContentsMargins(OUTER_MARGIN, OUTER_MARGIN, OUTER_MARGIN, OUTER_MARGIN)
         outer.setSpacing(0)
@@ -70,22 +78,22 @@ class CheckInManual(Screen):
         btn_row.addStretch()
         inner.addLayout(btn_row)
 
-    def _update_btn_state(self):
+    def _update_btn_state(self) -> None:
         self.check_in_btn.setEnabled(bool(self.pid_entry.text().strip()))
 
-    def on_show(self):
+    def on_show(self) -> None:
         self.pid_entry.setFocus()
 
-    def on_hide(self):
+    def on_hide(self) -> None:
         self.pid_entry.clearFocus()
 
-    def clear_entries(self):
+    def clear_entries(self) -> None:
         self.pid_entry.clear()
 
-    def update_entries(self, pid):
+    def update_entries(self, pid: str) -> None:
         self.pid_entry.setText(pid)
 
-    def _call_check_in(self, controller):
+    def _call_check_in(self, controller: NavigationController) -> None:
         pid = self.pid_entry.text().strip()
         if not pid:
             return

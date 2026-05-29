@@ -1,4 +1,8 @@
+from __future__ import annotations
+
 import uuid
+from collections.abc import Callable
+from typing import TYPE_CHECKING, TypeVar, cast
 
 from PyQt6.QtCore import QTimer, Qt
 from PyQt6.QtWidgets import QLabel
@@ -13,20 +17,28 @@ from views.sign_waiver import SignWaiver
 from views.check_in_manual import CheckInManual
 from views.qr_codes import QRCodes
 from views.user_welcome import UserWelcome
+from views.base import Screen
+from app_context import AppContext
+
+if TYPE_CHECKING:
+    from window import CheckInWindow
+    from views.components.dev_overlay import DevOverlay
+
+T = TypeVar("T", bound=Screen)
 
 
 class NavigationController:
-    def __init__(self, window, ctx, dev_mode=False):
+    def __init__(self, window: CheckInWindow, ctx: AppContext, dev_mode: bool = False) -> None:
         self.ctx = ctx
         self._window = window
         self._stacked = window.stacked
-        self._frames = {}
-        self._curr = None
-        self._frame_uuid = uuid.uuid4().hex
-        self._on_done_stack = []
-        self._dev_overlay = None
+        self._frames: dict[type[Screen], Screen] = {}
+        self._curr: type[Screen] | None = None
+        self._frame_uuid: str = uuid.uuid4().hex
+        self._on_done_stack: list[Callable[[], None] | None] = []
+        self._dev_overlay: DevOverlay | None = None
 
-        self._timeouts = {
+        self._timeouts: dict[type[Screen], int] = {
             SignWaiver: 30000,
             QRCodes: 30000,
         }
@@ -71,7 +83,7 @@ class NavigationController:
     # Core frame switching
     # ------------------------------------------------------------------
 
-    def show_frame(self, screen_class):
+    def show_frame(self, screen_class: type[Screen]) -> None:
         if self._curr is not None:
             self._frames[self._curr].on_hide()
         self._curr = screen_class
@@ -89,33 +101,33 @@ class NavigationController:
                 lambda: self._on_timeout(uid),
             )
 
-    def get_frame(self, screen_class):
-        return self._frames[screen_class]
+    def get_frame(self, screen_class: type[T]) -> T:
+        return cast(T, self._frames[screen_class])
 
-    def get_curr_frame(self):
+    def get_curr_frame(self) -> type[Screen] | None:
         return self._curr
 
     # ------------------------------------------------------------------
     # Status overlay
     # ------------------------------------------------------------------
 
-    def show_status(self, text):
+    def show_status(self, text: str) -> None:
         self._status_label.setText(text)
         self._status_label.show()
         self._status_label.raise_()
 
-    def hide_status(self):
+    def hide_status(self) -> None:
         self._status_label.hide()
 
     # ------------------------------------------------------------------
     # Stack-based flow
     # ------------------------------------------------------------------
 
-    def push(self, screen_class, on_done=None):
+    def push(self, screen_class: type[Screen], on_done: Callable[[], None] | None = None) -> None:
         self._on_done_stack.append(on_done)
         self.show_frame(screen_class)
 
-    def pop(self):
+    def pop(self) -> None:
         cb = self._on_done_stack.pop() if self._on_done_stack else None
         if cb:
             cb()
@@ -126,25 +138,27 @@ class NavigationController:
     # Named navigations
     # ------------------------------------------------------------------
 
-    def back_to_main(self):
+    def back_to_main(self) -> None:
         self._on_done_stack.clear()
         self.ctx.rfid = ""
         self.ctx.traffic_light.request_off()
         self.show_frame(CheckInRFID)
 
-    def go_to_no_id(self):
+    def go_to_no_id(self) -> None:
         self.get_frame(CheckInManual).clear_entries()
         self.show_frame(CheckInManual)
 
-    def go_to_create_account_manual(self):
+    def go_to_create_account_manual(self) -> None:
         self.get_frame(CreateAccountManual).clear_entries()
         self.show_frame(CreateAccountManual)
 
-    def go_to_create_account_no_pid(self):
+    def go_to_create_account_no_pid(self) -> None:
         self.get_frame(CreateAccountNoPid).clear_entries()
         self.show_frame(CreateAccountNoPid)
 
-    def go_to_create_account_review(self, pid="", first_name="", last_name="", email=""):
+    def go_to_create_account_review(
+        self, pid: str = "", first_name: str = "", last_name: str = "", email: str = ""
+    ) -> None:
         pid_locked = bool(pid)
         self.get_frame(CreateAccountReview).setup(
             first_name=first_name,
@@ -155,13 +169,13 @@ class NavigationController:
         )
         self.show_frame(CreateAccountReview)
 
-    def go_to_create_account(self, on_done):
+    def go_to_create_account(self, on_done: Callable[[], None]) -> None:
         self.get_frame(TransitionScreen).display(
             "Looks like you don't have an account,\nlet's set one up!"
         )
         QTimer.singleShot(3000, lambda: self.push(CreateAccountBarcode, on_done=on_done))
 
-    def go_to_sign_waiver(self):
+    def go_to_sign_waiver(self) -> None:
         self.get_frame(TransitionScreen).display(
             "Looks like you haven't signed\nthe waiver yet,\nlet's fix that!"
         )
@@ -171,6 +185,6 @@ class NavigationController:
     # Internal
     # ------------------------------------------------------------------
 
-    def _on_timeout(self, uid):
+    def _on_timeout(self, uid: str) -> None:
         if uid == self._frame_uuid:
             self.back_to_main()

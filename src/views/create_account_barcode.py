@@ -1,12 +1,20 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel
 from PyQt6.QtCore import Qt
+
 from .base import Screen
 from .components.outline_frame import OutlineFrame
 from .components.styled_button import StyledButton, home_button, INNER_MARGIN, OUTER_MARGIN
 
+if TYPE_CHECKING:
+    from controllers.navigation_controller import NavigationController
+
 
 class CreateAccountBarcode(Screen):
-    def _build(self, controller):
+    def _build(self, controller: NavigationController) -> None:
         outer = QVBoxLayout(self)
         outer.setContentsMargins(OUTER_MARGIN, OUTER_MARGIN, OUTER_MARGIN, OUTER_MARGIN)
         outer.setSpacing(0)

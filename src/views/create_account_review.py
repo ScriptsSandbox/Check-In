@@ -1,14 +1,22 @@
+from __future__ import annotations
+
+import logging
+from typing import TYPE_CHECKING
+
 from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel
 from PyQt6.QtCore import Qt
-import logging
+
 from .base import Screen
 from .components.outline_frame import OutlineFrame
 from .components.styled_button import StyledButton, home_button, INNER_MARGIN, OUTER_MARGIN
 from .components.styled_entry import StyledEntry
 
+if TYPE_CHECKING:
+    from controllers.navigation_controller import NavigationController
+
 
 class CreateAccountReview(Screen):
-    def _build(self, controller):
+    def _build(self, controller: NavigationController) -> None:
         outer = QVBoxLayout(self)
         outer.setContentsMargins(OUTER_MARGIN, OUTER_MARGIN, OUTER_MARGIN, OUTER_MARGIN)
         outer.setSpacing(0)
@@ -27,7 +35,7 @@ class CreateAccountReview(Screen):
 
         inner.addSpacing(8)
 
-        def _field_row(label_text):
+        def _field_row(label_text: str) -> StyledEntry:
             lbl = QLabel(label_text)
             lbl.setStyleSheet(
                 "color: #F5F0E6; font: 18pt Montserrat;"
@@ -68,7 +76,14 @@ class CreateAccountReview(Screen):
         btn_row.addStretch()
         inner.addLayout(btn_row)
 
-    def setup(self, first_name="", last_name="", email="", pid="", pid_locked=False):
+    def setup(
+        self,
+        first_name: str = "",
+        last_name: str = "",
+        email: str = "",
+        pid: str = "",
+        pid_locked: bool = False,
+    ) -> None:
         self.clear_entries()
         if first_name:
             self.first_name_entry.setText(first_name)
@@ -81,27 +96,27 @@ class CreateAccountReview(Screen):
         self.pid_entry.set_readonly(pid_locked)
         self._update_btn_state()
 
-    def _update_btn_state(self):
+    def _update_btn_state(self) -> None:
         self.register_btn.setEnabled(all(
             e.text().strip() for e in (self.first_name_entry, self.last_name_entry,
                                        self.email_entry, self.pid_entry)
         ))
 
-    def on_show(self):
+    def on_show(self) -> None:
         self.first_name_entry.setFocus()
 
-    def on_hide(self):
+    def on_hide(self) -> None:
         for entry in (self.first_name_entry, self.last_name_entry,
                       self.email_entry, self.pid_entry):
             entry.clearFocus()
 
-    def clear_entries(self):
+    def clear_entries(self) -> None:
         for entry in (self.first_name_entry, self.last_name_entry,
                       self.email_entry, self.pid_entry):
             entry.clear()
         self.pid_entry.set_readonly(False)
 
-    def _submit(self):
+    def _submit(self) -> None:
         first = self.first_name_entry.text().strip()
         last = self.last_name_entry.text().strip()
         email = self.email_entry.text().strip()

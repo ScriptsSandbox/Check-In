@@ -1,27 +1,37 @@
+from __future__ import annotations
+
 import logging
+from collections.abc import Callable
+from typing import Any
 
 from PyQt6.QtCore import QTimer
 
 from controllers.api_controller import ApiController
 from views.user_welcome import UserWelcome
 from views.transition_screen import TransitionScreen
+from app_context import AppContext
 
 
 class CheckInController:
-    def __init__(self, ctx):
+    def __init__(self, ctx: AppContext) -> None:
         self.ctx = ctx
 
-    def handle_by_uuid(self, tag):
+    def handle_by_uuid(self, tag: str) -> None:
         # Called from background thread — dispatch to main thread via signal.
         self.ctx.dispatcher.call.emit(
             lambda: self._run_check_in(tag, ApiController.checkin_by_uuid)
         )
 
-    def handle_by_pid(self, pid):
+    def handle_by_pid(self, pid: str) -> None:
         # Called on main thread (button click or barcode dispatcher).
         self._run_check_in(pid, ApiController.checkin_by_pid)
 
-    def _run_check_in(self, identifier, check_fn, welcome_message="Welcome back"):
+    def _run_check_in(
+        self,
+        identifier: str,
+        check_fn: Callable[[str], dict[str, Any]],
+        welcome_message: str = "Welcome back",
+    ) -> None:
         result = check_fn(identifier)
         status = result.get("status")
 

@@ -1,6 +1,10 @@
-from PyQt6.QtWidgets import QPushButton
-from PyQt6.QtGui import QPainter, QPainterPath, QColor, QPen, QFont
-from PyQt6.QtCore import Qt, QRectF, QRect
+from __future__ import annotations
+
+from collections.abc import Callable
+
+from PyQt6.QtWidgets import QPushButton, QWidget
+from PyQt6.QtGui import QPainter, QPainterPath, QColor, QPen, QFont, QPaintEvent, QEnterEvent
+from PyQt6.QtCore import Qt, QRectF, QRect, QEvent
 import qtawesome as qta
 
 from .theme import OUTER_MARGIN, INNER_MARGIN, NAV_BTN_SIZE, NAV_ICON_SIZE
@@ -10,7 +14,14 @@ __all__ = ["StyledButton", "home_button", "OUTER_MARGIN", "INNER_MARGIN", "NAV_B
 
 class StyledButton(QPushButton):
 
-    def __init__(self, text="", parent=None, font_size=30, ghost=False, radius=20):
+    def __init__(
+        self,
+        text: str = "",
+        parent: QWidget | None = None,
+        font_size: int = 30,
+        ghost: bool = False,
+        radius: int = 20,
+    ) -> None:
         super().__init__(text, parent)
         self._font_size = font_size
         self._ghost = ghost
@@ -21,17 +32,17 @@ class StyledButton(QPushButton):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setStyleSheet("background: transparent; border: none;")
 
-    def enterEvent(self, event):
+    def enterEvent(self, event: QEnterEvent | None) -> None:
         self._hovered = True
         self.update()
         super().enterEvent(event)
 
-    def leaveEvent(self, event):
+    def leaveEvent(self, event: QEvent | None) -> None:
         self._hovered = False
         self.update()
         super().leaveEvent(event)
 
-    def paintEvent(self, event):
+    def paintEvent(self, event: QPaintEvent | None) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
@@ -75,7 +86,7 @@ class StyledButton(QPushButton):
             painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self.text())
 
 
-def home_button(on_click):
+def home_button(on_click: Callable[[], None]) -> StyledButton:
     btn = StyledButton(ghost=True)
     btn.setIcon(qta.icon('fa5s.home', color='#F5F0E6'))
     btn.setIconSize(NAV_ICON_SIZE)

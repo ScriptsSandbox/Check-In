@@ -1,24 +1,32 @@
+from __future__ import annotations
+
 import time
 import logging
 import traceback
+from collections.abc import Callable
 from os.path import exists
 from threading import Thread, Event
+from typing import TYPE_CHECKING
 
 from controllers.api_controller import ApiController
 from views.create_account_manual import CreateAccountManual
+from app_context import AppContext
 import notifier
+
+if TYPE_CHECKING:
+    from hardware.rfid_reader import Reader
 
 
 class RfidReaderController:
-    def __init__(self, ctx):
+    def __init__(self, ctx: AppContext) -> None:
         self.ctx = ctx
         self._stop = Event()
-        self._thread = None
-        self._reader = None
-        self._on_disconnect = None
+        self._thread: Thread | None = None
+        self._reader: Reader | None = None
+        self._on_disconnect: Callable[[str], None] | None = None
         self._disconnect_fired = False
 
-    def start(self, reader, on_disconnect):
+    def start(self, reader: Reader, on_disconnect: Callable[[str], None]) -> None:
         self._reader = reader
         self._on_disconnect = on_disconnect
         self._stop.clear()
@@ -29,14 +37,14 @@ class RfidReaderController:
             poller = Thread(target=self._poll_traffic_light, daemon=True, name="traffic-light-poll")
             poller.start()
 
-    def stop(self):
+    def stop(self) -> None:
         self._stop.set()
         if self._thread is not None and self._thread.is_alive():
             self._thread.join(timeout=3)
         if self._reader is not None:
             self._reader.close()
 
-    def _fire_disconnect(self, reason):
+    def _fire_disconnect(self, reason: str) -> None:
         if self._disconnect_fired:
             return
         self._disconnect_fired = True
@@ -45,7 +53,7 @@ class RfidReaderController:
         if cb is not None:
             self.ctx.dispatcher.call.emit(lambda: cb(reason))
 
-    def _run_safe(self, reader):
+    def _run_safe(self, reader: Reader) -> None:
         try:
             self._run(reader)
         except BaseException as e:
@@ -57,10 +65,10 @@ class RfidReaderController:
             )
             self._fire_disconnect(f"{type(e).__name__}: {e}")
 
-    def _run(self, reader):
+    def _run(self, reader: Reader) -> None:
         logging.info("now reading ID cards")
-        last_tag = 0
-        last_time = 0
+        last_tag: str | None = None
+        last_time: float = 0
 
         while not self._stop.is_set():
             try:
@@ -101,8 +109,8 @@ class RfidReaderController:
                 last_tag = tag
                 last_time = time.time()
 
-    def _poll_traffic_light(self):
-        last_color = None
+    def _poll_traffic_light(self) -> None:
+        last_color: str | None = None
         while not self._stop.is_set():
             time.sleep(0.1)
             try:

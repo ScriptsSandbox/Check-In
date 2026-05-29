@@ -1,21 +1,28 @@
+from __future__ import annotations
+
 import logging
 import time
 from threading import Thread
+from typing import TYPE_CHECKING
 
 from views.check_in_manual import CheckInManual
 from views.create_account_barcode import CreateAccountBarcode
 from views.create_account_manual import CreateAccountManual
+from app_context import AppContext
+
+if TYPE_CHECKING:
+    from hardware.barcode_scanner import BarcodeScanner
 
 
 class BarcodeScannerController:
-    def __init__(self, ctx):
+    def __init__(self, ctx: AppContext) -> None:
         self.ctx = ctx
 
-    def start(self, scanner):
+    def start(self, scanner: BarcodeScanner) -> None:
         thread = Thread(target=self._run, args=(scanner,), daemon=True)
         thread.start()
 
-    def _run(self, scanner):
+    def _run(self, scanner: BarcodeScanner) -> None:
         logging.info("now reading barcodes")
         scanner_error = False
         try:

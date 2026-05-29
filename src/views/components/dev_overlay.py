@@ -1,3 +1,8 @@
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import TYPE_CHECKING
+
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton
 from PyQt6.QtCore import Qt, QTimer
 
@@ -11,6 +16,11 @@ from views.check_in_manual import CheckInManual
 from views.qr_codes import QRCodes
 from views.user_welcome import UserWelcome
 from views.transition_screen import TransitionScreen
+from views.base import Screen
+from controllers.navigation_controller import NavigationController
+
+if TYPE_CHECKING:
+    from window import CheckInWindow
 
 _DEV_NAME = "Dev User"
 _DEV_EMAIL = "devuser@ucsd.edu"
@@ -19,7 +29,7 @@ _DEV_RFID = "1a2b3c4d5e6f7g"
 _THANK_MSG = "Thank you for registering"
 
 
-def _sim_no_account_success(nav):
+def _sim_no_account_success(nav: NavigationController) -> None:
     nav.ctx.rfid = _DEV_RFID
     if not nav.ctx.has_barcode_scanner:
         nav.get_frame(TransitionScreen).display(
@@ -28,14 +38,14 @@ def _sim_no_account_success(nav):
         QTimer.singleShot(6000, nav.back_to_main)
         return
 
-    def on_done():
+    def on_done() -> None:
         nav.ctx.traffic_light.request_green()
         nav.get_frame(UserWelcome).display_name(_DEV_NAME, _THANK_MSG)
 
     nav.go_to_create_account(on_done=on_done)
 
 
-def _sim_no_account_needs_waiver(nav):
+def _sim_no_account_needs_waiver(nav: NavigationController) -> None:
     nav.ctx.rfid = _DEV_RFID
     if not nav.ctx.has_barcode_scanner:
         nav.get_frame(TransitionScreen).display(
@@ -46,7 +56,7 @@ def _sim_no_account_needs_waiver(nav):
     nav.go_to_create_account(on_done=nav.go_to_sign_waiver)
 
 
-def _sim_barcode_swipe(nav):
+def _sim_barcode_swipe(nav: NavigationController) -> None:
     nav.go_to_create_account_review(
         pid=_DEV_PID,
         first_name=_DEV_NAME.split()[0],
@@ -55,7 +65,7 @@ def _sim_barcode_swipe(nav):
     )
 
 
-TRANSITIONS = {
+TRANSITIONS: dict[type[Screen], list[tuple[str, Callable[[NavigationController], None]]]] = {
     CheckInRFID: [
         ("QR Codes", lambda nav: nav.show_frame(QRCodes)),
         ("No ID", lambda nav: nav.go_to_no_id()),
@@ -100,7 +110,7 @@ TRANSITIONS = {
 
 class DevOverlay(QWidget):
 
-    def __init__(self, window, nav):
+    def __init__(self, window: CheckInWindow, nav: NavigationController) -> None:
         super().__init__(window.central)
         self._nav = nav
         self._stacked = window.stacked
@@ -122,10 +132,10 @@ class DevOverlay(QWidget):
 
         self._layout = layout
 
-    def update(self, screen_class):
+    def update(self, screen_class: type[Screen]) -> None:  # type: ignore[override]
         while self._layout.count() > 1:
             item = self._layout.takeAt(1)
-            w = item.widget()
+            w = item.widget()  # type: ignore[union-attr]
             if w:
                 w.setParent(None)
         self._buttons.clear()
@@ -150,13 +160,13 @@ class DevOverlay(QWidget):
 
         QTimer.singleShot(0, self._refresh)
 
-    def _refresh(self):
+    def _refresh(self) -> None:
         self.adjustSize()
         self._reposition()
         self.raise_()
         self.show()
 
-    def _reposition(self):
+    def _reposition(self) -> None:
         s = self._stacked
         self.move(
             s.x() + s.width() - self.width() - 10,

@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import sys
 import logging
 import argparse
 import os
+from typing import Any
 from sys import stdout
 
 from PyQt6.QtWidgets import QApplication
@@ -30,7 +33,7 @@ API_MONITOR_INTERVAL_S = 15
 HARDWARE_RETRY_DELAY_S = 5
 
 
-def clear_and_return(ctx: AppContext):
+def clear_and_return(ctx: AppContext) -> None:
     ctx.nav.back_to_main()
     ctx.nav.get_frame(CreateAccountManual).clear_entries()
     ctx.nav.get_frame(CreateAccountNoPid).clear_entries()
@@ -71,14 +74,14 @@ if __name__ == "__main__":
     heartbeat_timer.start()
     QTimer.singleShot(0, health_server.mark_ui_ready)
 
-    state = {
+    state: dict[str, Any] = {
         "app_initialized": False,
         "reader_attached": False,
         "monitor_started": False,
         "ctx": None,
     }
 
-    def monitor_api():
+    def monitor_api() -> None:
         try:
             ApiController.ping()
         except ApiUnreachableError as e:
@@ -93,7 +96,7 @@ if __name__ == "__main__":
             window.hide_error()
         QTimer.singleShot(API_MONITOR_INTERVAL_S * 1000, monitor_api)
 
-    def build_app_context():
+    def build_app_context() -> AppContext:
         ctx = AppContext.create(get_usb_ids().traffic_light)
         ctx.dispatcher = MainThreadDispatcher()
         nav = NavigationController(window, ctx, dev_mode=dev_mode)
@@ -105,7 +108,7 @@ if __name__ == "__main__":
         window.set_escape_handler(lambda: clear_and_return(ctx))
         return ctx
 
-    def on_reader_disconnect(reason):
+    def on_reader_disconnect(reason: str) -> None:
         logging.warning("RFID reader disconnected: %s", reason)
         state["reader_attached"] = False
         window.show_error(
@@ -115,9 +118,9 @@ if __name__ == "__main__":
             on_retry=startup,
         )
 
-    def attach_reader(ctx):
+    def attach_reader(ctx: AppContext) -> None:
         usb = get_usb_ids()
-        reader = Reader(usb.reader)
+        reader = Reader(usb.reader)  # type: ignore[arg-type]
         card_reader = RfidReaderController(ctx)
         card_reader.start(reader, on_disconnect=on_reader_disconnect)
         ctx.card_reader = card_reader
@@ -130,14 +133,14 @@ if __name__ == "__main__":
         else:
             logging.warning("no barcode scanner found, barcode scanning disabled")
 
-    def shutdown():
+    def shutdown() -> None:
         ctx = state.get("ctx")
         if ctx is not None and getattr(ctx, "card_reader", None) is not None:
             ctx.card_reader.stop()
 
     app.aboutToQuit.connect(shutdown)
 
-    def startup():
+    def startup() -> None:
         try:
             ApiController.ping()
         except ApiUnreachableError as e:

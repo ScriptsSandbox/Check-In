@@ -4,6 +4,7 @@ import os
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any
 
 import notifier
 
@@ -26,7 +27,7 @@ def heartbeat() -> None:
     _state.last_heartbeat = time.monotonic()
 
 
-def _status(stall_threshold_s: float):
+def _status(stall_threshold_s: float) -> tuple[bool, str, float]:
     now = time.monotonic()
     if not _state.ui_ready:
         return False, "ui_not_ready", now - _state.started_at
@@ -39,10 +40,10 @@ def _status(stall_threshold_s: float):
 class _Handler(BaseHTTPRequestHandler):
     stall_threshold_s = 5.0
 
-    def log_message(self, *_a, **_kw):
+    def log_message(self, format: str, *args: object) -> None:
         pass
 
-    def do_GET(self):
+    def do_GET(self) -> None:
         if self.path != "/health":
             self.send_response(404)
             self.end_headers()
@@ -51,7 +52,7 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_response(200 if ok else 503)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
-        body = {
+        body: dict[str, Any] = {
             "status": reason,
             "ui_ready": _state.ui_ready,
             "heartbeat_age_s": round(age, 2),
@@ -67,7 +68,7 @@ def start(port: int = 8001) -> None:
 
 
 def start_watchdog(startup_grace_s: float = 60.0, stall_threshold_s: float = 15.0) -> None:
-    def loop():
+    def loop() -> None:
         while True:
             time.sleep(2)
             now = time.monotonic()
