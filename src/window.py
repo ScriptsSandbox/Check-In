@@ -2,18 +2,15 @@ from pathlib import Path
 from PyQt6.QtWidgets import QMainWindow, QWidget, QStackedWidget, QLabel, QVBoxLayout
 from PyQt6.QtGui import QFontDatabase, QPainter, QPixmap, QColor
 from PyQt6.QtCore import QTimer, Qt
-
 import notifier
-
-ASSETS_PATH = Path(__file__).parent / "assets" / "shared"
+from controllers.assets_controller import AssetController
 
 
 class _RootWidget(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        bg_path = ASSETS_PATH / "background_main.png"
-        self._bg = QPixmap(str(bg_path)) if bg_path.exists() else QPixmap()
+        self._bg = QPixmap(AssetController.BACKGROUND.get_path())
 
     def paintEvent(self, event):
         painter = QPainter(self)

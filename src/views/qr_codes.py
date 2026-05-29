@@ -1,12 +1,11 @@
-from pathlib import Path
 from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtCore import Qt
+
+from controllers.assets_controller import AssetController
 from .base import Screen
 from .components.outline_frame import OutlineFrame
 from .components.styled_button import home_button, INNER_MARGIN, OUTER_MARGIN
-
-ASSETS_PATH = Path(__file__).parent.parent / "assets" / "qr_codes"
 
 
 class QRCodes(Screen):
@@ -51,8 +50,8 @@ class QRCodes(Screen):
             return col
 
         qr_row.addStretch()
-        qr_row.addLayout(_qr_col(ASSETS_PATH / "qr_website.png", "Website"))
-        qr_row.addLayout(_qr_col(ASSETS_PATH / "qr_waiver.png", "Waiver"))
+        qr_row.addLayout(_qr_col(AssetController.QR_WEBSITE.get_path(), "Website"))
+        qr_row.addLayout(_qr_col(AssetController.QR_WAIVER.get_path(), "Waiver"))
         qr_row.addStretch()
         inner.addLayout(qr_row)
 

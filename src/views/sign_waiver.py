@@ -1,13 +1,10 @@
-from pathlib import Path
 from PyQt6.QtWidgets import QHBoxLayout, QVBoxLayout, QLabel
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtCore import Qt
+from controllers.assets_controller import AssetController
 from .base import Screen
 from .components.outline_frame import OutlineFrame
 from .components.styled_button import StyledButton, OUTER_MARGIN, INNER_MARGIN
-
-ASSETS_PATH = Path(__file__).parent.parent / "assets" / "sign_waiver"
-
 
 class SignWaiver(Screen):
     def _build(self, controller):
@@ -50,7 +47,7 @@ class SignWaiver(Screen):
         right.setSpacing(0)
         right.addStretch()
 
-        qr_px = QPixmap(str(ASSETS_PATH / "qr_waiver.png"))
+        qr_px = QPixmap(AssetController.QR_WAIVER.get_path())
         qr_px = qr_px.scaled(320, 320, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
         qr_label = QLabel()
         qr_label.setPixmap(qr_px)
