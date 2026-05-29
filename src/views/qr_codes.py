@@ -2,7 +2,7 @@ from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtCore import Qt
 
-from controllers.assets_controller import AssetController
+from controllers.asset_controller import AssetController
 from .base import Screen
 from .components.outline_frame import OutlineFrame
 from .components.styled_button import home_button, INNER_MARGIN, OUTER_MARGIN

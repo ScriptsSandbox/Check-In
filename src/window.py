@@ -3,7 +3,7 @@ from PyQt6.QtWidgets import QMainWindow, QWidget, QStackedWidget, QLabel, QVBoxL
 from PyQt6.QtGui import QFontDatabase, QPainter, QPixmap, QColor
 from PyQt6.QtCore import QTimer, Qt
 import notifier
-from controllers.assets_controller import AssetController
+from controllers.asset_controller import AssetController
 
 
 class _RootWidget(QWidget):
