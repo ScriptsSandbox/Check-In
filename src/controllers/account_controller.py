@@ -7,15 +7,15 @@ from typing import Any
 from PyQt6.QtCore import QTimer
 
 from controllers.api_controller import ApiController, ExternalApiError
-from app_context import AppContext
+from main import context
 
 
 class AccountController:
-    def __init__(self, ctx: AppContext) -> None:
-        self.ctx = ctx
+    def __init__(self) -> None:
+        pass
 
     def go_to_review_from_barcode(self, barcode: str) -> None:
-        self.ctx.nav.show_status("Looking up student...")
+        context.navigation_controller.show_status("Looking up student...")
         logging.info(f"looking up student by barcode: {barcode}")
         Thread(target=self._lookup_barcode_worker, args=(barcode,), daemon=True).start()
 
@@ -23,17 +23,17 @@ class AccountController:
         try:
             student = ApiController.lookup_by_barcode(barcode)
         except ExternalApiError as e:
-            self.ctx.dispatcher.call.emit(lambda: self._on_external_api_error(e.api))
+            context.dispatcher.call.emit(lambda: self._on_external_api_error(e.api))
             return
-        self.ctx.dispatcher.call.emit(lambda s=student: self._on_barcode_result(s))
+        context.dispatcher.call.emit(lambda s=student: self._on_barcode_result(s))
 
     def _on_barcode_result(self, student: dict[str, Any] | None) -> None:
-        self.ctx.nav.hide_status()
+        context.navigation_controller.hide_status()
         if student is None:
-            self.ctx.nav.show_status("Student not found. Please enter your details manually.")
-            QTimer.singleShot(3000, self.ctx.nav.hide_status)
+            context.navigation_controller.show_status("Student not found. Please enter your details manually.")
+            QTimer.singleShot(3000, context.navigation_controller.hide_status)
             return
-        self.ctx.nav.go_to_create_account_review(
+        context.navigation_controller.go_to_create_account_review(
             pid=student["pid"],
             first_name=student["first_name"],
             last_name=student["last_name"],
@@ -41,7 +41,7 @@ class AccountController:
         )
 
     def go_to_review_from_pid(self, pid: str) -> None:
-        self.ctx.nav.show_status("Looking up student...")
+        context.navigation_controller.show_status("Looking up student...")
         logging.info(f"looking up student by PID: {pid}")
         Thread(target=self._lookup_pid_worker, args=(pid,), daemon=True).start()
 
@@ -49,17 +49,17 @@ class AccountController:
         try:
             student = ApiController.lookup_by_pid(pid)
         except ExternalApiError as e:
-            self.ctx.dispatcher.call.emit(lambda: self._on_external_api_error(e.api))
+            context.dispatcher.call.emit(lambda: self._on_external_api_error(e.api))
             return
-        self.ctx.dispatcher.call.emit(lambda s=student: self._on_pid_result(s, pid))
+        context.dispatcher.call.emit(lambda s=student: self._on_pid_result(s, pid))
 
     def _on_pid_result(self, student: dict[str, Any] | None, pid: str) -> None:
-        self.ctx.nav.hide_status()
+        context.navigation_controller.hide_status()
         if student is None:
-            self.ctx.nav.show_status("Student not found. Please check your PID.")
-            QTimer.singleShot(3000, self.ctx.nav.hide_status)
+            context.navigation_controller.show_status("Student not found. Please check your PID.")
+            QTimer.singleShot(3000, context.navigation_controller.hide_status)
             return
-        self.ctx.nav.go_to_create_account_review(
+        context.navigation_controller.go_to_create_account_review(
             pid=pid,
             first_name=student["first_name"],
             last_name=student["last_name"],
@@ -81,7 +81,7 @@ class AccountController:
         last_name: str | None = None,
         email: str | None = None,
     ) -> None:
-        self.ctx.nav.show_status("Account creation in progress!")
+        context.navigation_controller.show_status("Account creation in progress!")
         logging.info(f"creating account: pid={pid} barcode={barcode}")
         Thread(
             target=self._create_worker,
@@ -90,9 +90,9 @@ class AccountController:
         ).start()
 
     def _on_external_api_error(self, api: str) -> None:
-        self.ctx.nav.hide_status()
-        self.ctx.nav.show_status(f"system error ({api.upper()} api). please talk to a staff member.")
-        QTimer.singleShot(4000, self.ctx.nav.hide_status)
+        context.navigation_controller.hide_status()
+        context.navigation_controller.show_status(f"system error ({api.upper()} api). please talk to a staff member.")
+        QTimer.singleShot(4000, context.navigation_controller.hide_status)
 
     def _create_worker(
         self,
@@ -105,7 +105,7 @@ class AccountController:
     ) -> None:
         try:
             result = ApiController.create_account(
-                self.ctx.rfid,
+                context.rfid,
                 barcode=barcode,
                 pid=pid,
                 first_name=first_name,
@@ -113,15 +113,15 @@ class AccountController:
                 email=email,
             )
         except ExternalApiError as e:
-            self.ctx.dispatcher.call.emit(lambda: self._on_external_api_error(e.api))
+            context.dispatcher.call.emit(lambda: self._on_external_api_error(e.api))
             return
-        self.ctx.dispatcher.call.emit(lambda r=result: self._on_create_result(r))
+        context.dispatcher.call.emit(lambda r=result: self._on_create_result(r))
 
     def _on_create_result(self, result: dict[str, Any] | None) -> None:
-        self.ctx.nav.hide_status()
+        context.navigation_controller.hide_status()
         if result is None:
-            self.ctx.nav.show_status("ERROR! Could not create account, please try manually.")
-            QTimer.singleShot(3000, self.ctx.nav.hide_status)
+            context.navigation_controller.show_status("ERROR! Could not create account, please try manually.")
+            QTimer.singleShot(3000, context.navigation_controller.hide_status)
             return
         logging.info("account creation succeeded")
-        self.ctx.nav.pop()
+        context.navigation_controller.pop()

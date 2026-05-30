@@ -4,8 +4,12 @@ from pathlib import Path
 from PyQt6.QtWidgets import QMainWindow, QWidget, QStackedWidget, QLabel, QVBoxLayout
 from PyQt6.QtGui import QFontDatabase, QPainter, QPixmap, QColor, QPaintEvent, QKeyEvent
 from PyQt6.QtCore import QTimer, Qt
-import notifier
 from controllers.asset_controller import AssetController
+from main import context
+from views.check_in_manual import CheckInManual
+from views.create_account_manual import CreateAccountManual
+from views.create_account_no_pid import CreateAccountNoPid
+from views.create_account_review import CreateAccountReview
 
 
 class _RootWidget(QWidget):
@@ -23,7 +27,7 @@ class _RootWidget(QWidget):
             painter.drawPixmap(x, y, self._bg)
 
 
-class CheckInWindow(QMainWindow):
+class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Check-In")
@@ -87,6 +91,8 @@ class CheckInWindow(QMainWindow):
 
         self._escape_handler: Callable[[], None] | None = None
 
+        self.showFullScreen()
+
     def show_error(self, title: str, detail: str, *, retry_in: int | None = None, on_retry: Callable[[], None] | None = None) -> None:
         self._error_title.setText(title)
         self._error_detail.setText(detail)
@@ -125,11 +131,12 @@ class CheckInWindow(QMainWindow):
         else:
             self._error_countdown.setText(f"Retrying in {self._retry_remaining}s…")
 
-    def set_escape_handler(self, fn: Callable[[], None]) -> None:
-        self._escape_handler = fn
-
     def keyPressEvent(self, event: QKeyEvent | None) -> None:
-        if event and event.key() == Qt.Key.Key_Escape and self._escape_handler:
-            self._escape_handler()
+        if event and event.key() == Qt.Key.Key_Escape:
+            context.navigation_controller.back_to_main()
+            context.navigation_controller.get_frame(CreateAccountManual).clear_entries()
+            context.navigation_controller.get_frame(CreateAccountNoPid).clear_entries()
+            context.navigation_controller.get_frame(CreateAccountReview).clear_entries()
+            context.navigation_controller.get_frame(CheckInManual).clear_entries()
         else:
             super().keyPressEvent(event)

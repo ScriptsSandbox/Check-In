@@ -5,8 +5,10 @@ import time
 from typing import Any
 
 import requests
+from PyQt6.QtCore import QTimer
 
-from config import API_BASE_URL
+from hardware.traffic_light import TrafficLightState
+from main import context
 
 SILENT_PATHS = frozenset(["/health", "/traffic-light"])
 
@@ -22,10 +24,28 @@ class ApiUnreachableError(Exception):
 
 
 class ApiController:
+    def __init__(self) -> None:
+        QTimer.singleShot(context.config.API_MONITOR_INTERVAL_SECONDS * 1000, self.monitor_api)
+
+    def monitor_api(self) -> None:
+        try:
+            ApiController.ping()
+        except ApiUnreachableError as e:
+            context.mainWindow.show_error(
+                "Lost connection to API",
+                str(e),
+                retry_in=context.config.API_RETRY_DELAY_SECONDS,
+                on_retry=self.monitor_api,
+            )
+            return
+        if context.mainWindow.is_error_visible():
+            context.mainWindow.hide_error()
+        QTimer.singleShot(context.config.API_MONITOR_INTERVAL_SECONDS * 1000, self.monitor_api)
+
     @staticmethod
     def _req(method: str, path: str, **kwargs: Any) -> requests.Response:
-        url = f"{API_BASE_URL}{path}"
-        start = time.time()
+        url = f"{context.env.CHECK_IN_API_URL}{path}"
+        start: float = time.time()
         resp = requests.request(method, url, **kwargs)
         ms = (time.time() - start) * 1000
         if resp.status_code == 502:
@@ -64,20 +84,23 @@ class ApiController:
             return {"status": "api_error"}
 
     @staticmethod
-    def set_traffic_light(color: str) -> None:
+    def set_traffic_light(state: TrafficLightState) -> None:
+        data: dict[str, TrafficLightState] = {
+            "state": state
+        }
         try:
-            ApiController._req("POST", "/traffic-light", json={"color": color}, timeout=5)
+            ApiController._req("POST", "/traffic-light", json=data, timeout=5)
         except Exception as e:
             logging.error(f"error setting traffic light: {e}")
 
     @staticmethod
-    def get_traffic_light() -> str:
+    def get_traffic_light() -> TrafficLightState:
         try:
             resp = ApiController._req("GET", "/traffic-light", timeout=5)
-            return resp.json().get("color", "off")  # type: ignore[no-any-return]
+            return TrafficLightState(resp.json().get("state"))
         except Exception as e:
             logging.error(f"error getting traffic light: {e}")
-            return "off"
+            return TrafficLightState.OFF
 
     @staticmethod
     def lookup_by_pid(pid: str) -> dict[str, Any] | None:

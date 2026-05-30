@@ -5,37 +5,49 @@ import time
 from threading import Thread
 from typing import TYPE_CHECKING
 
+from hardware.usb_ports import USBPortController, USBDevice
+from main import context
 from views.check_in_manual import CheckInManual
 from views.create_account_barcode import CreateAccountBarcode
 from views.create_account_manual import CreateAccountManual
-from app_context import AppContext
+from global_context import GlobalContext
 
 if TYPE_CHECKING:
     from hardware.barcode_scanner import BarcodeScanner
 
 
 class BarcodeScannerController:
-    def __init__(self, ctx: AppContext) -> None:
-        self.ctx = ctx
+    _barcode_scanner: BarcodeScanner | None
 
-    def start(self, scanner: BarcodeScanner) -> None:
-        thread = Thread(target=self._run, args=(scanner,), daemon=True)
+    def __init__(self) -> None:
+        if context.env.HAS_BARCODE_SCANNER:
+            self._barcode_scanner = BarcodeScanner(USBPortController.get_usb_device_port(USBDevice.BARCODE_SCANNER))
+
+        self.start()
+
+    def start(self) -> None:
+        if not self._barcode_scanner:
+            raise RuntimeError("Barcode scanner does not exist and thus cannot be started")
+
+        thread = Thread(target=self._run, daemon=True)
         thread.start()
 
-    def _run(self, scanner: BarcodeScanner) -> None:
+    def _run(self) -> None:
+        assert self._barcode_scanner
+
         logging.info("now reading barcodes")
         scanner_error = False
         try:
             while True:
                 if scanner_error:
                     time.sleep(0.5)
-                    if scanner.reconnect():
+                    if self._barcode_scanner.reconnect():
                         logging.info("barcode scanner reconnected")
                         scanner_error = False
                     continue
 
                 try:
-                    barcode = scanner.read_barcode()
+                    barcode = self._barcode_scanner.read_barcode()
                 except OSError as e:
                     logging.error("barcode scanner disconnected: %s", e)
                     scanner_error = True
@@ -46,20 +58,20 @@ class BarcodeScannerController:
 
                 logging.debug("raw barcode received: %r", barcode)
 
-                if not scanner.is_valid(barcode):
+                if not self._barcode_scanner.is_valid(barcode):
                     logging.warning("invalid barcode rejected: %r", barcode)
                     continue
 
                 logging.info("barcode scanned: %r", barcode)
-                curr_frame = self.ctx.nav.get_curr_frame()
+                curr_frame = context.navigation_controller.get_curr_frame()
 
                 if curr_frame == CheckInManual:
-                    self.ctx.dispatcher.call.emit(
-                        lambda b=barcode: self.ctx.check_in.handle_by_pid(b)
+                    context.dispatcher.call.emit(
+                        lambda b=barcode: context.check_in_controller.handle_by_pid(b)
                     )
                 elif curr_frame in (CreateAccountBarcode, CreateAccountManual):
-                    self.ctx.dispatcher.call.emit(
-                        lambda b=barcode: self.ctx.account.go_to_review_from_barcode(b)
+                    context.dispatcher.call.emit(
+                        lambda b=barcode: context.account_controller.go_to_review_from_barcode(b)
                     )
                 else:
                     logging.debug("barcode scanned on unhandled screen: %s", curr_frame)

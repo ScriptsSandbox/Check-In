@@ -10,7 +10,7 @@ from adafruit_pn532.uart import PN532_UART
 expected_characters = 14
 
 
-class Reader(Thread):
+class RFIDReader(Thread):
     def __init__(self, usb_id: str) -> None:
         super().__init__()
         self._usb_id = usb_id

@@ -6,7 +6,6 @@ services:
     network_mode: host
     environment:
       - DISPLAY=:0
-      - CHECK_IN_API_URL=http://10.8.0.1:8000
     env_file:
       - .env
     volumes:

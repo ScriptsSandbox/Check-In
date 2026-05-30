@@ -1,11 +1,12 @@
 import logging
 from dataclasses import dataclass
+from enum import Enum
 
 import serial.tools.list_ports
 
 READER_AND_TRAFFIC_LIGHT_VID = 0x1A86
 TRAFFIC_LIGHT_LOCATION = "1-1.1.2"
-BARCODE_VID = 0x9901
+BARCODE_SCANNER_VID = 0x9901
 
 
 @dataclass
@@ -15,18 +16,27 @@ class UsbIds:
     barcode: str | None
 
 
-def get_usb_ids() -> UsbIds:
-    reader = None
-    traffic_light = None
-    barcode = None
-    for p in serial.tools.list_ports.comports():
-        logging.debug("USB port: %s vid=%s desc=%s", p.device, hex(p.vid) if p.vid else None, p.description)
-        if p.vid == READER_AND_TRAFFIC_LIGHT_VID:
-            if p.location == TRAFFIC_LIGHT_LOCATION:
-                traffic_light = p.device
-            else:
-                reader = p.device
-        elif p.vid == BARCODE_VID:
-            barcode = p.device
-    logging.info("USB detected — reader: %s, traffic_light: %s, barcode: %s", reader, traffic_light, barcode)
-    return UsbIds(reader, traffic_light, barcode)
+class USBDevice(Enum):
+    RFID_READER = "rfid_reader"
+    TRAFFIC_LIGHT = "traffic_light"
+    BARCODE_SCANNER = "barcode_scanner"
+
+
+class USBPortController:
+
+    @classmethod
+    def get_usb_device_port(cls, device: USBDevice) -> str:
+        for port in serial.tools.list_ports.comports():
+            vendor_id = port.vid
+
+            match device:
+                case USBDevice.RFID_READER:
+                    if vendor_id == READER_AND_TRAFFIC_LIGHT_VID and port.location != TRAFFIC_LIGHT_LOCATION:
+                        return port.device
+                case USBDevice.TRAFFIC_LIGHT:
+                    if vendor_id == READER_AND_TRAFFIC_LIGHT_VID and port.location == TRAFFIC_LIGHT_LOCATION:
+                        return port.device
+                case USBDevice.BARCODE_SCANNER:
+                    if vendor_id == BARCODE_SCANNER_VID:
+                        return port.device
+        raise RuntimeError(f"Could not find usb for device {device}")

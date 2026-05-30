@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton
 from PyQt6.QtCore import Qt, QTimer
 
+from hardware.traffic_light import TrafficLightState
+from main import context
 from views.check_in_rfid import CheckInRFID
 from views.create_account_barcode import CreateAccountBarcode
 from views.create_account_manual import CreateAccountManual
@@ -19,9 +21,6 @@ from views.transition_screen import TransitionScreen
 from views.base import Screen
 from controllers.navigation_controller import NavigationController
 
-if TYPE_CHECKING:
-    from window import CheckInWindow
-
 _DEV_NAME = "Dev User"
 _DEV_EMAIL = "devuser@ucsd.edu"
 _DEV_PID = "A12345678"
@@ -30,8 +29,8 @@ _THANK_MSG = "Thank you for registering"
 
 
 def _sim_no_account_success(nav: NavigationController) -> None:
-    nav.ctx.rfid = _DEV_RFID
-    if not nav.ctx.has_barcode_scanner:
+    context.rfid = _DEV_RFID
+    if not context.has_barcode_scanner:
         nav.get_frame(TransitionScreen).display(
             "Looks like you don't have an account.\nUse the other kiosk to set one up!"
         )
@@ -39,15 +38,15 @@ def _sim_no_account_success(nav: NavigationController) -> None:
         return
 
     def on_done() -> None:
-        nav.ctx.traffic_light.request_green()
+        context.traffic_light_controller.request_state(TrafficLightState.GREEN)
         nav.get_frame(UserWelcome).display_name(_DEV_NAME, _THANK_MSG)
 
     nav.go_to_create_account(on_done=on_done)
 
 
 def _sim_no_account_needs_waiver(nav: NavigationController) -> None:
-    nav.ctx.rfid = _DEV_RFID
-    if not nav.ctx.has_barcode_scanner:
+    context.rfid = _DEV_RFID
+    if not context.has_barcode_scanner:
         nav.get_frame(TransitionScreen).display(
             "Looks like you don't have an account.\nUse the other kiosk to set one up!"
         )
@@ -90,7 +89,7 @@ TRANSITIONS: dict[type[Screen], list[tuple[str, Callable[[NavigationController],
         ("← Main", lambda nav: nav.back_to_main()),
     ],
     CreateAccountManual: [
-        ("→ review (pid lookup)", lambda nav: nav.ctx.account.go_to_review_from_pid(_DEV_PID)),
+        ("→ review (pid lookup)", lambda nav: context.account_controller.go_to_review_from_pid(_DEV_PID)),
         ("→ no-pid screen", lambda nav: nav.go_to_create_account_no_pid()),
         ("← Main", lambda nav: nav.back_to_main()),
     ],
@@ -110,10 +109,10 @@ TRANSITIONS: dict[type[Screen], list[tuple[str, Callable[[NavigationController],
 
 class DevOverlay(QWidget):
 
-    def __init__(self, window: CheckInWindow, nav: NavigationController) -> None:
-        super().__init__(window.central)
+    def __init__(self, nav: NavigationController) -> None:
+        super().__init__(context.mainWindow.central)
         self._nav = nav
-        self._stacked = window.stacked
+        self._stacked = context.mainWindow.stacked
         self._buttons: list[QPushButton] = []
 
         self.setStyleSheet("QWidget { background-color: #1a1a2e; }")
