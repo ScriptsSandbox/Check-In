@@ -48,7 +48,7 @@ class RFIDReaderController:
             "Card reader not detected",
             reason,
             retry_in=context.config.HARDWARE_RETRY_DELAY_SECONDS,
-            on_retry=startup,
+            # on_retry=startup,
         )
 
     def _fire_disconnect(self, reason: str) -> None:
@@ -108,8 +108,8 @@ class RFIDReaderController:
         except Exception as exception:
             tb = traceback.format_exc()
             logging.critical("RFID reader thread died: %s\n%s", exception, tb)
-            notifier.notify_critical(
-                "RFID reader thread died",
-                f"{type(exception).__name__}: {exception}\n\n{tb[-1500:]}",
-            )
+            # notifier.notify_critical(
+            #     "RFID reader thread died",
+            #     f"{type(exception).__name__}: {exception}\n\n{tb[-1500:]}",
+            # )
             self._fire_disconnect(f"{type(exception).__name__}: {exception}")

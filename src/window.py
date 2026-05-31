@@ -108,13 +108,13 @@ class MainWindow(QMainWindow):
             self._error_countdown.hide()
         self._error.show()
         self._error.raise_()
-        notifier.notify_critical(title, detail)
+        # notifier.notify_critical(title, detail)
 
     def hide_error(self) -> None:
         self._retry_timer.stop()
         self._retry_callback = None
         self._error.hide()
-        notifier.notify_resolved()
+        # notifier.notify_resolved()
 
     def is_error_visible(self) -> bool:
         return self._error.isVisible()

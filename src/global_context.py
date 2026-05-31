@@ -37,6 +37,17 @@ class Config:
     DISCORD_CRITICAL_ALERT_ROLE_ID = "1509027158209859695"
 
 
+def _from_env(key: str, required: bool) -> str:
+    value = os.environ.get(key)
+    if value is None:
+        if required:
+            raise RuntimeError(f"Missing environment variable: {key}")
+        else:
+            return ""
+
+    return value
+
+
 class GlobalContext:
     def __init__(
             self,
@@ -82,19 +93,9 @@ class GlobalContext:
 
     def load_env(self) -> None:
         self.env = Env(
-            KIOSK_NAME=self._from_env("KIOSK_NAME", required=True),
-            HAS_BARCODE_SCANNER=self._from_env("HAS_BARCODE_SCANNER", required=True).lower() == "true",
-            CHECK_IN_API_URL=self._from_env("CHECK_IN_API_URL", required=True),
-            DISCORD_WEBHOOK_URL=self._from_env("DISCORD_WEBHOOK_URL", required=False),
-            DEV_MODE=self._from_env("DEV_MODE", required=False).lower() == "true"
+            KIOSK_NAME=_from_env("KIOSK_NAME", required=True),
+            HAS_BARCODE_SCANNER=_from_env("HAS_BARCODE_SCANNER", required=True).lower() == "true",
+            CHECK_IN_API_URL=_from_env("CHECK_IN_API_URL", required=True),
+            DISCORD_WEBHOOK_URL=_from_env("DISCORD_WEBHOOK_URL", required=False),
+            DEV_MODE=_from_env("DEV_MODE", required=False).lower() == "true"
         )
-
-    def _from_env(self, key: str, required: bool) -> str:
-        value = os.environ.get(key)
-        if value is None:
-            if required:
-                raise RuntimeError(f"Missing environment variable: {key}")
-            else:
-                return ""
-
-        return value
