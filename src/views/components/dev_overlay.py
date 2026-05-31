@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton
 from PyQt6.QtCore import Qt, QTimer
 
+from global_context import context
 from hardware.traffic_light import TrafficLightState
-from main import context
 from views.check_in_rfid import CheckInRFID
 from views.create_account_barcode import CreateAccountBarcode
 from views.create_account_manual import CreateAccountManual
@@ -29,8 +29,8 @@ _THANK_MSG = "Thank you for registering"
 
 
 def _sim_no_account_success(nav: NavigationController) -> None:
-    context.rfid = _DEV_RFID
-    if not context.has_barcode_scanner:
+    context().rfid = _DEV_RFID
+    if not context().has_barcode_scanner:
         nav.get_frame(TransitionScreen).display(
             "Looks like you don't have an account.\nUse the other kiosk to set one up!"
         )
@@ -38,15 +38,15 @@ def _sim_no_account_success(nav: NavigationController) -> None:
         return
 
     def on_done() -> None:
-        context.traffic_light_controller.request_state(TrafficLightState.GREEN)
+        context().traffic_light_controller.request_state(TrafficLightState.GREEN)
         nav.get_frame(UserWelcome).display_name(_DEV_NAME, _THANK_MSG)
 
     nav.go_to_create_account(on_done=on_done)
 
 
 def _sim_no_account_needs_waiver(nav: NavigationController) -> None:
-    context.rfid = _DEV_RFID
-    if not context.has_barcode_scanner:
+    context().rfid = _DEV_RFID
+    if not context().has_barcode_scanner:
         nav.get_frame(TransitionScreen).display(
             "Looks like you don't have an account.\nUse the other kiosk to set one up!"
         )
@@ -89,7 +89,7 @@ TRANSITIONS: dict[type[Screen], list[tuple[str, Callable[[NavigationController],
         ("← Main", lambda nav: nav.back_to_main()),
     ],
     CreateAccountManual: [
-        ("→ review (pid lookup)", lambda nav: context.account_controller.go_to_review_from_pid(_DEV_PID)),
+        ("→ review (pid lookup)", lambda nav: context().account_controller.go_to_review_from_pid(_DEV_PID)),
         ("→ no-pid screen", lambda nav: nav.go_to_create_account_no_pid()),
         ("← Main", lambda nav: nav.back_to_main()),
     ],
@@ -110,9 +110,9 @@ TRANSITIONS: dict[type[Screen], list[tuple[str, Callable[[NavigationController],
 class DevOverlay(QWidget):
 
     def __init__(self, nav: NavigationController) -> None:
-        super().__init__(context.mainWindow.central)
+        super().__init__(context().mainWindow.central)
         self._nav = nav
-        self._stacked = context.mainWindow.stacked
+        self._stacked = context().mainWindow.stacked
         self._buttons: list[QPushButton] = []
 
         self.setStyleSheet("QWidget { background-color: #1a1a2e; }")

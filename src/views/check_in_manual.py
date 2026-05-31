@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING
 from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel
 from PyQt6.QtCore import Qt
 
-from main import context
 from .base import Screen
 from .components.outline_frame import OutlineFrame
 from .components.styled_button import StyledButton, home_button, INNER_MARGIN, OUTER_MARGIN
@@ -100,5 +99,5 @@ class CheckInManual(Screen):
             return
         controller.show_status("PLEASE WAIT: LOADING...")
         self.clear_entries()
-        context.check_in_controller.handle_by_pid(pid)
+        context().check_in_controller.handle_by_pid(pid)
         controller.hide_status()

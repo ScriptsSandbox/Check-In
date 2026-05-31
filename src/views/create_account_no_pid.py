@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING
 from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel
 from PyQt6.QtCore import Qt
 
-from main import context
 from .base import Screen
 from .components.outline_frame import OutlineFrame
 from .components.styled_button import StyledButton, home_button, INNER_MARGIN, OUTER_MARGIN
@@ -99,7 +98,7 @@ class CreateAccountNoPid(Screen):
             return
         self.clear_entries()
         try:
-            context.account_controller.create_account_from_review(
+            context().account_controller.create_account_from_review(
                 first_name=first, last_name=last, email=email, pid=""
             )
         except Exception:

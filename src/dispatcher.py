@@ -1,5 +1,3 @@
-from collections.abc import Callable
-
 from PyQt6.QtCore import QObject, pyqtSignal
 
 

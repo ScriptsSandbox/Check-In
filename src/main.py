@@ -17,14 +17,11 @@ from controllers.barcode_scanner_controller import BarcodeScannerController
 from controllers.check_in_controller import CheckInController
 from controllers.account_controller import AccountController
 from controllers.rfid_reader_controller import RFIDReaderController
-from global_context import GlobalContext
+from global_config import config
+from global_context import GlobalContext, set_context, context
 from controllers.api_controller import ApiController, ApiUnreachableError
 from hardware.usb_ports import USBPortController
 from window import MainWindow
-
-
-
-context: GlobalContext
 
 
 class BootError(Exception):
@@ -37,6 +34,24 @@ class BootError(Exception):
         super().__init__(readable_message)
         self.exception = exception
         self.retry_in = retry_in
+
+
+def setup_context() -> None:
+    set_context(GlobalContext(
+        health_controller=HealthController(),
+        navigation_controller=NavigationController(),
+        check_in_controller=CheckInController(),
+        account_controller=AccountController(),
+        rfid_reader_controller=RFIDReaderController(),
+        barcode_scanner_controller=BarcodeScannerController(),
+        traffic_light_controller=TrafficLightController(),
+        usb_port_controller=USBPortController(),
+        mainWindow=MainWindow()
+    ))
+
+    context().navigation_controller.start()
+    context().rfid_reader_controller.start()
+    context().traffic_light_controller.start()
 
 
 if __name__ == "__main__":
@@ -58,22 +73,10 @@ if __name__ == "__main__":
     import signal
     signal.signal(signal.SIGINT, signal.SIG_DFL)
 
-    def build_app_context() -> None:
-        global context
-        context = GlobalContext(
-            health_controller=HealthController(),
-            navigation_controller=NavigationController(),
-            check_in_controller=CheckInController(),
-            account_controller=AccountController(),
-            rfid_reader_controller=RFIDReaderController(),
-            barcode_scanner_controller=BarcodeScannerController(),
-            traffic_light_controller=TrafficLightController(),
-            usb_port_controller=USBPortController(),
-            mainWindow=MainWindow()
-        )
+    setup_context()
 
     def shutdown() -> None:
-        context.rfid_reader_controller.stop()
+        context().rfid_reader_controller.stop()
 
     app.aboutToQuit.connect(shutdown)
 
@@ -84,19 +87,10 @@ if __name__ == "__main__":
             raise BootError(
                 "Cannot reach API",
                 exception=exception,
-                retry_in=context.config.API_RETRY_DELAY_SECONDS
+                retry_in=config().API_RETRY_DELAY_SECONDS
             )
 
-        try:
-            build_app_context()
-        except Exception as exception:
-            raise BootError(
-                "Kiosk failed to initialize",
-                exception=exception,
-                retry_in=context.config.API_RETRY_DELAY_SECONDS
-            )
-
-        context.mainWindow.hide_error()
+        context().mainWindow.hide_error()
         logging.info("made it to app start")
 
     QTimer.singleShot(0, attempt_startup)

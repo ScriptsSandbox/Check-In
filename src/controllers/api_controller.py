@@ -7,8 +7,9 @@ from typing import Any
 import requests
 from PyQt6.QtCore import QTimer
 
+from global_config import config
+from global_context import context
 from hardware.traffic_light import TrafficLightState
-from main import context
 
 SILENT_PATHS = frozenset(["/health", "/traffic-light"])
 
@@ -25,26 +26,26 @@ class ApiUnreachableError(Exception):
 
 class ApiController:
     def __init__(self) -> None:
-        QTimer.singleShot(context.config.API_MONITOR_INTERVAL_SECONDS * 1000, self.monitor_api)
+        QTimer.singleShot(config().API_MONITOR_INTERVAL_SECONDS * 1000, self.monitor_api)
 
     def monitor_api(self) -> None:
         try:
             ApiController.ping()
         except ApiUnreachableError as e:
-            context.mainWindow.show_error(
+            context().mainWindow.show_error(
                 "Lost connection to API",
                 str(e),
-                retry_in=context.config.API_RETRY_DELAY_SECONDS,
+                retry_in=config().API_RETRY_DELAY_SECONDS,
                 on_retry=self.monitor_api,
             )
             return
-        if context.mainWindow.is_error_visible():
-            context.mainWindow.hide_error()
-        QTimer.singleShot(context.config.API_MONITOR_INTERVAL_SECONDS * 1000, self.monitor_api)
+        if context().mainWindow.is_error_visible():
+            context().mainWindow.hide_error()
+        QTimer.singleShot(config().API_MONITOR_INTERVAL_SECONDS * 1000, self.monitor_api)
 
     @staticmethod
     def _req(method: str, path: str, **kwargs: Any) -> requests.Response:
-        url = f"{context.env.CHECK_IN_API_URL}{path}"
+        url = f"{config().CHECK_IN_API_URL}{path}"
         start: float = time.time()
         resp = requests.request(method, url, **kwargs)
         ms = (time.time() - start) * 1000

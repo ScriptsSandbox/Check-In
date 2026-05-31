@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING
 from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel
 from PyQt6.QtCore import Qt
 
-from main import context
 from .base import Screen
 from .components.outline_frame import OutlineFrame
 from .components.styled_button import StyledButton, home_button, INNER_MARGIN, OUTER_MARGIN
@@ -92,4 +91,4 @@ class CreateAccountManual(Screen):
     def _go_to_review(self) -> None:
         pid = self.pid_entry.text().strip()
         self.clear_entries()
-        context.account_controller.go_to_review_from_pid(pid)
+        context().account_controller.go_to_review_from_pid(pid)

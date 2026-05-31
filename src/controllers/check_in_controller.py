@@ -7,8 +7,8 @@ from typing import Any
 from PyQt6.QtCore import QTimer
 
 from controllers.api_controller import ApiController
+from global_context import context
 from hardware.traffic_light import TrafficLightState
-from main import context
 from views.user_welcome import UserWelcome
 from views.transition_screen import TransitionScreen
 
@@ -18,7 +18,7 @@ class CheckInController:
         pass
 
     def handle_by_uuid(self, tag: str) -> None:
-        context.dispatcher.call.emit(
+        context().dispatcher.call.emit(
             lambda: self._run_check_in(tag, ApiController.checkin_by_uuid)
         )
 
@@ -36,21 +36,21 @@ class CheckInController:
 
         if status == "api_error":
             logging.error("API error during check-in")
-            context.traffic_light_controller.request_state(TrafficLightState.RED)
-            context.navigation_controller.show_status("System error, please let staff know.")
-            QTimer.singleShot(4000, context.navigation_controller.hide_status)
+            context().traffic_light_controller.request_state(TrafficLightState.RED)
+            context().navigation_controller.show_status("System error, please let staff know.")
+            QTimer.singleShot(4000, context().navigation_controller.hide_status)
             return
 
         if status == "no_account":
             logging.info(f"no account found for {identifier}")
-            context.traffic_light_controller.request_state(TrafficLightState.RED)
-            if not context.has_barcode_scanner:
-                context.navigation_controller.get_frame(TransitionScreen).display(
+            context().traffic_light_controller.request_state(TrafficLightState.RED)
+            if not context().has_barcode_scanner:
+                context().navigation_controller.get_frame(TransitionScreen).display(
                     "Looks like you don't have an account.\nUse the other kiosk to set one up!"
                 )
-                QTimer.singleShot(6000, context.navigation_controller.back_to_main)
+                QTimer.singleShot(6000, context().navigation_controller.back_to_main)
                 return
-            context.navigation_controller.go_to_create_account(
+            context().navigation_controller.go_to_create_account(
                 on_done=lambda: self._run_check_in(
                     identifier, check_fn, welcome_message="Thank you for registering"
                 )
@@ -59,10 +59,10 @@ class CheckInController:
 
         if status == "no_waiver":
             logging.info(f"no waiver for {identifier}")
-            context.traffic_light_controller.request_state(TrafficLightState.YELLOW)
-            context.navigation_controller.go_to_sign_waiver()
+            context().traffic_light_controller.request_state(TrafficLightState.YELLOW)
+            context().navigation_controller.go_to_sign_waiver()
             return
 
         logging.info(f"check-in successful: {result['name']}")
-        context.traffic_light_controller.request_state(TrafficLightState.GREEN)
-        context.navigation_controller.get_frame(UserWelcome).display_name(result["name"], welcome_message)
+        context().traffic_light_controller.request_state(TrafficLightState.GREEN)
+        context().navigation_controller.get_frame(UserWelcome).display_name(result["name"], welcome_message)

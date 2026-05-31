@@ -7,7 +7,8 @@ from threading import Thread
 from typing import Callable, Any
 import requests
 
-from main import context
+from global_config import config
+from global_context import context
 
 _HOSTNAME: str = socket.gethostname()
 _lock = threading.Lock()
@@ -16,7 +17,7 @@ _unresolved: bool = False
 
 
 def _send_embed(embed: dict[str, Any], content: str | None = None, *, blocking: bool) -> None:
-    webhook_url: str = context.env.DISCORD_WEBHOOK_URL
+    webhook_url: str = config().DISCORD_WEBHOOK_URL
     if not webhook_url:
         return
 
@@ -52,7 +53,7 @@ def notify_critical(title: str, detail: str, *, blocking: bool = False) -> None:
         "footer": {"text": _HOSTNAME},
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
-    role_mention = f"<@&{context.config.DISCORD_CRITICAL_ALERT_ROLE_ID}>"
+    role_mention = f"<@&{context().config.DISCORD_CRITICAL_ALERT_ROLE_ID}>"
     _send_embed(embed, content=role_mention, blocking=blocking)
 
 
@@ -72,9 +73,6 @@ def notify_resolved() -> None:
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
     _send_embed(embed, blocking=False)
-
-notify_critical("test", "test")
-notify_resolved()
 
 
 class CriticalSystemType(Enum):

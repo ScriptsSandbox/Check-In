@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING, TypeVar, cast
 from PyQt6.QtCore import QTimer, Qt
 from PyQt6.QtWidgets import QLabel
 
+from global_config import config
 from hardware.traffic_light import TrafficLightState
-from main import context
 from views.check_in_rfid import CheckInRFID
 from views.transition_screen import TransitionScreen
 from views.create_account_barcode import CreateAccountBarcode
@@ -20,7 +20,7 @@ from views.check_in_manual import CheckInManual
 from views.qr_codes import QRCodes
 from views.user_welcome import UserWelcome
 from views.base import Screen
-from global_context import GlobalContext
+from global_context import GlobalContext, context
 
 if TYPE_CHECKING:
     from views.components.dev_overlay import DevOverlay
@@ -30,7 +30,10 @@ T = TypeVar("T", bound=Screen)
 
 class NavigationController:
     def __init__(self) -> None:
-        self._stacked = context.mainWindow.stacked
+        pass
+
+    def start(self):
+        self._stacked = context().mainWindow.stacked
         self._frames: dict[type[Screen], Screen] = {}
         self._curr: type[Screen] | None = None
         self._frame_uuid: str = uuid.uuid4().hex
@@ -59,7 +62,7 @@ class NavigationController:
             self._stacked.addWidget(frame)
 
         # Status overlay — floats over the stacked widget at the bottom
-        self._status_label = QLabel("", context.mainWindow.central)
+        self._status_label = QLabel("", context().mainWindow.central)
         self._status_label.setGeometry(40, 628, 1200, 56)
         self._status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._status_label.setStyleSheet(
@@ -72,7 +75,7 @@ class NavigationController:
         self._status_label.hide()
         self._status_label.raise_()
 
-        if context.env.DEV_MODE:
+        if config().DEV_MODE:
             from views.components.dev_overlay import DevOverlay
             self._dev_overlay = DevOverlay(self)
 
@@ -139,8 +142,8 @@ class NavigationController:
 
     def back_to_main(self) -> None:
         self._on_done_stack.clear()
-        context.rfid = ""
-        context.traffic_light_controller.request_state(TrafficLightState.OFF)
+        context().rfid = ""
+        context().traffic_light_controller.request_state(TrafficLightState.OFF)
         self.show_frame(CheckInRFID)
 
     def go_to_no_id(self) -> None:

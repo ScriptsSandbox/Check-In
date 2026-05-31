@@ -8,7 +8,7 @@ from typing import Any
 
 
 # TODO: revisit this and build out a more proper server
-# start with: health_server.start(port=context.config.HEALTH_SERVER_PORT)
+# start with: health_server.start(port=context().config.HEALTH_SERVER_PORT)
 # class _Handler(BaseHTTPRequestHandler):
 #     stall_threshold_s = 5.0
 #

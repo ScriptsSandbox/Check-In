@@ -5,47 +5,28 @@ import threading
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from controllers.barcode_scanner_controller import BarcodeScannerController
-from controllers.health_controller import HealthController
-from hardware.usb_ports import USBPortController
-from window import MainWindow
+from dispatcher import MainThreadDispatcher
 
 if TYPE_CHECKING:
     from controllers.navigation_controller import NavigationController
     from controllers.check_in_controller import CheckInController
     from controllers.account_controller import AccountController
     from controllers.rfid_reader_controller import RFIDReaderController
-    from dispatcher import MainThreadDispatcher
     from controllers.traffic_light_controller import TrafficLightController
+    from controllers.barcode_scanner_controller import BarcodeScannerController
+    from controllers.health_controller import HealthController
+    from hardware.usb_ports import USBPortController
+    from window import MainWindow
 
 
-@dataclass
-class Env:
-    KIOSK_NAME: str
-    HAS_BARCODE_SCANNER: bool
-    CHECK_IN_API_URL: str
-    DISCORD_WEBHOOK_URL: str
-    DEV_MODE: bool
+_context: GlobalContext
 
+def context() -> GlobalContext:
+    return _context
 
-@dataclass
-class Config:
-    API_RETRY_DELAY_SECONDS: int = 10
-    API_MONITOR_INTERVAL_SECONDS: int = 15
-    HARDWARE_RETRY_DELAY_SECONDS: int = 5
-    HEALTH_SERVER_PORT: int = 8001
-    DISCORD_CRITICAL_ALERT_ROLE_ID = "1509027158209859695"
-
-
-def _from_env(key: str, required: bool) -> str:
-    value = os.environ.get(key)
-    if value is None:
-        if required:
-            raise RuntimeError(f"Missing environment variable: {key}")
-        else:
-            return ""
-
-    return value
+def set_context(new_context: GlobalContext) -> None:
+    global _context
+    _context = new_context
 
 
 class GlobalContext:
@@ -69,9 +50,6 @@ class GlobalContext:
         self.rfid_reader_controller = rfid_reader_controller
         self.traffic_light_controller = traffic_light_controller
         self.usb_port_controller = usb_port_controller
-
-        self.env: Env = None  # type: ignore[assignment]
-        self.config: Config = Config()
 
         self.mainWindow = mainWindow
 

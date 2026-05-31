@@ -5,12 +5,12 @@ import time
 from threading import Thread
 from typing import TYPE_CHECKING
 
+from global_config import config
 from hardware.usb_ports import USBPortController, USBDevice
-from main import context
 from views.check_in_manual import CheckInManual
 from views.create_account_barcode import CreateAccountBarcode
 from views.create_account_manual import CreateAccountManual
-from global_context import GlobalContext
+from global_context import GlobalContext, context
 
 if TYPE_CHECKING:
     from hardware.barcode_scanner import BarcodeScanner
@@ -20,10 +20,9 @@ class BarcodeScannerController:
     _barcode_scanner: BarcodeScanner | None
 
     def __init__(self) -> None:
-        if context.env.HAS_BARCODE_SCANNER:
+        if config().HAS_BARCODE_SCANNER:
             self._barcode_scanner = BarcodeScanner(USBPortController.get_usb_device_port(USBDevice.BARCODE_SCANNER))
-
-        self.start()
+            self.start()
 
     def start(self) -> None:
         if not self._barcode_scanner:
@@ -63,15 +62,15 @@ class BarcodeScannerController:
                     continue
 
                 logging.info("barcode scanned: %r", barcode)
-                curr_frame = context.navigation_controller.get_curr_frame()
+                curr_frame = context().navigation_controller.get_curr_frame()
 
                 if curr_frame == CheckInManual:
-                    context.dispatcher.call.emit(
-                        lambda b=barcode: context.check_in_controller.handle_by_pid(b)
+                    context().dispatcher.call.emit(
+                        lambda b=barcode: context().check_in_controller.handle_by_pid(b)
                     )
                 elif curr_frame in (CreateAccountBarcode, CreateAccountManual):
-                    context.dispatcher.call.emit(
-                        lambda b=barcode: context.account_controller.go_to_review_from_barcode(b)
+                    context().dispatcher.call.emit(
+                        lambda b=barcode: context().account_controller.go_to_review_from_barcode(b)
                     )
                 else:
                     logging.debug("barcode scanned on unhandled screen: %s", curr_frame)
