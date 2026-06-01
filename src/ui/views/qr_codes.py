@@ -2,14 +2,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel
-from PyQt6.QtGui import QPixmap
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QPixmap
+from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel
 
 from misc.asset import Asset
 from ui.base import Screen
-from ui.components.outline_frame import OutlineFrame
-from ui.components.styled_button import home_button, INNER_MARGIN, OUTER_MARGIN
 from ui.components.label import styled_label
 
 if TYPE_CHECKING:
@@ -18,23 +16,9 @@ if TYPE_CHECKING:
 
 class QRCodes(Screen):
     def _build(self, controller: NavigationController) -> None:
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(OUTER_MARGIN, OUTER_MARGIN, OUTER_MARGIN, OUTER_MARGIN)
-        outer.setSpacing(0)
+        self.add_home_row()
 
-        outline = OutlineFrame()
-        outer.addWidget(outline)
-
-        inner = QVBoxLayout(outline)
-        inner.setContentsMargins(INNER_MARGIN, INNER_MARGIN, INNER_MARGIN, INNER_MARGIN)
-        inner.setSpacing(0)
-
-        top_row = QHBoxLayout()
-        top_row.addWidget(home_button(lambda: controller.back_to_main()))
-        top_row.addStretch()
-        inner.addLayout(top_row)
-
-        inner.addStretch(1)
+        self.content.addStretch(1)
 
         qr_row = QHBoxLayout()
         qr_row.setSpacing(80)
@@ -56,6 +40,6 @@ class QRCodes(Screen):
         qr_row.addLayout(_qr_col(Asset.QR_WEBSITE.get_path(), "Website"))
         qr_row.addLayout(_qr_col(Asset.QR_WAIVER.get_path(), "Waiver"))
         qr_row.addStretch()
-        inner.addLayout(qr_row)
+        self.content.addLayout(qr_row)
 
-        inner.addStretch(1)
+        self.content.addStretch(1)
