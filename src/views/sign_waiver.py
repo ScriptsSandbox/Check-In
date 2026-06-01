@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import QHBoxLayout, QVBoxLayout, QLabel
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtCore import Qt
 
-from controllers.asset_controller import AssetController
+from misc.asset import Asset
 from .base import Screen
 from .components.styled_button import StyledButton
 from .components.label import styled_label
@@ -40,7 +40,7 @@ class SignWaiver(Screen):
         right.setSpacing(0)
         right.addStretch()
 
-        qr_px = QPixmap(AssetController.QR_WAIVER.get_path())
+        qr_px = QPixmap(Asset.QR_WAIVER.get_path())
         qr_px = qr_px.scaled(320, 320, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
         qr_label = QLabel()
         qr_label.setPixmap(qr_px)

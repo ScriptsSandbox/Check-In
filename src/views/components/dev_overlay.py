@@ -111,7 +111,7 @@ TRANSITIONS: dict[type[Screen], list[tuple[str, Callable[[NavigationController],
 class DevOverlay(QWidget):
 
     def __init__(self, nav: NavigationController) -> None:
-        super().__init__(context().mainWindow.central)
+        super().__init__(context().main_window.central)
         self._nav = nav
         self._buttons: list[QPushButton] = []
 

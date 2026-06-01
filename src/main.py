@@ -1,26 +1,23 @@
 from __future__ import annotations
 
-import sys
-import logging
 import argparse
-import os
+import logging
+import sys
 from sys import stdout
 
-from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QTimer
-from pyqttoast import ToastPreset
+from PyQt6.QtWidgets import QApplication
 
-import health_server
-from controllers.health_controller import HealthController
-from controllers.traffic_light_controller import TrafficLightController
-from controllers.navigation_controller import NavigationController
+from controllers.account_controller import AccountController
+from controllers.api_controller import ApiController, ApiUnreachableError
 from controllers.barcode_scanner_controller import BarcodeScannerController
 from controllers.check_in_controller import CheckInController
-from controllers.account_controller import AccountController
+from controllers.health_controller import HealthController
+from controllers.navigation_controller import NavigationController
 from controllers.rfid_reader_controller import RFIDReaderController
+from controllers.traffic_light_controller import TrafficLightController
 from global_config import config
 from global_context import GlobalContext, set_context, context
-from controllers.api_controller import ApiController, ApiUnreachableError
 from hardware.usb_ports import USBPortController
 from window import MainWindow
 
@@ -38,16 +35,26 @@ class BootError(Exception):
 
 
 def setup_context() -> None:
+    health_controller = HealthController()
+    navigation_controller = NavigationController()
+    check_in_controller = CheckInController()
+    account_controller = AccountController()
+    rfid_reader_controller = RFIDReaderController()
+    barcode_scanner_controller = BarcodeScannerController()
+    traffic_light_controller = TrafficLightController()
+    usb_port_controller = USBPortController()
+    main_window = MainWindow()
+
     set_context(GlobalContext(
-        health_controller=HealthController(),
-        navigation_controller=NavigationController(),
-        check_in_controller=CheckInController(),
-        account_controller=AccountController(),
-        rfid_reader_controller=RFIDReaderController(),
-        barcode_scanner_controller=BarcodeScannerController(),
-        traffic_light_controller=TrafficLightController(),
-        usb_port_controller=USBPortController(),
-        mainWindow=MainWindow()
+        health_controller=health_controller,
+        navigation_controller=navigation_controller,
+        check_in_controller=check_in_controller,
+        account_controller=account_controller,
+        rfid_reader_controller=rfid_reader_controller,
+        barcode_scanner_controller=barcode_scanner_controller,
+        traffic_light_controller=traffic_light_controller,
+        usb_port_controller=usb_port_controller,
+        main_window=main_window
     ))
 
     context().navigation_controller.start()
@@ -91,7 +98,7 @@ if __name__ == "__main__":
                 retry_in=config().API_RETRY_DELAY_SECONDS
             )
 
-        context().mainWindow.hide_error()
+        context().main_window.hide_error()
         logging.info("made it to app start")
 
     QTimer.singleShot(0, attempt_startup)

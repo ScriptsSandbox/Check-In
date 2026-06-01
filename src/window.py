@@ -6,7 +6,7 @@ from PyQt6.QtGui import QFontDatabase, QPainter, QPixmap, QColor, QFont, QPaintE
 from PyQt6.QtWidgets import QMainWindow, QStackedWidget, QApplication
 from pyqttoast import Toast, ToastPosition, ToastPreset
 
-from controllers.asset_controller import AssetController
+from misc.asset import Asset
 from global_config import config
 from global_context import context
 from views.check_in_manual import CheckInManual
@@ -22,7 +22,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Check-In")
         self.setFixedSize(config().SCREEN_WIDTH, config().SCREEN_HEIGHT)
 
-        fonts_dir = Path(AssetController.FONTS_DIR.get_path())
+        fonts_dir = Path(Asset.FONTS_DIR.get_path())
         for font_file in fonts_dir.glob("*.ttf"):
             QFontDatabase.addApplicationFont(str(font_file))
 
@@ -40,10 +40,10 @@ class MainWindow(QMainWindow):
             self.setGeometry(QApplication.screens()[2].geometry())
         self.showFullScreen()
 
-        # QTimer.singleShot(1000, lambda: context().mainWindow.show_toast("test", "subtitle", ToastPreset.SUCCESS))
+        # QTimer.singleShot(1000, lambda: context().main_window.show_toast("test", "subtitle", ToastPreset.SUCCESS))
         # self.timer = QTimer()
         # self.timer.timeout.connect(
-        #     lambda: context().mainWindow.show_toast(
+        #     lambda: context().main_window.show_toast(
         #         "test test test test",
         #         "subtitle subtitle subtitle subtitle subtitle subtitle subtitle",
         #         ToastPreset.SUCCESS
@@ -86,7 +86,7 @@ class MainWindow(QMainWindow):
     def paintEvent(self, event: QPaintEvent | None) -> None:
         painter = QPainter(self)
         painter.fillRect(self.rect(), QColor("#153246"))
-        painter.drawPixmap(0, 0, QPixmap(AssetController.BACKGROUND.get_path()))
+        painter.drawPixmap(0, 0, QPixmap(Asset.BACKGROUND.get_path()))
 
     def is_error_visible(self) -> bool:
         return self._error.isVisible()

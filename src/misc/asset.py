@@ -4,7 +4,7 @@ from pathlib import Path
 ASSETS_PATH = Path(__file__).parent.parent / "assets"
 
 
-class AssetController(Enum):
+class Asset(Enum):
     BACKGROUND = "background_main.png"
     QR_WAIVER = "qr_waiver.png"
     QR_WEBSITE = "qr_website.png"

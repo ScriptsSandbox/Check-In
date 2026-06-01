@@ -58,7 +58,7 @@ class NavigationController:
         ):
             frame = F(self)
             self._frames[F] = frame
-            context().mainWindow.central.addWidget(frame)
+            context().main_window.central.addWidget(frame)
 
         if config().DEV_MODE:
             from views.components.dev_overlay import DevOverlay
@@ -75,7 +75,7 @@ class NavigationController:
             self._frames[self._curr].on_hide()
         self._curr = screen_class
         self._frame_uuid = uuid.uuid4().hex
-        context().mainWindow.central.setCurrentWidget(self._frames[screen_class])
+        context().main_window.central.setCurrentWidget(self._frames[screen_class])
         self._frames[screen_class].on_show()
 
         if self._dev_overlay is not None:
@@ -145,7 +145,7 @@ class NavigationController:
         self.show_frame(CreateAccountReview)
 
     def go_to_create_account(self, on_done: Callable[[], None]) -> None:
-        context().mainWindow.show_toast("No Account",
+        context().main_window.show_toast("No Account",
                                         "Looks like you don't have an account yet, let's set one up!", ToastPreset.INFORMATION)
         # self.get_frame(TransitionScreen).display(
         #     "Looks like you don't have an account,\nlet's set one up!"

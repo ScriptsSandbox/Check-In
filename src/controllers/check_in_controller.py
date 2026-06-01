@@ -39,7 +39,7 @@ class CheckInController:
         if status == "api_error":
             logging.error("API error during check-in")
             context().traffic_light_controller.request_state(TrafficLightState.RED)
-            context().mainWindow.show_toast("System Error", "Please let staff know", ToastPreset.ERROR)
+            context().main_window.show_toast("System Error", "Please let staff know", ToastPreset.ERROR)
             return
 
         if status == "no_account":

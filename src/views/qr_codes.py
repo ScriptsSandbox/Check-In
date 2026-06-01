@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtCore import Qt
 
-from controllers.asset_controller import AssetController
+from misc.asset import Asset
 from .base import Screen
 from .components.outline_frame import OutlineFrame
 from .components.styled_button import home_button, INNER_MARGIN, OUTER_MARGIN
@@ -53,8 +53,8 @@ class QRCodes(Screen):
             return col
 
         qr_row.addStretch()
-        qr_row.addLayout(_qr_col(AssetController.QR_WEBSITE.get_path(), "Website"))
-        qr_row.addLayout(_qr_col(AssetController.QR_WAIVER.get_path(), "Waiver"))
+        qr_row.addLayout(_qr_col(Asset.QR_WEBSITE.get_path(), "Website"))
+        qr_row.addLayout(_qr_col(Asset.QR_WAIVER.get_path(), "Waiver"))
         qr_row.addStretch()
         inner.addLayout(qr_row)
 

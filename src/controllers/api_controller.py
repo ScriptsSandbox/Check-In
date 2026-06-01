@@ -32,22 +32,22 @@ class ApiController:
         try:
             ApiController.ping()
         except ApiUnreachableError as e:
-            context().mainWindow.show_error(
+            context().main_window.show_error(
                 "Lost connection to API",
                 str(e),
                 retry_in=config().API_RETRY_DELAY_SECONDS,
                 on_retry=self.monitor_api,
             )
             return
-        if context().mainWindow.is_error_visible():
-            context().mainWindow.hide_error()
+        if context().main_window.is_error_visible():
+            context().main_window.hide_error()
         QTimer.singleShot(config().API_MONITOR_INTERVAL_SECONDS * 1000, self.monitor_api)
 
     @staticmethod
     def _req(method: str, path: str, **kwargs: Any) -> requests.Response:
         url = f"{config().CHECK_IN_API_URL}{path}"
         start: float = time.time()
-        resp = requests.request(method, url, **kwargs)
+        resp = requests.request(method, url, timeout=3, **kwargs)
         ms = (time.time() - start) * 1000
         if resp.status_code == 502:
             raise ExternalApiError(resp.json().get("api", "unknown"))
@@ -58,7 +58,7 @@ class ApiController:
     @staticmethod
     def ping() -> None:
         try:
-            resp = ApiController._req("GET", "/health", timeout=5)
+            resp = ApiController._req("GET", "/health")
         except Exception as e:
             raise ApiUnreachableError(str(e)) from e
         if not resp.ok:
@@ -67,7 +67,7 @@ class ApiController:
     @staticmethod
     def checkin_by_uuid(uuid: str) -> dict[str, Any]:
         try:
-            resp = ApiController._req("GET", f"/check-in/uuid/{uuid}", timeout=10)
+            resp = ApiController._req("GET", f"/check-in/uuid/{uuid}")
             resp.raise_for_status()
             return resp.json()  # type: ignore[no-any-return]
         except Exception as e:
@@ -77,7 +77,7 @@ class ApiController:
     @staticmethod
     def checkin_by_pid(pid: str) -> dict[str, Any]:
         try:
-            resp = ApiController._req("GET", f"/check-in/pid/{pid}", timeout=10)
+            resp = ApiController._req("GET", f"/check-in/pid/{pid}")
             resp.raise_for_status()
             return resp.json()  # type: ignore[no-any-return]
         except Exception as e:
@@ -90,14 +90,14 @@ class ApiController:
             "state": state
         }
         try:
-            ApiController._req("POST", "/traffic-light", json=data, timeout=5)
+            ApiController._req("POST", "/traffic-light", json=data)
         except Exception as e:
             logging.error(f"error setting traffic light: {e}")
 
     @staticmethod
     def get_traffic_light() -> TrafficLightState:
         try:
-            resp = ApiController._req("GET", "/traffic-light", timeout=5)
+            resp = ApiController._req("GET", "/traffic-light")
             return TrafficLightState(resp.json().get("state"))
         except Exception as e:
             logging.error(f"error getting traffic light: {e}")
@@ -106,7 +106,7 @@ class ApiController:
     @staticmethod
     def lookup_by_pid(pid: str) -> dict[str, Any] | None:
         try:
-            resp = ApiController._req("GET", f"/accounts/lookup/pid/{pid}", timeout=10)
+            resp = ApiController._req("GET", f"/accounts/lookup/pid/{pid}")
             if resp.status_code == 404:
                 return None
             resp.raise_for_status()
@@ -118,7 +118,7 @@ class ApiController:
     @staticmethod
     def lookup_by_barcode(barcode: str) -> dict[str, Any] | None:
         try:
-            resp = ApiController._req("GET", f"/accounts/lookup/barcode/{barcode}", timeout=10)
+            resp = ApiController._req("GET", f"/accounts/lookup/barcode/{barcode}")
             if resp.status_code == 404:
                 return None
             resp.raise_for_status()
@@ -138,18 +138,18 @@ class ApiController:
         email: str | None,
     ) -> dict[str, Any] | None:
         try:
-            payload: dict[str, str] = {"rfid": rfid}
-            if barcode:
-                payload["barcode"] = barcode
-            if pid:
-                payload["pid"] = pid
-            if first_name:
-                payload["first_name"] = first_name
-            if last_name:
-                payload["last_name"] = last_name
-            if email:
-                payload["email"] = email
-            resp = ApiController._req("POST", "/accounts", json=payload, timeout=30)
+            raw_payload: dict[str, str | None] = {
+                "rfid": rfid,
+                "barcode": barcode,
+                "pid": pid,
+                "first_name": first_name,
+                "last_name": last_name,
+                "email": email,
+            }
+
+            payload: dict[str, str] = {k: v for k, v in raw_payload.items() if v is not None}
+
+            resp = ApiController._req("POST", "/accounts", json=payload)
             resp.raise_for_status()
             return resp.json()  # type: ignore[no-any-return]
         except Exception as e:

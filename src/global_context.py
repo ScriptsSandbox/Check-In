@@ -41,7 +41,7 @@ class GlobalContext:
             barcode_scanner_controller: BarcodeScannerController,
             traffic_light_controller: TrafficLightController,
             usb_port_controller: USBPortController,
-            mainWindow: MainWindow
+            main_window: MainWindow
     ):
         self.health_controller = health_controller
         self.navigation_controller = navigation_controller
@@ -52,7 +52,7 @@ class GlobalContext:
         self.traffic_light_controller = traffic_light_controller
         self.usb_port_controller = usb_port_controller
 
-        self.mainWindow = mainWindow
+        self.main_window = main_window
 
         self.dispatcher: MainThreadDispatcher = MainThreadDispatcher()
 

@@ -42,7 +42,7 @@ class RFIDReaderController:
 
     def on_reader_disconnect(self, reason: str) -> None:
         logging.warning("RFID reader disconnected: %s", reason)
-        context().mainWindow.show_error(
+        context().main_window.show_error(
             "Card reader not detected",
             reason,
             retry_in=config().HARDWARE_RETRY_DELAY_SECONDS,
