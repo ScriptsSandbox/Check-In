@@ -9,22 +9,21 @@ from os.path import exists
 from threading import Thread, Event
 from typing import TYPE_CHECKING
 
-from controllers.api_controller import ApiController
 from global_config import config
 from global_context import context
-from hardware.rfid_reader import RFIDReader
+from hardware.rfid_reader_aitrip import RFIDReaderAITRIP
 from hardware.usb_ports import USBDevice
 from views.create_account_manual import CreateAccountManual
 
 
 class RFIDReaderController:
-    _reader: RFIDReader
+    _reader: RFIDReaderAITRIP
 
     def __init__(self) -> None:
         pass
 
     def start(self) -> None:
-        self._reader = RFIDReader(context().usb_port_controller.get_usb_device_port(USBDevice.RFID_READER))
+        self._reader = RFIDReaderAITRIP(context().usb_port_controller.get_usb_device_port(USBDevice.RFID_READER))
         self._stop = threading.Event()
         self._thread: Thread | None = None
         self._on_disconnect: Callable[[str], None] | None = None
@@ -60,7 +59,7 @@ class RFIDReaderController:
         if cb is not None:
             context().dispatcher.call.emit(lambda: cb(reason))
 
-    def _run(self, reader: RFIDReader) -> None:
+    def _run(self, reader: RFIDReaderAITRIP) -> None:
         try:
             logging.info("now reading ID cards")
             last_tag: str | None = None

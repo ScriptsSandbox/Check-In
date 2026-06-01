@@ -3,7 +3,9 @@ import logging
 from os.path import exists
 
 
-class BarcodeScanner:
+"""No idea how long this link will work but I believe this is the barcode serial reader we are using currently
+https://www.amazon.com/NETUM-NT-EM61-Embedded-Barcode-Scanner/dp/B0FVM3BXGD"""
+class BarcodeScannerNetumNTEM61:
     def __init__(self, usb_id: str) -> None:
         self._usb_id = usb_id
         self._ser: serial.Serial | None = None

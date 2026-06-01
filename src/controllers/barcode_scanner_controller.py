@@ -5,20 +5,20 @@ import time
 from threading import Thread
 
 from global_config import config
+from global_context import context
+from hardware.barcode_scanner_netum_nt_em61 import BarcodeScannerNetumNTEM61
 from hardware.usb_ports import USBPortController, USBDevice
 from views.check_in_manual import CheckInManual
 from views.create_account_barcode import CreateAccountBarcode
 from views.create_account_manual import CreateAccountManual
-from hardware.barcode_scanner import BarcodeScanner
-from global_context import GlobalContext, context
 
 
 class BarcodeScannerController:
-    _barcode_scanner: BarcodeScanner | None
+    _barcode_scanner: BarcodeScannerNetumNTEM61 | None
 
     def __init__(self) -> None:
         if config().HAS_BARCODE_SCANNER:
-            self._barcode_scanner = BarcodeScanner(USBPortController.get_usb_device_port(USBDevice.BARCODE_SCANNER))
+            self._barcode_scanner = BarcodeScannerNetumNTEM61(USBPortController.get_usb_device_port(USBDevice.BARCODE_SCANNER))
             self.start()
 
     def start(self) -> None:

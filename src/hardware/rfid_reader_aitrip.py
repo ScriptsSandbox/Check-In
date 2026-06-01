@@ -10,7 +10,9 @@ from adafruit_pn532.uart import PN532_UART
 expected_characters = 14
 
 
-class RFIDReader(Thread):
+"""No idea how long this link will work but I believe this is the RFID serial reader we are using currently
+https://www.amazon.com/AITRIP-Wireless-Attenna-Interface-Raspberry/dp/B0DWSMVKT1"""
+class RFIDReaderAITRIP(Thread):
     def __init__(self, usb_id: str) -> None:
         super().__init__()
         self._usb_id = usb_id
