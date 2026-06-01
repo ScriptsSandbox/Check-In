@@ -7,10 +7,10 @@ from PyQt6.QtGui import QPixmap
 from PyQt6.QtCore import Qt
 
 from misc.asset import Asset
-from .base import Screen
-from .components.outline_frame import OutlineFrame
-from .components.styled_button import home_button, INNER_MARGIN, OUTER_MARGIN
-from .components.label import styled_label
+from ui.base import Screen
+from ui.components.outline_frame import OutlineFrame
+from ui.components.styled_button import home_button, INNER_MARGIN, OUTER_MARGIN
+from ui.components.label import styled_label
 
 if TYPE_CHECKING:
     from controllers.navigation_controller import NavigationController

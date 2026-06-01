@@ -4,8 +4,8 @@ from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import Qt
 
-from .base import Screen
-from .components.label import styled_label
+from ui.base import Screen
+from ui.components.label import styled_label
 
 if TYPE_CHECKING:
     from controllers.navigation_controller import NavigationController

@@ -6,9 +6,9 @@ from PyQt6.QtWidgets import QHBoxLayout
 from PyQt6.QtCore import Qt
 import qtawesome as qta
 
-from .base import Screen
-from .components.styled_button import StyledButton, NAV_BTN_SIZE, NAV_ICON_SIZE
-from .components.label import styled_label, title_label
+from ui.base import Screen
+from ui.components.styled_button import StyledButton, NAV_BTN_SIZE, NAV_ICON_SIZE
+from ui.components.label import styled_label, title_label
 from .qr_codes import QRCodes
 
 if TYPE_CHECKING:
