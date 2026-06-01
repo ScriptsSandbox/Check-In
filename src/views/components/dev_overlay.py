@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING
 
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton
 from PyQt6.QtCore import Qt, QTimer
 
-from global_config import config
-from global_context import context
+from misc.global_config import config
+from misc.global_context import context
 from hardware.traffic_light import TrafficLightState
 from views.check_in_rfid import CheckInRFID
 from views.create_account_barcode import CreateAccountBarcode
@@ -30,10 +29,11 @@ _THANK_MSG = "Thank you for registering"
 
 
 def _sim_no_account_success(nav: NavigationController) -> None:
-    context().rfid = _DEV_RFID
+    context().session.rfid = _DEV_RFID
     if not config().HAS_BARCODE_SCANNER:
-        nav.get_frame(TransitionScreen).display(
-            "Looks like you don't have an account.\nUse the other kiosk to set one up!"
+        nav.navigate(
+            TransitionScreen,
+            lambda s: s.setup("Looks like you don't have an account.\nUse the other kiosk to set one up!"),
         )
         QTimer.singleShot(6000, nav.back_to_main)
         return
@@ -46,10 +46,11 @@ def _sim_no_account_success(nav: NavigationController) -> None:
 
 
 def _sim_no_account_needs_waiver(nav: NavigationController) -> None:
-    context().rfid = _DEV_RFID
+    context().session.rfid = _DEV_RFID
     if not config().HAS_BARCODE_SCANNER:
-        nav.get_frame(TransitionScreen).display(
-            "Looks like you don't have an account.\nUse the other kiosk to set one up!"
+        nav.navigate(
+            TransitionScreen,
+            lambda s: s.setup("Looks like you don't have an account.\nUse the other kiosk to set one up!"),
         )
         QTimer.singleShot(6000, nav.back_to_main)
         return
@@ -67,7 +68,7 @@ def _sim_barcode_swipe(nav: NavigationController) -> None:
 
 TRANSITIONS: dict[type[Screen], list[tuple[str, Callable[[NavigationController], None]]]] = {
     CheckInRFID: [
-        ("QR Codes", lambda nav: nav.show_frame(QRCodes)),
+        ("QR Codes", lambda nav: nav.navigate(QRCodes)),
         ("No ID", lambda nav: nav.go_to_no_id()),
         ("card: success", lambda nav: nav.get_frame(UserWelcome).display_name(_DEV_NAME)),
         ("card: no account [→ success]", _sim_no_account_success),

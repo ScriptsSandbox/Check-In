@@ -7,7 +7,7 @@ from typing import Any
 from pyqttoast import ToastPreset
 
 from controllers.api_controller import ApiController, ExternalApiError
-from global_context import context
+from misc.global_context import context
 
 
 class AccountController:
@@ -99,7 +99,7 @@ class AccountController:
     ) -> None:
         try:
             result = ApiController.create_account(
-                context().rfid,
+                context().session.rfid,
                 barcode=barcode,
                 pid=pid,
                 first_name=first_name,

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from PyQt6.QtWidgets import QHBoxLayout
 from PyQt6.QtCore import Qt
 
-from global_context import context
+from misc.global_context import context
 from .base import Screen
 from .components.styled_button import StyledButton, home_button
 from .components.styled_entry import StyledEntry
@@ -68,7 +68,6 @@ class CreateAccountReview(Screen):
         pid: str = "",
         pid_locked: bool = False,
     ) -> None:
-        self.clear_entries()
         if first_name:
             self.first_name_entry.setText(first_name)
         if last_name:
@@ -93,6 +92,7 @@ class CreateAccountReview(Screen):
         for entry in (self.first_name_entry, self.last_name_entry,
                       self.email_entry, self.pid_entry):
             entry.clearFocus()
+        self.clear_entries()
 
     def clear_entries(self) -> None:
         for entry in (self.first_name_entry, self.last_name_entry,

@@ -3,8 +3,8 @@ import threading
 import time
 
 from controllers.api_controller import ApiController
-from global_config import config
-from global_context import context
+from misc.global_config import config
+from misc.global_context import context
 from hardware.traffic_light import TrafficLight, TrafficLightState
 from hardware.usb_ports import USBDevice
 
@@ -13,9 +13,6 @@ class TrafficLightController:
     _traffic_light: TrafficLight
 
     def __init__(self) -> None:
-        pass
-
-    def start(self) -> None:
         if config().HAS_TRAFFIC_LIGHT:
             self._traffic_light = TrafficLight(context().usb_port_controller.get_usb_device_port(USBDevice.TRAFFIC_LIGHT))
             self._stop = threading.Event()

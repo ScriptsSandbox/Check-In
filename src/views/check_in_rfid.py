@@ -24,7 +24,7 @@ class CheckInRFID(Screen):
         qr_btn.setIcon(qta.icon('mdi.qrcode-scan', color='#F5F0E6'))
         qr_btn.setIconSize(NAV_ICON_SIZE)
         qr_btn.setFixedSize(NAV_BTN_SIZE, NAV_BTN_SIZE)
-        qr_btn.clicked.connect(lambda: controller.show_frame(QRCodes))
+        qr_btn.clicked.connect(lambda: controller.navigate(QRCodes))
 
         no_id_btn = StyledButton("No ID", font_size=20, ghost=True)
         no_id_btn.setFixedSize(NAV_BTN_SIZE, NAV_BTN_SIZE)

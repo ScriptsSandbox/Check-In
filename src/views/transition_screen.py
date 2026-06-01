@@ -20,6 +20,5 @@ class TransitionScreen(Screen):
 
         self.content.addStretch()
 
-    def display(self, message: str) -> None:
+    def setup(self, message: str) -> None:
         self._msg_label.setText(message)
-        self.controller.show_frame(TransitionScreen)

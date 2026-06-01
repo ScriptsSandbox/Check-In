@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 from PyQt6.QtWidgets import QHBoxLayout
 from PyQt6.QtCore import Qt
 
-from global_context import context
+from misc.global_context import context
 from .base import Screen
 from .components.styled_button import StyledButton, home_button
 from .components.styled_entry import StyledEntry
@@ -69,6 +69,7 @@ class CreateAccountManual(Screen):
 
     def on_hide(self) -> None:
         self.pid_entry.clearFocus()
+        self.clear_entries()
 
     def clear_entries(self) -> None:
         self.pid_entry.clear()

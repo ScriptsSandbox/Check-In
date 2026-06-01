@@ -6,23 +6,19 @@ import logging
 import traceback
 from collections.abc import Callable
 from os.path import exists
-from threading import Thread, Event
-from typing import TYPE_CHECKING
+from threading import Thread
 
-from global_config import config
-from global_context import context
+from misc.global_config import config
+from misc.global_context import context
 from hardware.rfid_reader_aitrip import RFIDReaderAITRIP
 from hardware.usb_ports import USBDevice
-from views.create_account_manual import CreateAccountManual
+from views.check_in_rfid import CheckInRFID
 
 
 class RFIDReaderController:
     _reader: RFIDReaderAITRIP
 
     def __init__(self) -> None:
-        pass
-
-    def start(self) -> None:
         self._reader = RFIDReaderAITRIP(context().usb_port_controller.get_usb_device_port(USBDevice.RFID_READER))
         self._stop = threading.Event()
         self._thread: Thread | None = None
@@ -78,9 +74,6 @@ class RFIDReaderController:
                     continue
 
                 if in_waiting >= 14:
-                    context().dispatcher.call.emit(
-                        lambda: context().navigation_controller.get_frame(CreateAccountManual).clear_entries()
-                    )
                     tag = reader.grab_rfid()
 
                     if " " in tag:
@@ -98,7 +91,11 @@ class RFIDReaderController:
                     else:
                         logging.debug("RFID check succeeded")
 
-                    context().rfid = tag
+                    if context().navigation_controller.get_curr_frame() != CheckInRFID:
+                        logging.debug("ignoring card tap off home screen")
+                        continue
+
+                    context().session.rfid = tag
                     context().check_in_controller.handle_by_uuid(tag)
 
                     last_tag = tag

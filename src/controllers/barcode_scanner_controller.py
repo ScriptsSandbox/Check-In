@@ -4,11 +4,11 @@ import logging
 import time
 from threading import Thread
 
-from global_config import config
-from global_context import context
+from misc.global_config import config
+from misc.global_context import context
 from hardware.barcode_scanner_netum_nt_em61 import BarcodeScannerNetumNTEM61
 from hardware.usb_ports import USBPortController, USBDevice
-from views.check_in_manual import CheckInManual
+from views.check_in_rfid import CheckInRFID
 from views.create_account_barcode import CreateAccountBarcode
 from views.create_account_manual import CreateAccountManual
 
@@ -61,7 +61,7 @@ class BarcodeScannerController:
                 logging.info("barcode scanned: %r", barcode)
                 curr_frame = context().navigation_controller.get_curr_frame()
 
-                if curr_frame == CheckInManual:
+                if curr_frame == CheckInRFID:
                     context().dispatcher.call.emit(
                         lambda b=barcode: context().check_in_controller.handle_by_pid(b)
                     )

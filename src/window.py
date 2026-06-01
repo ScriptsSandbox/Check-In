@@ -7,13 +7,9 @@ from PyQt6.QtWidgets import QMainWindow, QStackedWidget, QApplication
 from pyqttoast import Toast, ToastPosition, ToastPreset
 
 from misc.asset import Asset
-from global_config import config
-from global_context import context
-from views.check_in_manual import CheckInManual
+from misc.global_config import config
+from misc.global_context import context
 from views.components.error_overlay import ErrorOverlay
-from views.create_account_manual import CreateAccountManual
-from views.create_account_no_pid import CreateAccountNoPid
-from views.create_account_review import CreateAccountReview
 
 
 class MainWindow(QMainWindow):
@@ -94,9 +90,5 @@ class MainWindow(QMainWindow):
     def keyPressEvent(self, event: QKeyEvent | None) -> None:
         if event and event.key() == Qt.Key.Key_Escape:
             context().navigation_controller.back_to_main()
-            context().navigation_controller.get_frame(CreateAccountManual).clear_entries()
-            context().navigation_controller.get_frame(CreateAccountNoPid).clear_entries()
-            context().navigation_controller.get_frame(CreateAccountReview).clear_entries()
-            context().navigation_controller.get_frame(CheckInManual).clear_entries()
         else:
             super().keyPressEvent(event)

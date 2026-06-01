@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import socket
 import threading
@@ -7,8 +9,7 @@ from threading import Thread
 from typing import Callable, Any
 import requests
 
-from global_config import config
-from global_context import context
+from misc.global_config import config
 
 _HOSTNAME: str = socket.gethostname()
 _lock = threading.Lock()
@@ -49,7 +50,7 @@ def notify_critical(title: str, detail: str, *, blocking: bool = False) -> None:
     embed: dict[str, Any] = {
         "title": f":x:  {title}",
         "description": f"```\n{detail[:1800]}\n```",
-        "color": 0xED4245,  # discord red
+        "color": 0xED4245,
         "footer": {"text": _HOSTNAME},
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
@@ -68,7 +69,7 @@ def notify_resolved() -> None:
 
     embed: dict[str, Any] = {
         "title": f":white_check_mark:  Resolved: {title}",
-        "color": 0x57F287,  # discord green
+        "color": 0x57F287,
         "footer": {"text": _HOSTNAME},
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
@@ -83,11 +84,11 @@ class CriticalSystem:
     # DO NOT EVER INVOKE DIRECTLY
     def __init__(
             self,
-            systemType: CriticalSystemType,
+            system_type: CriticalSystemType,
             monitor_health_check_func: Callable[[], bool] | None = None,
             period_seconds: int | None = None
     ):
-        self.systemType = systemType
+        self.systemType = system_type
         self.is_healthy: bool = True
         self.monitor_health_check_func = monitor_health_check_func
         self.period_seconds = period_seconds
@@ -96,15 +97,15 @@ class CriticalSystem:
     @classmethod
     def with_monitoring(
             cls,
-            systemType: CriticalSystemType,
+            system_type: CriticalSystemType,
             monitor_health_check_func: Callable[[], bool] | None = None,
             period_seconds: int | None = None
     ) -> "CriticalSystem":
-        return cls(systemType, monitor_health_check_func, period_seconds)
+        return cls(system_type, monitor_health_check_func, period_seconds)
 
     @classmethod
-    def without_monitoring(cls, systemType: CriticalSystemType) -> "CriticalSystem":
-        return cls(systemType)
+    def without_monitoring(cls, system_type: CriticalSystemType) -> CriticalSystem:
+        return cls(system_type)
 
 
 class HealthController:

@@ -48,7 +48,7 @@ class UserWelcome(Screen):
 
         self._last_name = name
         self._msg_label.setText(message)
-        self.controller.show_frame(UserWelcome)
+        self.controller.navigate(UserWelcome)
 
         label = styled_label(name, font_size=70, bold=True)
         self._names_layout.addWidget(label, alignment=Qt.AlignmentFlag.AlignHCenter)

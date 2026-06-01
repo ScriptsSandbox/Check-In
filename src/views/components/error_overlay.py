@@ -5,7 +5,7 @@ from collections.abc import Callable
 from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout
 from PyQt6.QtCore import QTimer, Qt
 
-from global_config import config
+from misc.global_config import config
 from .label import styled_label
 
 

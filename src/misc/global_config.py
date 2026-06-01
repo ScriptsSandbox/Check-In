@@ -40,3 +40,4 @@ class GlobalConfig:
     CHECK_IN_API_URL: str = _from_env("CHECK_IN_API_URL", required=True)
     DISCORD_WEBHOOK_URL: str = _from_env("DISCORD_WEBHOOK_URL", required=False)
     DEV_MODE: bool = _from_env("DEV_MODE", required=False).lower() == "true"
+    VERBOSE_LOGGING: bool = _from_env("VERBOSE_LOGGING", required=False).lower() == "true"

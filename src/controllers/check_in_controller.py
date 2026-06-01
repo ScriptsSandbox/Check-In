@@ -8,8 +8,8 @@ from PyQt6.QtCore import QTimer
 from pyqttoast import ToastPreset
 
 from controllers.api_controller import ApiController
-from global_config import config
-from global_context import context
+from misc.global_config import config
+from misc.global_context import context
 from hardware.traffic_light import TrafficLightState
 from views.user_welcome import UserWelcome
 from views.transition_screen import TransitionScreen
@@ -46,8 +46,9 @@ class CheckInController:
             logging.info(f"no account found for {identifier}")
             context().traffic_light_controller.request_state(TrafficLightState.RED)
             if not config().HAS_BARCODE_SCANNER:
-                context().navigation_controller.get_frame(TransitionScreen).display(
-                    "Looks like you don't have an account.\nUse the other kiosk to set one up!"
+                context().navigation_controller.navigate(
+                    TransitionScreen,
+                    lambda s: s.setup("Looks like you don't have an account.\nUse the other kiosk to set one up!"),
                 )
                 QTimer.singleShot(6000, context().navigation_controller.back_to_main)
                 return

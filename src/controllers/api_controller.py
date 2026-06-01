@@ -7,8 +7,8 @@ from typing import Any
 import requests
 from PyQt6.QtCore import QTimer
 
-from global_config import config
-from global_context import context
+from misc.global_config import config
+from misc.global_context import context
 from hardware.traffic_light import TrafficLightState
 
 SILENT_PATHS = frozenset(["/health", "/traffic-light"])
@@ -26,6 +26,7 @@ class ApiUnreachableError(Exception):
 
 class ApiController:
     def __init__(self) -> None:
+        self.ping()
         QTimer.singleShot(config().API_MONITOR_INTERVAL_SECONDS * 1000, self.monitor_api)
 
     def monitor_api(self) -> None:
