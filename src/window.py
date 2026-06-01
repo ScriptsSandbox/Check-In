@@ -9,7 +9,7 @@ from pyqttoast import Toast, ToastPosition, ToastPreset
 from misc.asset import Asset
 from misc.global_config import config
 from misc.global_context import context
-from views.components.error_overlay import ErrorOverlay
+from ui.components.error_overlay import ErrorOverlay
 
 
 class MainWindow(QMainWindow):

@@ -11,8 +11,8 @@ from controllers.api_controller import ApiController
 from misc.global_config import config
 from misc.global_context import context
 from hardware.traffic_light import TrafficLightState
-from views.user_welcome import UserWelcome
-from views.transition_screen import TransitionScreen
+from ui.views.user_welcome import UserWelcome
+from ui.views.transition_screen import TransitionScreen
 
 
 class CheckInController:

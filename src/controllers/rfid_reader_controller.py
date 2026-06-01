@@ -12,7 +12,7 @@ from misc.global_config import config
 from misc.global_context import context
 from hardware.rfid_reader_aitrip import RFIDReaderAITRIP
 from hardware.usb_ports import USBDevice
-from views.check_in_rfid import CheckInRFID
+from ui.views.check_in_rfid import CheckInRFID
 
 
 class RFIDReaderController:

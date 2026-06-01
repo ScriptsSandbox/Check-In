@@ -9,20 +9,20 @@ from pyqttoast import ToastPreset
 
 from misc.global_config import config
 from misc.global_context import context
-from views.base import Screen
-from views.check_in_manual import CheckInManual
-from views.check_in_rfid import CheckInRFID
-from views.create_account_barcode import CreateAccountBarcode
-from views.create_account_manual import CreateAccountManual
-from views.create_account_no_pid import CreateAccountNoPid
-from views.create_account_review import CreateAccountReview
-from views.qr_codes import QRCodes
-from views.sign_waiver import SignWaiver
-from views.transition_screen import TransitionScreen
-from views.user_welcome import UserWelcome
+from ui.base import Screen
+from ui.views.check_in_manual import CheckInManual
+from ui.views.check_in_rfid import CheckInRFID
+from ui.views.create_account_barcode import CreateAccountBarcode
+from ui.views.create_account_manual import CreateAccountManual
+from ui.views.create_account_no_pid import CreateAccountNoPid
+from ui.views.create_account_review import CreateAccountReview
+from ui.views.qr_codes import QRCodes
+from ui.views.sign_waiver import SignWaiver
+from ui.views.transition_screen import TransitionScreen
+from ui.views.user_welcome import UserWelcome
 
 if TYPE_CHECKING:
-    from views.components.dev_overlay import DevOverlay
+    from ui.components.dev_overlay import DevOverlay
 
 T = TypeVar("T", bound=Screen)
 
@@ -56,7 +56,7 @@ class NavigationController:
             context().main_window.central.addWidget(frame)
 
         if config().DEV_MODE:
-            from views.components.dev_overlay import DevOverlay
+            from ui.components.dev_overlay import DevOverlay
             self._dev_overlay = DevOverlay(self)
 
         self.navigate(CheckInRFID)

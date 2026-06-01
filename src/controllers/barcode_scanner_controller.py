@@ -8,9 +8,9 @@ from misc.global_config import config
 from misc.global_context import context
 from hardware.barcode_scanner_netum_nt_em61 import BarcodeScannerNetumNTEM61
 from hardware.usb_ports import USBPortController, USBDevice
-from views.check_in_rfid import CheckInRFID
-from views.create_account_barcode import CreateAccountBarcode
-from views.create_account_manual import CreateAccountManual
+from ui.views.check_in_rfid import CheckInRFID
+from ui.views.create_account_barcode import CreateAccountBarcode
+from ui.views.create_account_manual import CreateAccountManual
 
 
 class BarcodeScannerController:
