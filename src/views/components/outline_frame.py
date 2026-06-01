@@ -8,7 +8,6 @@ class OutlineFrame(QFrame):
     def __init__(self, parent: QWidget | None = None, radius: int = 20) -> None:
         super().__init__(parent)
         self._radius = radius
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
 
     def paintEvent(self, event: QPaintEvent | None) -> None:
         painter = QPainter(self)

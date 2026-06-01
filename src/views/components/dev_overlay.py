@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton
 from PyQt6.QtCore import Qt, QTimer
 
+from global_config import config
 from global_context import context
 from hardware.traffic_light import TrafficLightState
 from views.check_in_rfid import CheckInRFID
@@ -112,7 +113,6 @@ class DevOverlay(QWidget):
     def __init__(self, nav: NavigationController) -> None:
         super().__init__(context().mainWindow.central)
         self._nav = nav
-        self._stacked = context().mainWindow.stacked
         self._buttons: list[QPushButton] = []
 
         self.setStyleSheet("QWidget { background-color: #1a1a2e; }")
@@ -166,8 +166,7 @@ class DevOverlay(QWidget):
         self.show()
 
     def _reposition(self) -> None:
-        s = self._stacked
         self.move(
-            s.x() + s.width() - self.width() - 10,
-            s.y() + s.height() - self.height() - 10,
+            25,
+            config().SCREEN_HEIGHT - self.height() - 25,
         )

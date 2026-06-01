@@ -15,7 +15,7 @@ class TrafficLightController:
     def __init__(self) -> None:
         pass
 
-    def start(self):
+    def start(self) -> None:
         if config().HAS_TRAFFIC_LIGHT:
             self._traffic_light = TrafficLight(context().usb_port_controller.get_usb_device_port(USBDevice.TRAFFIC_LIGHT))
             self._stop = threading.Event()

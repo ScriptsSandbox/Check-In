@@ -8,6 +8,7 @@ from sys import stdout
 
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QTimer
+from pyqttoast import ToastPreset
 
 import health_server
 from controllers.health_controller import HealthController

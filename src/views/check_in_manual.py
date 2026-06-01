@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel
 from PyQt6.QtCore import Qt
 
+from global_context import context
 from .base import Screen
 from .components.outline_frame import OutlineFrame
 from .components.styled_button import StyledButton, home_button, INNER_MARGIN, OUTER_MARGIN
@@ -59,7 +60,7 @@ class CheckInManual(Screen):
         entry_row = QHBoxLayout()
         self.pid_entry = StyledEntry()
         self.pid_entry.setMaximumWidth(800)
-        self.pid_entry.returnPressed.connect(lambda: self._call_check_in(controller))
+        self.pid_entry.returnPressed.connect(lambda: self._call_check_in())
         entry_row.addStretch()
         entry_row.addWidget(self.pid_entry)
         entry_row.addStretch()
@@ -71,7 +72,7 @@ class CheckInManual(Screen):
         self.check_in_btn = StyledButton("Check In")
         self.check_in_btn.setFixedWidth(349)
         self.check_in_btn.setEnabled(False)
-        self.check_in_btn.clicked.connect(lambda: self._call_check_in(controller))
+        self.check_in_btn.clicked.connect(lambda: self._call_check_in())
         self.pid_entry.textChanged.connect(self._update_btn_state)
         btn_row.addStretch()
         btn_row.addWidget(self.check_in_btn)
@@ -93,11 +94,13 @@ class CheckInManual(Screen):
     def update_entries(self, pid: str) -> None:
         self.pid_entry.setText(pid)
 
-    def _call_check_in(self, controller: NavigationController) -> None:
+    def _call_check_in(self) -> None:
+        # Local import to avoid a circular import (window imports this module at load time)
+        from window import ToastType
+
         pid = self.pid_entry.text().strip()
         if not pid:
             return
-        controller.show_status("PLEASE WAIT: LOADING...")
+        context().mainWindow.show_toast("PLEASE WAIT: LOADING...", ToastType.NOTIFICATION)
         self.clear_entries()
         context().check_in_controller.handle_by_pid(pid)
-        controller.hide_status()

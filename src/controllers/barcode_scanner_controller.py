@@ -3,17 +3,14 @@ from __future__ import annotations
 import logging
 import time
 from threading import Thread
-from typing import TYPE_CHECKING
 
 from global_config import config
 from hardware.usb_ports import USBPortController, USBDevice
 from views.check_in_manual import CheckInManual
 from views.create_account_barcode import CreateAccountBarcode
 from views.create_account_manual import CreateAccountManual
+from hardware.barcode_scanner import BarcodeScanner
 from global_context import GlobalContext, context
-
-if TYPE_CHECKING:
-    from hardware.barcode_scanner import BarcodeScanner
 
 
 class BarcodeScannerController:

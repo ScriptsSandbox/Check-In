@@ -32,6 +32,7 @@ def set_context(new_context: GlobalContext) -> None:
 class GlobalContext:
     def __init__(
             self,
+            *,
             health_controller: HealthController,
             navigation_controller: NavigationController,
             check_in_controller: CheckInController,
@@ -54,7 +55,6 @@ class GlobalContext:
         self.mainWindow = mainWindow
 
         self.dispatcher: MainThreadDispatcher = MainThreadDispatcher()
-        self.has_barcode_scanner: bool = False
 
         self._rfid: str = ""
         self._rfid_lock = threading.Lock()

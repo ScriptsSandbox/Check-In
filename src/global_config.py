@@ -3,6 +3,7 @@ from dataclasses import dataclass
 
 _config: GlobalConfig | None = None
 
+
 def config() -> GlobalConfig:
     global _config
     if not _config:
@@ -29,6 +30,8 @@ class GlobalConfig:
     HARDWARE_RETRY_DELAY_SECONDS: int = 5
     HEALTH_SERVER_PORT: int = 8001
     DISCORD_CRITICAL_ALERT_ROLE_ID = "1509027158209859695"
+    SCREEN_WIDTH: int = 1280
+    SCREEN_HEIGHT: int = 720
 
     # values pulled from env
     KIOSK_NAME: str = _from_env("KIOSK_NAME", required=True)

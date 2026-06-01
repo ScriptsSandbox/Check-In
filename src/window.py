@@ -1,9 +1,13 @@
 from collections.abc import Callable
+from enum import Enum, auto
+from idlelib.run import show_socket_error
 from pathlib import Path
+from tkinter.messagebox import showerror
 
 from PyQt6.QtWidgets import QMainWindow, QWidget, QStackedWidget, QApplication
-from PyQt6.QtGui import QFontDatabase, QPainter, QPixmap, QColor, QPaintEvent, QKeyEvent
-from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QFontDatabase, QPainter, QPixmap, QColor, QFont, QPaintEvent, QKeyEvent
+from PyQt6.QtCore import Qt, QTimer
+from pyqttoast import Toast, ToastPosition, ToastPreset
 from controllers.asset_controller import AssetController
 from global_config import config
 from global_context import context
@@ -14,54 +18,77 @@ from views.create_account_no_pid import CreateAccountNoPid
 from views.create_account_review import CreateAccountReview
 
 
-class _RootWidget(QWidget):
-
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self._bg = QPixmap(AssetController.BACKGROUND.get_path())
-
-    def paintEvent(self, event: QPaintEvent | None) -> None:
-        painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor("#153246"))
-        if not self._bg.isNull():
-            x = (self.width() - self._bg.width()) // 2
-            y = (self.height() - self._bg.height()) // 2
-            painter.drawPixmap(x, y, self._bg)
-
-
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Check-In")
         self.setFixedSize(1280, 720)
 
-        fonts_dir = Path(__file__).parent.parent / "fonts"
-        if fonts_dir.exists():
-            for font_file in fonts_dir.glob("*.ttf"):
-                QFontDatabase.addApplicationFont(str(font_file))
+        fonts_dir = Path(AssetController.FONTS_DIR.get_path())
+        for font_file in fonts_dir.glob("*.ttf"):
+            QFontDatabase.addApplicationFont(str(font_file))
 
-        self.central = _RootWidget()
+        self.central = QStackedWidget()
         self.setCentralWidget(self.central)
-
-        self.stacked = QStackedWidget(self.central)
-        self.stacked.setGeometry(0, 0, 1280, 720)
-        self.stacked.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.stacked.setStyleSheet("background: transparent;")
 
         self._error = ErrorOverlay(self.central)
 
-        self._escape_handler: Callable[[], None] | None = None
+        Toast.setPositionRelativeToWidget(self.central)
+        Toast.setPosition(ToastPosition.BOTTOM_RIGHT)
+        Toast.setMaximumOnScreen(3)
 
         if config().DEV_MODE:
             # TODO: this is just some temporary code that opens the ui on the screen I want it to
-            self.setGeometry(QApplication.screens()[1].geometry())
+            self.setGeometry(QApplication.screens()[2].geometry())
         self.showFullScreen()
 
-    def show_error(self, title: str, detail: str, *, retry_in: int | None = None, on_retry: Callable[[], None] | None = None) -> None:
+        # QTimer.singleShot(1000, lambda: context().mainWindow.show_toast("test", "subtitle", ToastPreset.SUCCESS))
+        # self.timer = QTimer()
+        # self.timer.timeout.connect(
+        #     lambda: context().mainWindow.show_toast(
+        #         "test test test test",
+        #         "subtitle subtitle subtitle subtitle subtitle subtitle subtitle",
+        #         ToastPreset.SUCCESS
+        #     )
+        # )
+        # self.timer.start(2000)
+
+    def show_error(
+            self, title:
+            str, detail:
+            str,
+            *,
+            retry_in: int | None = None,
+            on_retry: Callable[[], None] | None = None
+    ) -> None:
         self._error.show_error(title, detail, retry_in=retry_in, on_retry=on_retry)
 
     def hide_error(self) -> None:
         self._error.hide_error()
+
+    def show_toast(self, title: str, text: str = "", toast_preset: ToastPreset = ToastPreset.INFORMATION) -> None:
+        toast = Toast(self)
+        toast.setTitle(title)
+        if text:
+            toast.setText(text)
+        toast.applyPreset(toast_preset)
+        toast.setDuration(7_000)
+        # toast.setShowIcon(True)
+        toast.setShowCloseButton(False)
+        # toast.setShowDurationBar(False)
+        # toast.setResetDurationOnHover(False)
+        toast.setBorderRadius(10)
+        toast.setMaximumWidth(400)
+        # toast.setBackgroundColor(QColor(0, 0, 0, 170))
+        # toast.setTextColor(QColor("#F5F0E6"))
+        toast.setTitleFont(QFont("Montserrat", 18, QFont.Weight.Bold))
+        toast.setTextFont(QFont("Montserrat", 14, QFont.Weight.Normal))
+        toast.show()
+
+    def paintEvent(self, event: QPaintEvent | None) -> None:
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor("#153246"))
+        painter.drawPixmap(0, 0, QPixmap(AssetController.BACKGROUND.get_path()))
 
     def is_error_visible(self) -> bool:
         return self._error.isVisible()

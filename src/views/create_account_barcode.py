@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel
+from PyQt6.QtGui import QFont
 from PyQt6.QtCore import Qt
 
 from .base import Screen
@@ -33,15 +34,27 @@ class CreateAccountBarcode(Screen):
 
         inner.addStretch(3)
 
-        instruction = QLabel("Please scan your ID barcode")
-        instruction.setStyleSheet(
-            "color: #F5F0E6; font: 36pt Montserrat;"
+        title = QLabel("Welcome!")
+        title.setStyleSheet(
+            "color: #F5F0E6; font: bold 80pt Montserrat;"
             "background: transparent; border: none;"
         )
-        instruction.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        inner.addWidget(instruction)
+        title.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        inner.addWidget(title)
 
-        inner.addStretch(3)
+        instruction = QLabel("It looks like you don't have an account yet! If you have a student ID, please scan your barcode now. "
+                             "If not, please press \"Fill Manually\"")
+        instruction.setStyleSheet(
+            "color: #F5F0E6;"
+        )
+        instruction.setFont(QFont("Montserrat", 36))
+        instruction.setWordWrap(True)
+        instruction.setFixedWidth(800)
+        instruction.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        instruction.setMinimumHeight(instruction.heightForWidth(800))
+        inner.addWidget(instruction, alignment=Qt.AlignmentFlag.AlignHCenter)
+
+        inner.addStretch(2)
 
         btn_row = QHBoxLayout()
         fill_btn = StyledButton("Fill Manually")
@@ -51,3 +64,5 @@ class CreateAccountBarcode(Screen):
         btn_row.addWidget(fill_btn)
         btn_row.addStretch()
         inner.addLayout(btn_row)
+
+        inner.addStretch(2)

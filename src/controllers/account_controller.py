@@ -4,7 +4,7 @@ import logging
 from threading import Thread
 from typing import Any
 
-from PyQt6.QtCore import QTimer
+from pyqttoast import ToastPreset
 
 from controllers.api_controller import ApiController, ExternalApiError
 from global_context import context
@@ -15,7 +15,7 @@ class AccountController:
         pass
 
     def go_to_review_from_barcode(self, barcode: str) -> None:
-        context().navigation_controller.show_status("Looking up student...")
+        context().mainWindow.show_toast("Looking Up Student", "", ToastPreset.INFORMATION)
         logging.info(f"looking up student by barcode: {barcode}")
         Thread(target=self._lookup_barcode_worker, args=(barcode,), daemon=True).start()
 
@@ -28,10 +28,8 @@ class AccountController:
         context().dispatcher.call.emit(lambda s=student: self._on_barcode_result(s))
 
     def _on_barcode_result(self, student: dict[str, Any] | None) -> None:
-        context().navigation_controller.hide_status()
         if student is None:
-            context().navigation_controller.show_status("Student not found. Please enter your details manually.")
-            QTimer.singleShot(3000, context().navigation_controller.hide_status)
+            context().mainWindow.show_toast("Student not found", "Please enter your details manually", ToastPreset.ERROR)
             return
         context().navigation_controller.go_to_create_account_review(
             pid=student["pid"],
@@ -41,7 +39,7 @@ class AccountController:
         )
 
     def go_to_review_from_pid(self, pid: str) -> None:
-        context().navigation_controller.show_status("Looking up student...")
+        context().mainWindow.show_toast("Looking Up Student", "", ToastPreset.INFORMATION)
         logging.info(f"looking up student by PID: {pid}")
         Thread(target=self._lookup_pid_worker, args=(pid,), daemon=True).start()
 
@@ -54,10 +52,8 @@ class AccountController:
         context().dispatcher.call.emit(lambda s=student: self._on_pid_result(s, pid))
 
     def _on_pid_result(self, student: dict[str, Any] | None, pid: str) -> None:
-        context().navigation_controller.hide_status()
         if student is None:
-            context().navigation_controller.show_status("Student not found. Please check your PID.")
-            QTimer.singleShot(3000, context().navigation_controller.hide_status)
+            context().mainWindow.show_toast("Student Not Found", "Please check your PID", ToastPreset.ERROR)
             return
         context().navigation_controller.go_to_create_account_review(
             pid=pid,
@@ -81,7 +77,7 @@ class AccountController:
         last_name: str | None = None,
         email: str | None = None,
     ) -> None:
-        context().navigation_controller.show_status("Account creation in progress!")
+        context().mainWindow.show_toast("Account creation in progress!", "", ToastPreset.INFORMATION)
         logging.info(f"creating account: pid={pid} barcode={barcode}")
         Thread(
             target=self._create_worker,
@@ -90,9 +86,7 @@ class AccountController:
         ).start()
 
     def _on_external_api_error(self, api: str) -> None:
-        context().navigation_controller.hide_status()
-        context().navigation_controller.show_status(f"system error ({api.upper()} api). please talk to a staff member.")
-        QTimer.singleShot(4000, context().navigation_controller.hide_status)
+        context().mainWindow.show_toast(f"System Error: {api}", "Please talk to a staff member", ToastPreset.ERROR)
 
     def _create_worker(
         self,
@@ -118,10 +112,8 @@ class AccountController:
         context().dispatcher.call.emit(lambda r=result: self._on_create_result(r))
 
     def _on_create_result(self, result: dict[str, Any] | None) -> None:
-        context().navigation_controller.hide_status()
         if result is None:
-            context().navigation_controller.show_status("ERROR! Could not create account, please try manually.")
-            QTimer.singleShot(3000, context().navigation_controller.hide_status)
+            context().mainWindow.show_toast("ERROR! Could not create account, please try manually.", ToastType.NOTIFICATION)
             return
         logging.info("account creation succeeded")
         context().navigation_controller.pop()

@@ -5,8 +5,10 @@ from collections.abc import Callable
 from typing import Any
 
 from PyQt6.QtCore import QTimer
+from pyqttoast import ToastPreset
 
 from controllers.api_controller import ApiController
+from global_config import config
 from global_context import context
 from hardware.traffic_light import TrafficLightState
 from views.user_welcome import UserWelcome
@@ -37,14 +39,13 @@ class CheckInController:
         if status == "api_error":
             logging.error("API error during check-in")
             context().traffic_light_controller.request_state(TrafficLightState.RED)
-            context().navigation_controller.show_status("System error, please let staff know.")
-            QTimer.singleShot(4000, context().navigation_controller.hide_status)
+            context().mainWindow.show_toast("System Error", "Please let staff know", ToastPreset.ERROR)
             return
 
         if status == "no_account":
             logging.info(f"no account found for {identifier}")
             context().traffic_light_controller.request_state(TrafficLightState.RED)
-            if not context().has_barcode_scanner:
+            if not config().HAS_BARCODE_SCANNER:
                 context().navigation_controller.get_frame(TransitionScreen).display(
                     "Looks like you don't have an account.\nUse the other kiosk to set one up!"
                 )

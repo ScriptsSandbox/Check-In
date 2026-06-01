@@ -7,8 +7,9 @@ from PyQt6.QtCore import QTimer, Qt
 
 
 class ErrorOverlay(QWidget):
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, parent: QWidget) -> None:
         super().__init__(parent)
+        print(self.geometry())
         self.setGeometry(0, 0, 1280, 720)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet("background-color: rgba(0, 0, 0, 110);")

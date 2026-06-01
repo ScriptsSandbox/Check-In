@@ -4,23 +4,23 @@ import uuid
 from collections.abc import Callable
 from typing import TYPE_CHECKING, TypeVar, cast
 
-from PyQt6.QtCore import QTimer, Qt
-from PyQt6.QtWidgets import QLabel
+from PyQt6.QtCore import QTimer
+from pyqttoast import ToastPreset
 
 from global_config import config
+from global_context import context
 from hardware.traffic_light import TrafficLightState
+from views.base import Screen
+from views.check_in_manual import CheckInManual
 from views.check_in_rfid import CheckInRFID
-from views.transition_screen import TransitionScreen
 from views.create_account_barcode import CreateAccountBarcode
 from views.create_account_manual import CreateAccountManual
 from views.create_account_no_pid import CreateAccountNoPid
 from views.create_account_review import CreateAccountReview
-from views.sign_waiver import SignWaiver
-from views.check_in_manual import CheckInManual
 from views.qr_codes import QRCodes
+from views.sign_waiver import SignWaiver
+from views.transition_screen import TransitionScreen
 from views.user_welcome import UserWelcome
-from views.base import Screen
-from global_context import GlobalContext, context
 
 if TYPE_CHECKING:
     from views.components.dev_overlay import DevOverlay
@@ -32,8 +32,7 @@ class NavigationController:
     def __init__(self) -> None:
         pass
 
-    def start(self):
-        self._stacked = context().mainWindow.stacked
+    def start(self) -> None:
         self._frames: dict[type[Screen], Screen] = {}
         self._curr: type[Screen] | None = None
         self._frame_uuid: str = uuid.uuid4().hex
@@ -59,21 +58,7 @@ class NavigationController:
         ):
             frame = F(self)
             self._frames[F] = frame
-            self._stacked.addWidget(frame)
-
-        # Status overlay — floats over the stacked widget at the bottom
-        self._status_label = QLabel("", context().mainWindow.central)
-        self._status_label.setGeometry(40, 628, 1200, 56)
-        self._status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._status_label.setStyleSheet(
-            "color: #F5F0E6;"
-            "font: bold 18pt Montserrat;"
-            "background-color: rgba(0, 0, 0, 170);"
-            "border-radius: 10px;"
-            "border: none;"
-        )
-        self._status_label.hide()
-        self._status_label.raise_()
+            context().mainWindow.central.addWidget(frame)
 
         if config().DEV_MODE:
             from views.components.dev_overlay import DevOverlay
@@ -90,7 +75,7 @@ class NavigationController:
             self._frames[self._curr].on_hide()
         self._curr = screen_class
         self._frame_uuid = uuid.uuid4().hex
-        self._stacked.setCurrentWidget(self._frames[screen_class])
+        context().mainWindow.central.setCurrentWidget(self._frames[screen_class])
         self._frames[screen_class].on_show()
 
         if self._dev_overlay is not None:
@@ -108,18 +93,6 @@ class NavigationController:
 
     def get_curr_frame(self) -> type[Screen] | None:
         return self._curr
-
-    # ------------------------------------------------------------------
-    # Status overlay
-    # ------------------------------------------------------------------
-
-    def show_status(self, text: str) -> None:
-        self._status_label.setText(text)
-        self._status_label.show()
-        self._status_label.raise_()
-
-    def hide_status(self) -> None:
-        self._status_label.hide()
 
     # ------------------------------------------------------------------
     # Stack-based flow
@@ -172,10 +145,14 @@ class NavigationController:
         self.show_frame(CreateAccountReview)
 
     def go_to_create_account(self, on_done: Callable[[], None]) -> None:
-        self.get_frame(TransitionScreen).display(
-            "Looks like you don't have an account,\nlet's set one up!"
-        )
-        QTimer.singleShot(3000, lambda: self.push(CreateAccountBarcode, on_done=on_done))
+        context().mainWindow.show_toast("No Account",
+                                        "Looks like you don't have an account yet, let's set one up!", ToastPreset.INFORMATION)
+        # self.get_frame(TransitionScreen).display(
+        #     "Looks like you don't have an account,\nlet's set one up!"
+        # )
+        # context().dispatcher.call.emit(lambda: self.push(CreateAccountBarcode, on_done=on_done))
+        self.push(CreateAccountBarcode, on_done=on_done)
+        # QTimer.singleShot(3000, lambda: self.push(CreateAccountBarcode, on_done=on_done))
 
     def go_to_sign_waiver(self) -> None:
         self.get_frame(TransitionScreen).display(

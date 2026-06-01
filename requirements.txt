@@ -3,8 +3,10 @@ requests==2.32.5
 adafruit-circuitpython-pn532
 RPi.GPIO; sys_platform == 'linux'
 pyqt6==6.11.0
+pyqt6-stubs
 qtawesome
 pyqt6-sip
+pyqt-toast-notification==1.3.3
 mypy==2.1.0
 types-pyserial
 types-requests
