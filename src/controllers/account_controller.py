@@ -14,7 +14,7 @@ class AccountController:
     def __init__(self) -> None:
         pass
 
-    def go_to_review_from_barcode(self, barcode: str) -> None:
+    def lookup_by_barcode(self, barcode: str) -> None:
         context().main_window.show_toast("Looking Up Student", "", ToastPreset.INFORMATION)
         logging.info(f"looking up student by barcode: {barcode}")
         Thread(target=self._lookup_barcode_worker, args=(barcode,), daemon=True).start()
@@ -38,7 +38,7 @@ class AccountController:
             email=student["email"],
         )
 
-    def go_to_review_from_pid(self, pid: str) -> None:
+    def lookup_by_pid(self, pid: str) -> None:
         context().main_window.show_toast("Looking Up Student", "", ToastPreset.INFORMATION)
         logging.info(f"looking up student by PID: {pid}")
         Thread(target=self._lookup_pid_worker, args=(pid,), daemon=True).start()
@@ -62,7 +62,7 @@ class AccountController:
             email=student["email"],
         )
 
-    def create_account_from_review(self, *, first_name: str, last_name: str, email: str, pid: str) -> None:
+    def submit_account(self, *, first_name: str, last_name: str, email: str, pid: str) -> None:
         if pid:
             self._create(pid=pid)
         else:

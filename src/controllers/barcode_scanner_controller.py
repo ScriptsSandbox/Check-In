@@ -67,7 +67,7 @@ class BarcodeScannerController:
                     )
                 elif curr_frame in (CreateAccountBarcode, CreateAccountManual):
                     context().dispatcher.call.emit(
-                        lambda b=barcode: context().account_controller.go_to_review_from_barcode(b)
+                        lambda b=barcode: context().account_controller.lookup_by_barcode(b)
                     )
                 else:
                     logging.debug("barcode scanned on unhandled screen: %s", curr_frame)

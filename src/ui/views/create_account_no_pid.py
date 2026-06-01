@@ -65,7 +65,7 @@ class CreateAccountNoPid(Screen):
             return
         self.clear_entries()
         try:
-            context().account_controller.create_account_from_review(
+            context().account_controller.submit_account(
                 first_name=first, last_name=last, email=email, pid=""
             )
         except Exception:

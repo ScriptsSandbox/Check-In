@@ -91,7 +91,7 @@ TRANSITIONS: dict[type[Screen], list[tuple[str, Callable[[NavigationController],
         ("← Main", lambda nav: nav.back_to_main()),
     ],
     CreateAccountManual: [
-        ("→ review (pid lookup)", lambda nav: context().account_controller.go_to_review_from_pid(_DEV_PID)),
+        ("→ review (pid lookup)", lambda nav: context().account_controller.lookup_by_pid(_DEV_PID)),
         ("→ no-pid screen", lambda nav: nav.go_to_create_account_no_pid()),
         ("← Main", lambda nav: nav.back_to_main()),
     ],
