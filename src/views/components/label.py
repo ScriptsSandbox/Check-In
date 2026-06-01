@@ -10,30 +10,30 @@ from .theme import CREAM, FONT_FAMILY
 def styled_label(
     text: str = "",
     *,
-    size: int,
+    font_size: int,
     bold: bool = False,
     color: str = CREAM,
     align: Qt.AlignmentFlag = Qt.AlignmentFlag.AlignHCenter,
-    wrap: bool = False,
-    wrap_width: int | None = None,
+    width: int = 800,
 ) -> QLabel:
     lbl = QLabel(text)
 
-    font = QFont(FONT_FAMILY, size)
+    font = QFont(FONT_FAMILY, font_size)
     font.setBold(bold)
     lbl.setFont(font)
 
     lbl.setStyleSheet(f"color: {color}; background: transparent; border: none;")
     lbl.setAlignment(align)
 
-    if wrap or wrap_width is not None:
-        lbl.setWordWrap(True)
-    if wrap_width is not None:
-        lbl.setFixedWidth(wrap_width)
-        lbl.setMinimumHeight(lbl.heightForWidth(wrap_width))
+    lbl.setWordWrap(True)
+    lbl.setFixedWidth(width)
+    lbl.setMinimumHeight(lbl.heightForWidth(width))
 
     return lbl
 
 
+def title_label(text: str) -> QLabel:
+    return styled_label(text, font_size=80, bold=True)
+
 def field_label(text: str) -> QLabel:
-    return styled_label(text, size=18)
+    return styled_label(text, font_size=18)

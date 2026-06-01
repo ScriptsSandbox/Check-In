@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout
+from PyQt6.QtCore import Qt
 
 from global_context import context
 from .base import Screen
@@ -38,15 +39,14 @@ class CheckInManual(Screen):
         instruction = styled_label(
             "Enter your UCSD PID below\n"
             "to check in",
-            size=36,
-            wrap=True,
+            font_size=36,
         )
-        inner.addWidget(instruction)
+        inner.addWidget(instruction, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         inner.addStretch(1)
 
         pid_label = field_label("PID")
-        inner.addWidget(pid_label)
+        inner.addWidget(pid_label, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         entry_row = QHBoxLayout()
         self.pid_entry = StyledEntry()

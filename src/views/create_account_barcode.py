@@ -8,7 +8,6 @@ from PyQt6.QtCore import Qt
 from .base import Screen
 from .components.outline_frame import OutlineFrame
 from .components.styled_button import StyledButton, home_button, INNER_MARGIN, OUTER_MARGIN
-from .components.theme import BODY_WRAP_WIDTH
 from .components.label import styled_label
 
 if TYPE_CHECKING:
@@ -35,14 +34,13 @@ class CreateAccountBarcode(Screen):
 
         inner.addStretch(3)
 
-        title = styled_label("Welcome!", size=80, bold=True)
-        inner.addWidget(title)
+        title = styled_label("Welcome!", font_size=80, bold=True)
+        inner.addWidget(title, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         instruction = styled_label(
             "It looks like you don't have an account yet! If you have a student ID, "
             "please scan your barcode now. If not, please press \"Fill Manually\"",
-            size=36,
-            wrap_width=BODY_WRAP_WIDTH,
+            font_size=36,
         )
         inner.addWidget(instruction, alignment=Qt.AlignmentFlag.AlignHCenter)
 

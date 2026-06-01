@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout
+from PyQt6.QtCore import Qt
 
 from global_context import context
 from .base import Screen
@@ -36,7 +37,7 @@ class CreateAccountManual(Screen):
         inner.addStretch(3)
 
         pid_label = field_label("PID")
-        inner.addWidget(pid_label)
+        inner.addWidget(pid_label, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         entry_row = QHBoxLayout()
         self.pid_entry = StyledEntry()

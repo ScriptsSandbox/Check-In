@@ -40,10 +40,9 @@ class SignWaiver(Screen):
 
         instruction = styled_label(
             "Please scan the QR code\non the right and sign the waiver",
-            size=36,
-            wrap=True,
+            font_size=36,
         )
-        left.addWidget(instruction)
+        left.addWidget(instruction, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         left.addStretch(2)
 

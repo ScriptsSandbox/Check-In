@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PyQt6.QtWidgets import QVBoxLayout, QLabel
-from PyQt6.QtCore import QTimer
+from PyQt6.QtCore import QTimer, Qt
 
 from .base import Screen
 from .components.outline_frame import OutlineFrame
@@ -32,8 +32,8 @@ class UserWelcome(Screen):
 
         inner.addStretch()
 
-        self._msg_label = styled_label("Welcome back", size=38)
-        inner.addWidget(self._msg_label)
+        self._msg_label = styled_label("Welcome back", font_size=38)
+        inner.addWidget(self._msg_label, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         inner.addSpacing(8)
 
@@ -61,8 +61,8 @@ class UserWelcome(Screen):
         self._msg_label.setText(message)
         self.controller.show_frame(UserWelcome)
 
-        label = styled_label(name, size=70, bold=True)
-        self._names_layout.addWidget(label)
+        label = styled_label(name, font_size=70, bold=True)
+        self._names_layout.addWidget(label, alignment=Qt.AlignmentFlag.AlignHCenter)
         self._active_labels.add(label)
 
         QTimer.singleShot(3000, lambda: self._remove_name(label))

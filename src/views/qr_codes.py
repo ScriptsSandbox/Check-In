@@ -47,9 +47,9 @@ class QRCodes(Screen):
             img.setPixmap(px)
             img.setAlignment(Qt.AlignmentFlag.AlignHCenter)
             img.setStyleSheet("background: transparent; border: none;")
-            lbl = styled_label(caption, size=30)
+            lbl = styled_label(caption, font_size=30, width=px.width())
             col.addWidget(img)
-            col.addWidget(lbl)
+            col.addWidget(lbl, alignment=Qt.AlignmentFlag.AlignHCenter)
             return col
 
         qr_row.addStretch()

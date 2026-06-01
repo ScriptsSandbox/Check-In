@@ -20,7 +20,7 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Check-In")
-        self.setFixedSize(1280, 720)
+        self.setFixedSize(config().SCREEN_WIDTH, config().SCREEN_HEIGHT)
 
         fonts_dir = Path(AssetController.FONTS_DIR.get_path())
         for font_file in fonts_dir.glob("*.ttf"):

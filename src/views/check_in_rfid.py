@@ -3,12 +3,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout
+from PyQt6.QtCore import Qt
 import qtawesome as qta
 
 from .base import Screen
 from .components.outline_frame import OutlineFrame
 from .components.styled_button import StyledButton, NAV_BTN_SIZE, NAV_ICON_SIZE, INNER_MARGIN, OUTER_MARGIN
-from .components.label import styled_label
+from .components.label import styled_label, title_label
 from .qr_codes import QRCodes
 
 if TYPE_CHECKING:
@@ -48,13 +49,13 @@ class CheckInRFID(Screen):
 
         inner.addStretch(2)
 
-        title = styled_label("UCSD Makerspace", size=80, bold=True)
-        inner.addWidget(title)
+        title = title_label("UCSD Makerspace")
+        inner.addWidget(title, alignment=Qt.AlignmentFlag.AlignHCenter)
 
-        subtitle = styled_label("Welcome Desk", size=55)
-        inner.addWidget(subtitle)
+        subtitle = styled_label("Welcome Desk", font_size=55)
+        inner.addWidget(subtitle, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         inner.addStretch(3)
 
-        instruction = styled_label("Please tap ID on the blue box to start", size=24)
-        inner.addWidget(instruction)
+        instruction = styled_label("Please tap ID on the blue box to start", font_size=24)
+        inner.addWidget(instruction, alignment=Qt.AlignmentFlag.AlignHCenter)

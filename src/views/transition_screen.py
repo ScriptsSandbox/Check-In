@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PyQt6.QtWidgets import QVBoxLayout
+from PyQt6.QtCore import Qt
 
 from .base import Screen
 from .components.outline_frame import OutlineFrame
@@ -27,8 +28,8 @@ class TransitionScreen(Screen):
 
         inner.addStretch()
 
-        self._msg_label = styled_label("", size=48, wrap=True)
-        inner.addWidget(self._msg_label)
+        self._msg_label = styled_label("", font_size=48)
+        inner.addWidget(self._msg_label, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         inner.addStretch()
 

@@ -12,5 +12,3 @@ CREAM: str = "#F5F0E6"
 ACCENT: str = "#4EBEEE"
 READONLY_TEXT: str = "#C8C0B0"
 DARK: str = "#153246"
-
-BODY_WRAP_WIDTH: int = 800

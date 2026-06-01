@@ -5,6 +5,7 @@ from collections.abc import Callable
 from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout
 from PyQt6.QtCore import QTimer, Qt
 
+from global_config import config
 from .label import styled_label
 
 
@@ -12,7 +13,7 @@ class ErrorOverlay(QWidget):
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent)
         print(self.geometry())
-        self.setGeometry(0, 0, 1280, 720)
+        self.setGeometry(0, 0, config().SCREEN_WIDTH, config().SCREEN_HEIGHT)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet("background-color: rgba(0, 0, 0, 110);")
         self.hide()
@@ -26,7 +27,7 @@ class ErrorOverlay(QWidget):
         self._heading.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._heading.setStyleSheet("background: transparent; color: #FF6B6B; font: bold 28pt Montserrat; letter-spacing: 6px;")
 
-        self._title = styled_label("", size=40, bold=True, align=Qt.AlignmentFlag.AlignCenter, wrap=True)
+        self._title = styled_label("", font_size=40, bold=True, align=Qt.AlignmentFlag.AlignCenter)
 
         self._detail = QLabel("", self)
         self._detail.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
@@ -42,12 +43,12 @@ class ErrorOverlay(QWidget):
         )
         self._detail.setFixedWidth(900)
 
-        self._countdown = styled_label("", size=16, align=Qt.AlignmentFlag.AlignCenter)
+        self._countdown = styled_label("", font_size=16, align=Qt.AlignmentFlag.AlignCenter)
 
         layout.addWidget(self._heading)
-        layout.addWidget(self._title)
+        layout.addWidget(self._title, alignment=Qt.AlignmentFlag.AlignHCenter)
         layout.addWidget(self._detail, alignment=Qt.AlignmentFlag.AlignHCenter)
-        layout.addWidget(self._countdown)
+        layout.addWidget(self._countdown, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         self._retry_timer = QTimer(self)
         self._retry_timer.setInterval(1000)

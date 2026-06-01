@@ -4,6 +4,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout
+from PyQt6.QtCore import Qt
 
 from global_context import context
 from .base import Screen
@@ -37,7 +38,7 @@ class CreateAccountNoPid(Screen):
         inner.addStretch(1)
 
         def _field_row(label_text: str) -> StyledEntry:
-            inner.addWidget(field_label(label_text))
+            inner.addWidget(field_label(label_text), alignment=Qt.AlignmentFlag.AlignHCenter)
 
             row = QHBoxLayout()
             entry = StyledEntry()
