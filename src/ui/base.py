@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
 
 from .components.outline_frame import OutlineFrame
+from .components.styled_button import home_button
 from .components.theme import OUTER_MARGIN, INNER_MARGIN
 
 if TYPE_CHECKING:
@@ -28,6 +29,12 @@ class Screen(QWidget):
         self.content.setSpacing(0)
 
         self._build(controller)
+
+    def add_home_row(self) -> None:
+        row = QHBoxLayout()
+        row.addWidget(home_button(lambda: self.controller.back_to_main()))
+        row.addStretch()
+        self.content.addLayout(row)
 
     def _build(self, controller: NavigationController) -> None:
         pass

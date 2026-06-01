@@ -33,7 +33,7 @@ class MainWindow(QMainWindow):
 
         if config().DEV_MODE:
             # TODO: this is just some temporary code that opens the ui on the screen I want it to
-            self.setGeometry(QApplication.screens()[2].geometry())
+            self.setGeometry(QApplication.screens()[0].geometry())
         self.showFullScreen()
 
         # QTimer.singleShot(1000, lambda: context().main_window.show_toast("test", "subtitle", ToastPreset.SUCCESS))

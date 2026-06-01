@@ -4,13 +4,11 @@ import logging
 from typing import TYPE_CHECKING
 
 from PyQt6.QtWidgets import QHBoxLayout
-from PyQt6.QtCore import Qt
 
 from misc.global_context import context
 from ui.base import Screen
-from ui.components.styled_button import StyledButton, home_button
-from ui.components.styled_entry import StyledEntry
-from ui.components.label import field_label
+from ui.components.styled_button import StyledButton
+from ui.components.styled_entry import field_row
 
 if TYPE_CHECKING:
     from controllers.navigation_controller import NavigationController
@@ -18,30 +16,14 @@ if TYPE_CHECKING:
 
 class CreateAccountReview(Screen):
     def _build(self, controller: NavigationController) -> None:
-        top_row = QHBoxLayout()
-        top_row.addWidget(home_button(lambda: controller.back_to_main()))
-        top_row.addStretch()
-        self.content.addLayout(top_row)
+        self.add_home_row()
 
         self.content.addSpacing(8)
 
-        def _field_row(label_text: str) -> StyledEntry:
-            self.content.addWidget(field_label(label_text), alignment=Qt.AlignmentFlag.AlignHCenter)
-
-            row = QHBoxLayout()
-            entry = StyledEntry()
-            entry.setMaximumWidth(800)
-            row.addStretch()
-            row.addWidget(entry)
-            row.addStretch()
-            self.content.addLayout(row)
-            self.content.addSpacing(8)
-            return entry
-
-        self.first_name_entry = _field_row("First Name")
-        self.last_name_entry = _field_row("Last Name")
-        self.email_entry = _field_row("Email")
-        self.pid_entry = _field_row("PID")
+        self.first_name_entry = field_row(self.content, "First Name")
+        self.last_name_entry = field_row(self.content, "Last Name")
+        self.email_entry = field_row(self.content, "Email")
+        self.pid_entry = field_row(self.content, "PID")
 
         for entry in (self.first_name_entry, self.last_name_entry,
                       self.email_entry, self.pid_entry):

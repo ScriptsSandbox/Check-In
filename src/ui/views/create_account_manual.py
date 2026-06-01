@@ -3,13 +3,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PyQt6.QtWidgets import QHBoxLayout
-from PyQt6.QtCore import Qt
 
 from misc.global_context import context
 from ui.base import Screen
-from ui.components.styled_button import StyledButton, home_button
-from ui.components.styled_entry import StyledEntry
-from ui.components.label import field_label
+from ui.components.styled_button import StyledButton
+from ui.components.styled_entry import field_row
 
 if TYPE_CHECKING:
     from controllers.navigation_controller import NavigationController
@@ -17,24 +15,12 @@ if TYPE_CHECKING:
 
 class CreateAccountManual(Screen):
     def _build(self, controller: NavigationController) -> None:
-        top_row = QHBoxLayout()
-        top_row.addWidget(home_button(lambda: controller.back_to_main()))
-        top_row.addStretch()
-        self.content.addLayout(top_row)
+        self.add_home_row()
 
         self.content.addStretch(3)
 
-        pid_label = field_label("PID")
-        self.content.addWidget(pid_label, alignment=Qt.AlignmentFlag.AlignHCenter)
-
-        entry_row = QHBoxLayout()
-        self.pid_entry = StyledEntry()
-        self.pid_entry.setMaximumWidth(800)
+        self.pid_entry = field_row(self.content, "PID", spacing=0)
         self.pid_entry.returnPressed.connect(self._go_to_review)
-        entry_row.addStretch()
-        entry_row.addWidget(self.pid_entry)
-        entry_row.addStretch()
-        self.content.addLayout(entry_row)
 
         self.content.addStretch(2)
 

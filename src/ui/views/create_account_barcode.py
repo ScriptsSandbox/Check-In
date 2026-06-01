@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import QHBoxLayout
 from PyQt6.QtCore import Qt
 
 from ui.base import Screen
-from ui.components.styled_button import StyledButton, home_button
+from ui.components.styled_button import StyledButton
 from ui.components.label import styled_label
 
 if TYPE_CHECKING:
@@ -15,10 +15,7 @@ if TYPE_CHECKING:
 
 class CreateAccountBarcode(Screen):
     def _build(self, controller: NavigationController) -> None:
-        top_row = QHBoxLayout()
-        top_row.addWidget(home_button(lambda: controller.back_to_main()))
-        top_row.addStretch()
-        self.content.addLayout(top_row)
+        self.add_home_row()
 
         self.content.addStretch(2)
 
