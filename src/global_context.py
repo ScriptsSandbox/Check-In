@@ -68,12 +68,3 @@ class GlobalContext:
     def rfid(self, value: str) -> None:
         with self._rfid_lock:
             self._rfid = value
-
-    def load_env(self) -> None:
-        self.env = Env(
-            KIOSK_NAME=_from_env("KIOSK_NAME", required=True),
-            HAS_BARCODE_SCANNER=_from_env("HAS_BARCODE_SCANNER", required=True).lower() == "true",
-            CHECK_IN_API_URL=_from_env("CHECK_IN_API_URL", required=True),
-            DISCORD_WEBHOOK_URL=_from_env("DISCORD_WEBHOOK_URL", required=False),
-            DEV_MODE=_from_env("DEV_MODE", required=False).lower() == "true"
-        )

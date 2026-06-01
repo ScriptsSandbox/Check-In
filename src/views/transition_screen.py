@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PyQt6.QtWidgets import QVBoxLayout, QLabel
-from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QVBoxLayout
 
 from .base import Screen
 from .components.outline_frame import OutlineFrame
 from .components.theme import INNER_MARGIN, OUTER_MARGIN
+from .components.label import styled_label
 
 if TYPE_CHECKING:
     from controllers.navigation_controller import NavigationController
@@ -27,13 +27,7 @@ class TransitionScreen(Screen):
 
         inner.addStretch()
 
-        self._msg_label = QLabel("")
-        self._msg_label.setStyleSheet(
-            "color: #F5F0E6; font: 48pt Montserrat;"
-            "background: transparent; border: none;"
-        )
-        self._msg_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        self._msg_label.setWordWrap(True)
+        self._msg_label = styled_label("", size=48, wrap=True)
         inner.addWidget(self._msg_label)
 
         inner.addStretch()

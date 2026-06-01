@@ -1,13 +1,11 @@
 from collections.abc import Callable
-from enum import Enum, auto
-from idlelib.run import show_socket_error
 from pathlib import Path
-from tkinter.messagebox import showerror
 
-from PyQt6.QtWidgets import QMainWindow, QWidget, QStackedWidget, QApplication
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFontDatabase, QPainter, QPixmap, QColor, QFont, QPaintEvent, QKeyEvent
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtWidgets import QMainWindow, QStackedWidget, QApplication
 from pyqttoast import Toast, ToastPosition, ToastPreset
+
 from controllers.asset_controller import AssetController
 from global_config import config
 from global_context import context

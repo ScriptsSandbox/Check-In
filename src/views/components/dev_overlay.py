@@ -31,7 +31,7 @@ _THANK_MSG = "Thank you for registering"
 
 def _sim_no_account_success(nav: NavigationController) -> None:
     context().rfid = _DEV_RFID
-    if not context().has_barcode_scanner:
+    if not config().HAS_BARCODE_SCANNER:
         nav.get_frame(TransitionScreen).display(
             "Looks like you don't have an account.\nUse the other kiosk to set one up!"
         )
@@ -47,7 +47,7 @@ def _sim_no_account_success(nav: NavigationController) -> None:
 
 def _sim_no_account_needs_waiver(nav: NavigationController) -> None:
     context().rfid = _DEV_RFID
-    if not context().has_barcode_scanner:
+    if not config().HAS_BARCODE_SCANNER:
         nav.get_frame(TransitionScreen).display(
             "Looks like you don't have an account.\nUse the other kiosk to set one up!"
         )

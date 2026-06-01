@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel
-from PyQt6.QtGui import QFont
+from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout
 from PyQt6.QtCore import Qt
 
 from .base import Screen
 from .components.outline_frame import OutlineFrame
 from .components.styled_button import StyledButton, home_button, INNER_MARGIN, OUTER_MARGIN
+from .components.theme import BODY_WRAP_WIDTH
+from .components.label import styled_label
 
 if TYPE_CHECKING:
     from controllers.navigation_controller import NavigationController
@@ -34,24 +35,15 @@ class CreateAccountBarcode(Screen):
 
         inner.addStretch(3)
 
-        title = QLabel("Welcome!")
-        title.setStyleSheet(
-            "color: #F5F0E6; font: bold 80pt Montserrat;"
-            "background: transparent; border: none;"
-        )
-        title.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        title = styled_label("Welcome!", size=80, bold=True)
         inner.addWidget(title)
 
-        instruction = QLabel("It looks like you don't have an account yet! If you have a student ID, please scan your barcode now. "
-                             "If not, please press \"Fill Manually\"")
-        instruction.setStyleSheet(
-            "color: #F5F0E6;"
+        instruction = styled_label(
+            "It looks like you don't have an account yet! If you have a student ID, "
+            "please scan your barcode now. If not, please press \"Fill Manually\"",
+            size=36,
+            wrap_width=BODY_WRAP_WIDTH,
         )
-        instruction.setFont(QFont("Montserrat", 36))
-        instruction.setWordWrap(True)
-        instruction.setFixedWidth(800)
-        instruction.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        instruction.setMinimumHeight(instruction.heightForWidth(800))
         inner.addWidget(instruction, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         inner.addStretch(2)

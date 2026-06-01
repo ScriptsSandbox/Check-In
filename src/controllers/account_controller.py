@@ -113,7 +113,7 @@ class AccountController:
 
     def _on_create_result(self, result: dict[str, Any] | None) -> None:
         if result is None:
-            context().mainWindow.show_toast("ERROR! Could not create account, please try manually.", ToastType.NOTIFICATION)
+            context().mainWindow.show_toast("Error", "Could not create account, please try manually", ToastPreset.ERROR)
             return
         logging.info("account creation succeeded")
         context().navigation_controller.pop()

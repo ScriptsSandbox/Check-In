@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel
-from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout
 
 from global_context import context
 from .base import Screen
 from .components.outline_frame import OutlineFrame
 from .components.styled_button import StyledButton, home_button, INNER_MARGIN, OUTER_MARGIN
 from .components.styled_entry import StyledEntry
+from .components.label import field_label, styled_label
 
 if TYPE_CHECKING:
     from controllers.navigation_controller import NavigationController
@@ -35,26 +35,17 @@ class CheckInManual(Screen):
 
         inner.addStretch(2)
 
-        instruction = QLabel(
+        instruction = styled_label(
             "Enter your UCSD PID below\n"
-            "to check in"
+            "to check in",
+            size=36,
+            wrap=True,
         )
-        instruction.setStyleSheet(
-            "color: #F5F0E6; font: 36pt Montserrat;"
-            "background: transparent; border: none;"
-        )
-        instruction.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        instruction.setWordWrap(True)
         inner.addWidget(instruction)
 
         inner.addStretch(1)
 
-        pid_label = QLabel("PID")
-        pid_label.setStyleSheet(
-            "color: #F5F0E6; font: 18pt Montserrat;"
-            "background: transparent; border: none;"
-        )
-        pid_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        pid_label = field_label("PID")
         inner.addWidget(pid_label)
 
         entry_row = QHBoxLayout()
@@ -95,12 +86,8 @@ class CheckInManual(Screen):
         self.pid_entry.setText(pid)
 
     def _call_check_in(self) -> None:
-        # Local import to avoid a circular import (window imports this module at load time)
-        from window import ToastType
-
         pid = self.pid_entry.text().strip()
         if not pid:
             return
-        context().mainWindow.show_toast("PLEASE WAIT: LOADING...", ToastType.NOTIFICATION)
         self.clear_entries()
         context().check_in_controller.handle_by_pid(pid)

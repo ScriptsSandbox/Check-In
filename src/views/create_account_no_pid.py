@@ -3,13 +3,14 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel
-from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout
 
+from global_context import context
 from .base import Screen
 from .components.outline_frame import OutlineFrame
 from .components.styled_button import StyledButton, home_button, INNER_MARGIN, OUTER_MARGIN
 from .components.styled_entry import StyledEntry
+from .components.label import field_label
 
 if TYPE_CHECKING:
     from controllers.navigation_controller import NavigationController
@@ -36,13 +37,7 @@ class CreateAccountNoPid(Screen):
         inner.addStretch(1)
 
         def _field_row(label_text: str) -> StyledEntry:
-            lbl = QLabel(label_text)
-            lbl.setStyleSheet(
-                "color: #F5F0E6; font: 18pt Montserrat;"
-                "background: transparent; border: none;"
-            )
-            lbl.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-            inner.addWidget(lbl)
+            inner.addWidget(field_label(label_text))
 
             row = QHBoxLayout()
             entry = StyledEntry()

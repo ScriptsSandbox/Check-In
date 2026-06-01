@@ -3,11 +3,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PyQt6.QtWidgets import QVBoxLayout, QLabel
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import QTimer
 
 from .base import Screen
 from .components.outline_frame import OutlineFrame
 from .components.theme import INNER_MARGIN, OUTER_MARGIN
+from .components.label import styled_label
 
 if TYPE_CHECKING:
     from controllers.navigation_controller import NavigationController
@@ -31,12 +32,7 @@ class UserWelcome(Screen):
 
         inner.addStretch()
 
-        self._msg_label = QLabel("Welcome back")
-        self._msg_label.setStyleSheet(
-            "color: #F5F0E6; font: 38pt Montserrat;"
-            "background: transparent; border: none;"
-        )
-        self._msg_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        self._msg_label = styled_label("Welcome back", size=38)
         inner.addWidget(self._msg_label)
 
         inner.addSpacing(8)
@@ -65,12 +61,7 @@ class UserWelcome(Screen):
         self._msg_label.setText(message)
         self.controller.show_frame(UserWelcome)
 
-        label = QLabel(name)
-        label.setStyleSheet(
-            "color: #F5F0E6; font: bold 70pt Montserrat;"
-            "background: transparent; border: none;"
-        )
-        label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        label = styled_label(name, size=70, bold=True)
         self._names_layout.addWidget(label)
         self._active_labels.add(label)
 

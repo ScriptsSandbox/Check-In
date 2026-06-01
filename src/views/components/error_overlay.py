@@ -5,6 +5,8 @@ from collections.abc import Callable
 from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout
 from PyQt6.QtCore import QTimer, Qt
 
+from .label import styled_label
+
 
 class ErrorOverlay(QWidget):
     def __init__(self, parent: QWidget) -> None:
@@ -24,10 +26,7 @@ class ErrorOverlay(QWidget):
         self._heading.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._heading.setStyleSheet("background: transparent; color: #FF6B6B; font: bold 28pt Montserrat; letter-spacing: 6px;")
 
-        self._title = QLabel("", self)
-        self._title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._title.setWordWrap(True)
-        self._title.setStyleSheet("background: transparent; color: #F5F0E6; font: bold 40pt Montserrat;")
+        self._title = styled_label("", size=40, bold=True, align=Qt.AlignmentFlag.AlignCenter, wrap=True)
 
         self._detail = QLabel("", self)
         self._detail.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
@@ -43,9 +42,7 @@ class ErrorOverlay(QWidget):
         )
         self._detail.setFixedWidth(900)
 
-        self._countdown = QLabel("", self)
-        self._countdown.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._countdown.setStyleSheet("background: transparent; color: #F5F0E6; font: 16pt Montserrat;")
+        self._countdown = styled_label("", size=16, align=Qt.AlignmentFlag.AlignCenter)
 
         layout.addWidget(self._heading)
         layout.addWidget(self._title)

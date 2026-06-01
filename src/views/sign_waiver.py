@@ -10,6 +10,7 @@ from controllers.asset_controller import AssetController
 from .base import Screen
 from .components.outline_frame import OutlineFrame
 from .components.styled_button import StyledButton, OUTER_MARGIN, INNER_MARGIN
+from .components.label import styled_label
 
 if TYPE_CHECKING:
     from controllers.navigation_controller import NavigationController
@@ -37,15 +38,11 @@ class SignWaiver(Screen):
 
         left.addStretch(1)
 
-        instruction = QLabel(
-            "Please scan the QR code\non the right and sign the waiver"
+        instruction = styled_label(
+            "Please scan the QR code\non the right and sign the waiver",
+            size=36,
+            wrap=True,
         )
-        instruction.setStyleSheet(
-            "color: #F5F0E6; font: 36pt Montserrat;"
-            "background: transparent; border: none;"
-        )
-        instruction.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        instruction.setWordWrap(True)
         left.addWidget(instruction)
 
         left.addStretch(2)

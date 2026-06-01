@@ -10,6 +10,7 @@ from threading import Thread, Event
 from typing import TYPE_CHECKING
 
 from controllers.api_controller import ApiController
+from global_config import config
 from global_context import context
 from hardware.rfid_reader import RFIDReader
 from hardware.usb_ports import USBDevice
@@ -45,7 +46,7 @@ class RFIDReaderController:
         context().mainWindow.show_error(
             "Card reader not detected",
             reason,
-            retry_in=context().config.HARDWARE_RETRY_DELAY_SECONDS,
+            retry_in=config().HARDWARE_RETRY_DELAY_SECONDS,
             # on_retry=startup,
         )
 

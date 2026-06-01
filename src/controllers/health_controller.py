@@ -53,7 +53,7 @@ def notify_critical(title: str, detail: str, *, blocking: bool = False) -> None:
         "footer": {"text": _HOSTNAME},
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
-    role_mention = f"<@&{context().config.DISCORD_CRITICAL_ALERT_ROLE_ID}>"
+    role_mention = f"<@&{config().DISCORD_CRITICAL_ALERT_ROLE_ID}>"
     _send_embed(embed, content=role_mention, blocking=blocking)
 
 

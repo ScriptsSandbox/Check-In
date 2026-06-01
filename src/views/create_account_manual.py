@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel
-from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout
 
+from global_context import context
 from .base import Screen
 from .components.outline_frame import OutlineFrame
 from .components.styled_button import StyledButton, home_button, INNER_MARGIN, OUTER_MARGIN
 from .components.styled_entry import StyledEntry
+from .components.label import field_label
 
 if TYPE_CHECKING:
     from controllers.navigation_controller import NavigationController
@@ -34,12 +35,7 @@ class CreateAccountManual(Screen):
 
         inner.addStretch(3)
 
-        pid_label = QLabel("PID")
-        pid_label.setStyleSheet(
-            "color: #F5F0E6; font: 18pt Montserrat;"
-            "background: transparent; border: none;"
-        )
-        pid_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        pid_label = field_label("PID")
         inner.addWidget(pid_label)
 
         entry_row = QHBoxLayout()

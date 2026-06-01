@@ -10,6 +10,7 @@ from controllers.asset_controller import AssetController
 from .base import Screen
 from .components.outline_frame import OutlineFrame
 from .components.styled_button import home_button, INNER_MARGIN, OUTER_MARGIN
+from .components.label import styled_label
 
 if TYPE_CHECKING:
     from controllers.navigation_controller import NavigationController
@@ -46,12 +47,7 @@ class QRCodes(Screen):
             img.setPixmap(px)
             img.setAlignment(Qt.AlignmentFlag.AlignHCenter)
             img.setStyleSheet("background: transparent; border: none;")
-            lbl = QLabel(caption)
-            lbl.setStyleSheet(
-                "color: #F5F0E6; font: 30pt Montserrat;"
-                "background: transparent; border: none;"
-            )
-            lbl.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+            lbl = styled_label(caption, size=30)
             col.addWidget(img)
             col.addWidget(lbl)
             return col
