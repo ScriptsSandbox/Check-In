@@ -30,7 +30,7 @@ T = TypeVar("T", bound=Screen)
 class NavigationController:
     def __init__(self) -> None:
         self._frames: dict[type[Screen], Screen] = {}
-        self._curr: type[Screen] | None = None
+        self._curr_frame: type[Screen] | None = None
         self._frame_uuid: str = uuid.uuid4().hex
         self._dev_overlay: DevOverlay | None = None
 
@@ -66,9 +66,9 @@ class NavigationController:
     # ------------------------------------------------------------------
 
     def navigate(self, screen_class: type[T], before_show: Callable[[T], None] | None = None) -> None:
-        if self._curr is not None:
-            self._frames[self._curr].on_hide()
-        self._curr = screen_class
+        if self._curr_frame is not None:
+            self._frames[self._curr_frame].on_hide()
+        self._curr_frame = screen_class
         frame = self.get_frame(screen_class)
         if before_show is not None:
             before_show(frame)
@@ -90,7 +90,7 @@ class NavigationController:
         return cast(T, self._frames[screen_class])
 
     def get_curr_frame(self) -> type[Screen] | None:
-        return self._curr
+        return self._curr_frame
 
     # ------------------------------------------------------------------
     # Stack-based flow
