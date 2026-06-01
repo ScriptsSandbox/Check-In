@@ -75,7 +75,7 @@ if __name__ == "__main__":
             context().main_window.show_error("System Boot Failure", str(exception), retry_in=60, on_retry=lambda: sys.exit(1))
             notify_critical("System Boot Failure", "", blocking=True)
             logging.error(f"System Boot Failure: {exception}")
-            app.exec() # need to start main loop
+            app.exec() # need to start the pyqt ui loop otherwise nothing will render
 
         sys.exit(1)
 
