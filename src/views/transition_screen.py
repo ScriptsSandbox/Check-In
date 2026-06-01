@@ -2,12 +2,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PyQt6.QtWidgets import QVBoxLayout
 from PyQt6.QtCore import Qt
 
 from .base import Screen
-from .components.outline_frame import OutlineFrame
-from .components.theme import INNER_MARGIN, OUTER_MARGIN
 from .components.label import styled_label
 
 if TYPE_CHECKING:
@@ -16,22 +13,12 @@ if TYPE_CHECKING:
 
 class TransitionScreen(Screen):
     def _build(self, controller: NavigationController) -> None:
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(OUTER_MARGIN, OUTER_MARGIN, OUTER_MARGIN, OUTER_MARGIN)
-        outer.setSpacing(0)
-
-        outline = OutlineFrame()
-        outer.addWidget(outline)
-
-        inner = QVBoxLayout(outline)
-        inner.setContentsMargins(INNER_MARGIN, INNER_MARGIN, INNER_MARGIN, INNER_MARGIN)
-
-        inner.addStretch()
+        self.content.addStretch()
 
         self._msg_label = styled_label("", font_size=48)
-        inner.addWidget(self._msg_label, alignment=Qt.AlignmentFlag.AlignHCenter)
+        self.content.addWidget(self._msg_label, alignment=Qt.AlignmentFlag.AlignHCenter)
 
-        inner.addStretch()
+        self.content.addStretch()
 
     def display(self, message: str) -> None:
         self._msg_label.setText(message)

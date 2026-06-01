@@ -12,9 +12,8 @@ def styled_label(
     *,
     font_size: int,
     bold: bool = False,
-    color: str = CREAM,
     align: Qt.AlignmentFlag = Qt.AlignmentFlag.AlignHCenter,
-    width: int = 800,
+    width: int = 1000,
 ) -> QLabel:
     lbl = QLabel(text)
 
@@ -22,7 +21,7 @@ def styled_label(
     font.setBold(bold)
     lbl.setFont(font)
 
-    lbl.setStyleSheet(f"color: {color}; background: transparent; border: none;")
+    lbl.setStyleSheet(f"color: {CREAM}")
     lbl.setAlignment(align)
 
     lbl.setWordWrap(True)

@@ -8,8 +8,7 @@ from PyQt6.QtCore import Qt
 
 from controllers.asset_controller import AssetController
 from .base import Screen
-from .components.outline_frame import OutlineFrame
-from .components.styled_button import StyledButton, OUTER_MARGIN, INNER_MARGIN
+from .components.styled_button import StyledButton
 from .components.label import styled_label
 
 if TYPE_CHECKING:
@@ -18,17 +17,6 @@ if TYPE_CHECKING:
 
 class SignWaiver(Screen):
     def _build(self, controller: NavigationController) -> None:
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(OUTER_MARGIN, OUTER_MARGIN, OUTER_MARGIN, OUTER_MARGIN)
-        outer.setSpacing(0)
-
-        outline = OutlineFrame()
-        outer.addWidget(outline)
-
-        root = QVBoxLayout(outline)
-        root.setContentsMargins(INNER_MARGIN, INNER_MARGIN, INNER_MARGIN, INNER_MARGIN)
-        root.setSpacing(0)
-
         content = QHBoxLayout()
         content.setContentsMargins(50, 0, 50, 0)
         content.setSpacing(20)
@@ -71,4 +59,4 @@ class SignWaiver(Screen):
 
         content.addLayout(right, stretch=1)
 
-        root.addLayout(content)
+        self.content.addLayout(content)

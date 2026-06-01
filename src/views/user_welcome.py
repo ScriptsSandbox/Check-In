@@ -2,12 +2,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PyQt6.QtWidgets import QVBoxLayout, QLabel
+from PyQt6.QtWidgets import QLabel, QVBoxLayout
 from PyQt6.QtCore import QTimer, Qt
 
 from .base import Screen
-from .components.outline_frame import OutlineFrame
-from .components.theme import INNER_MARGIN, OUTER_MARGIN
 from .components.label import styled_label
 
 if TYPE_CHECKING:
@@ -19,37 +17,28 @@ class UserWelcome(Screen):
         self._last_name: str | None = None
         self._active_labels: set[QLabel] = set()
 
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(OUTER_MARGIN, OUTER_MARGIN, OUTER_MARGIN, OUTER_MARGIN)
-        outer.setSpacing(0)
-
-        outline = OutlineFrame()
-        outer.addWidget(outline)
-
-        inner = QVBoxLayout(outline)
-        inner.setContentsMargins(INNER_MARGIN, INNER_MARGIN, INNER_MARGIN, INNER_MARGIN)
-        inner.setSpacing(0)
-
-        inner.addStretch()
+        self.content.addStretch()
 
         self._msg_label = styled_label("Welcome back", font_size=38)
-        inner.addWidget(self._msg_label, alignment=Qt.AlignmentFlag.AlignHCenter)
+        self.content.addWidget(self._msg_label, alignment=Qt.AlignmentFlag.AlignHCenter)
 
-        inner.addSpacing(8)
+        self.content.addSpacing(8)
 
         self._names_layout = QVBoxLayout()
         self._names_layout.setContentsMargins(0, 0, 0, 0)
         self._names_layout.setSpacing(0)
-        inner.addLayout(self._names_layout)
+        self.content.addLayout(self._names_layout)
 
-        inner.addStretch()
+        self.content.addStretch()
 
     def on_hide(self) -> None:
         self._active_labels.clear()
         while self._names_layout.count():
             item = self._names_layout.takeAt(0)
-            if item.widget():  # type: ignore[union-attr]
-                item.widget().deleteLater()  # type: ignore[union-attr]
+            if item is not None:
+                widget = item.widget()
+                if widget is not None:
+                    widget.deleteLater()
         self._msg_label.setText("Welcome back")
         self._last_name = None
 
