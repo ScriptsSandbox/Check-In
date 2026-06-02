@@ -8,6 +8,7 @@ from collections.abc import Callable
 from os.path import exists
 from threading import Thread
 
+from controllers.health_controller import CriticalSystemType
 from misc.global_config import config
 from misc.global_context import context
 from hardware.rfid_reader_aitrip import RFIDReaderAITRIP
@@ -16,15 +17,10 @@ from ui.views.check_in_rfid import CheckInRFID
 
 
 class RFIDReaderController:
-    _reader: RFIDReaderAITRIP
-
     def __init__(self) -> None:
         self._reader = RFIDReaderAITRIP(context().usb_port_controller.get_usb_device_port(USBDevice.RFID_READER))
         self._stop = threading.Event()
         self._thread: Thread | None = None
-        self._on_disconnect: Callable[[str], None] | None = None
-        self._disconnect_fired = False
-
         self._disconnect_fired = False
         self._thread = Thread(target=self._run, args=(self._reader,), daemon=True, name="rfid-reader")
         self._thread.start()
@@ -36,24 +32,30 @@ class RFIDReaderController:
         if self._reader is not None:
             self._reader.close()
 
-    def on_reader_disconnect(self, reason: str) -> None:
-        logging.warning("RFID reader disconnected: %s", reason)
-        context().main_window.show_error(
-            "Card reader not detected",
-            reason,
-            retry_in=config().HARDWARE_RETRY_DELAY_SECONDS,
-            # on_retry=startup,
-        )
-
-    def _fire_disconnect(self, reason: str) -> None:
+    def on_reader_disconnect(self) -> None:
         if self._disconnect_fired:
             return
         self._disconnect_fired = True
         self._stop.set()
 
-        cb = self.on_reader_disconnect
-        if cb is not None:
-            context().dispatcher.call.emit(lambda: cb(reason))
+        context().health_controller.get_system(CriticalSystemType.RFID_READER).mark_unhealthy(
+            retry_interval=5,
+            retry_callback=self._reconnect,
+        )
+
+    def _reconnect(self) -> bool:
+        logging.info("attempting RFID reader reconnect")
+        try:
+            port = context().usb_port_controller.get_usb_device_port(USBDevice.RFID_READER)
+            self._reader = RFIDReaderAITRIP(port)
+            self._stop = threading.Event()
+            self._disconnect_fired = False
+            self._thread = Thread(target=self._run, args=(self._reader,), daemon=True, name="rfid-reader")
+            self._thread.start()
+            return True
+        except Exception as e:
+            logging.error("RFID reader reconnect failed: %s", e)
+            return False
 
     def _run(self, reader: RFIDReaderAITRIP) -> None:
         try:
@@ -67,7 +69,7 @@ class RFIDReaderController:
                 except OSError as e:
                     if not exists(reader._usb_id):
                         logging.error("card reader disconnected: %s", e)
-                        self._fire_disconnect(f"Card reader at {reader._usb_id} no longer present")
+                        self.on_reader_disconnect()
                         return
                     logging.debug("card reader transient error, retrying: %s", e)
                     time.sleep(0.2)
@@ -96,15 +98,11 @@ class RFIDReaderController:
                         continue
 
                     context().session.rfid = tag
-                    context().check_in_controller.handle_by_uuid(tag)
+                    context().check_in_controller.check_in("rfid", tag)
 
                     last_tag = tag
                     last_time = time.time()
         except Exception as exception:
             tb = traceback.format_exc()
             logging.critical("RFID reader thread died: %s\n%s", exception, tb)
-            # notifier.notify_critical(
-            #     "RFID reader thread died",
-            #     f"{type(exception).__name__}: {exception}\n\n{tb[-1500:]}",
-            # )
-            self._fire_disconnect(f"{type(exception).__name__}: {exception}")
+            self.on_reader_disconnect()

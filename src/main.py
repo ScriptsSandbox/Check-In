@@ -7,9 +7,10 @@ import sys
 from PyQt6.QtWidgets import QApplication
 
 from controllers.account_controller import AccountController
+from controllers.api_controller import APIController
 from controllers.barcode_scanner_controller import BarcodeScannerController
 from controllers.check_in_controller import CheckInController
-from controllers.health_controller import HealthController, notify_critical
+from controllers.health_controller import HealthController, CriticalSystem, CriticalSystemType
 from controllers.navigation_controller import NavigationController
 from controllers.rfid_reader_controller import RFIDReaderController
 from controllers.traffic_light_controller import TrafficLightController
@@ -35,6 +36,9 @@ def initiate_boot() -> None:
 
     global_context.health_controller = HealthController()
     global_context.main_window = MainWindow()
+    global_context.dispatcher = MainThreadDispatcher()
+
+    global_context.api_controller = APIController()
 
     global_context.navigation_controller = NavigationController()
     global_context.check_in_controller = CheckInController()
@@ -45,8 +49,13 @@ def initiate_boot() -> None:
     global_context.barcode_scanner_controller = BarcodeScannerController()
     global_context.traffic_light_controller = TrafficLightController()
 
-    global_context.dispatcher = MainThreadDispatcher()
     global_context.session = Session()
+
+    global_context.health_controller.register(CriticalSystem.with_monitoring(
+        CriticalSystemType.API_CONNECTION,
+        global_context.api_controller.ping,
+        period_seconds=10
+    ))
 
 def shutdown() -> None:
     context().rfid_reader_controller.stop()
@@ -67,13 +76,13 @@ if __name__ == "__main__":
 
         elif context().main_window is None:
             # if this occurred the system failed before the UI loaded
-            notify_critical("UI Failed to load", "", blocking=True)
+            context().health_controller.get_system(CriticalSystemType.SYSTEM_BOOT).mark_unhealthy()
             logging.error(f"UI Failed to load: {exception}")
 
         else:
             # if this occurred something else failed to initialize, and we should retry after a while
             context().main_window.show_error("System Boot Failure", str(exception), retry_in=60, on_retry=lambda: sys.exit(1))
-            notify_critical("System Boot Failure", "", blocking=True)
+            context().health_controller.get_system(CriticalSystemType.SYSTEM_BOOT).mark_unhealthy()
             logging.error(f"System Boot Failure: {exception}")
             app.exec() # need to start the pyqt ui loop otherwise nothing will render
 

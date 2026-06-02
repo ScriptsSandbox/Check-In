@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from window import MainWindow
     from misc.dispatcher import MainThreadDispatcher
     from misc.session import Session
+    from controllers.api_controller import APIController
 
 
 _context: GlobalContext
@@ -34,6 +35,7 @@ class GlobalContext:
     main_window: MainWindow
     dispatcher: MainThreadDispatcher
     session: Session
+    api_controller: APIController
 
     def __init__(self) -> None:
         global _context

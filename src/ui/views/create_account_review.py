@@ -91,8 +91,6 @@ class CreateAccountReview(Screen):
             return
         self.clear_entries()
         try:
-            context().account_controller.submit_account(
-                first_name=first, last_name=last, email=email, pid=pid
-            )
+            context().account_controller.create_account(pid=pid)
         except Exception:
             logging.warning("error occurred trying to create a user account", exc_info=True)

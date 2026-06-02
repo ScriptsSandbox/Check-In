@@ -32,4 +32,4 @@ class Session:
     def reset(self) -> None:
         self.rfid = ""
         self._continuations.clear()
-        context().traffic_light_controller.request_state(TrafficLightState.OFF)
+        context().traffic_light_controller.request_state_async(TrafficLightState.OFF)

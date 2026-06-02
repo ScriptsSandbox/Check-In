@@ -39,7 +39,7 @@ def _sim_no_account_success(nav: NavigationController) -> None:
         return
 
     def on_done() -> None:
-        context().traffic_light_controller.request_state(TrafficLightState.GREEN)
+        context().traffic_light_controller.request_state_async(TrafficLightState.GREEN)
         nav.get_frame(UserWelcome).display_name(_DEV_NAME, _THANK_MSG)
 
     nav.go_to_create_account(on_done=on_done)
@@ -91,7 +91,7 @@ TRANSITIONS: dict[type[Screen], list[tuple[str, Callable[[NavigationController],
         ("← Main", lambda nav: nav.back_to_main()),
     ],
     CreateAccountManual: [
-        ("→ review (pid lookup)", lambda nav: context().account_controller.lookup_by_pid(_DEV_PID)),
+        ("→ review (pid lookup)", lambda nav: context().account_controller.lookup("pid", _DEV_PID)),
         ("→ no-pid screen", lambda nav: nav.go_to_create_account_no_pid()),
         ("← Main", lambda nav: nav.back_to_main()),
     ],

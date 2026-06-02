@@ -63,4 +63,4 @@ class CreateAccountManual(Screen):
     def _go_to_review(self) -> None:
         pid = self.pid_entry.text().strip()
         self.clear_entries()
-        context().account_controller.lookup_by_pid(pid)
+        context().account_controller.lookup("pid", pid)

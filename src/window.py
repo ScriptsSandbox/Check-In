@@ -33,13 +33,13 @@ class MainWindow(QMainWindow):
 
         if config().DEV_MODE:
             # TODO: this is just some temporary code that opens the ui on the screen I want it to
-            self.setGeometry(QApplication.screens()[0].geometry())
+            self.setGeometry(QApplication.screens()[2].geometry())
         self.showFullScreen()
 
-        # QTimer.singleShot(1000, lambda: context().main_window.show_toast("test", "subtitle", ToastPreset.SUCCESS))
+        # QTimer.singleShot(1000, lambda: context().main_window.show_toast_async("test", "subtitle", ToastPreset.SUCCESS))
         # self.timer = QTimer()
         # self.timer.timeout.connect(
-        #     lambda: context().main_window.show_toast(
+        #     lambda: context().main_window.show_toast_async(
         #         "test test test test",
         #         "subtitle subtitle subtitle subtitle subtitle subtitle subtitle",
         #         ToastPreset.SUCCESS
@@ -60,7 +60,10 @@ class MainWindow(QMainWindow):
     def hide_error(self) -> None:
         self._error.hide_error()
 
-    def show_toast(self, title: str, text: str = "", toast_preset: ToastPreset = ToastPreset.INFORMATION) -> None:
+    def show_toast_async(self, title: str, text: str = "", toast_preset: ToastPreset = ToastPreset.INFORMATION) -> None:
+        context().dispatcher.call.emit(lambda: self._show_toast(title, text, toast_preset))
+
+    def _show_toast(self, title: str, text: str = "", toast_preset: ToastPreset = ToastPreset.INFORMATION) -> None:
         toast = Toast(self)
         toast.setTitle(title)
         if text:

@@ -83,7 +83,7 @@ class NavigationController:
             uid = self._frame_uuid
             QTimer.singleShot(
                 self._timeouts[screen_class],
-                lambda: self._on_timeout(uid),
+                lambda: self.back_to_main() if uid == self._frame_uuid else None,
             )
 
     def get_frame(self, screen_class: type[T]) -> T:
@@ -139,8 +139,8 @@ class NavigationController:
         )
 
     def go_to_create_account(self, on_done: Callable[[], None]) -> None:
-        context().main_window.show_toast("No Account",
-                                        "Looks like you don't have an account yet, let's set one up!", ToastPreset.INFORMATION)
+        context().main_window.show_toast_async("No Account",
+                                              "Looks like you don't have an account yet, let's set one up!", ToastPreset.INFORMATION)
         self.push(CreateAccountBarcode, on_done=on_done)
 
     def go_to_sign_waiver(self) -> None:
@@ -150,10 +150,3 @@ class NavigationController:
         )
         QTimer.singleShot(3000, lambda: self.navigate(SignWaiver))
 
-    # ------------------------------------------------------------------
-    # Internal
-    # ------------------------------------------------------------------
-
-    def _on_timeout(self, uid: str) -> None:
-        if uid == self._frame_uuid:
-            self.back_to_main()

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import logging
-import time
+import threading
 from threading import Thread
 
+from controllers.health_controller import CriticalSystemType
 from misc.global_config import config
 from misc.global_context import context
 from hardware.barcode_scanner_netum_nt_em61 import BarcodeScannerNetumNTEM61
@@ -17,37 +18,51 @@ class BarcodeScannerController:
     _barcode_scanner: BarcodeScannerNetumNTEM61 | None
 
     def __init__(self) -> None:
+        self._stop = threading.Event()
+        self._disconnect_fired = False
+        self._thread: Thread | None = None
         if config().HAS_BARCODE_SCANNER:
             self._barcode_scanner = BarcodeScannerNetumNTEM61(USBPortController.get_usb_device_port(USBDevice.BARCODE_SCANNER))
-            self.start()
+            self._thread = Thread(target=self._run, daemon=True)
+            self._thread.start()
 
-    def start(self) -> None:
-        if not self._barcode_scanner:
-            raise RuntimeError("Barcode scanner does not exist and thus cannot be started")
+    def on_scanner_disconnect(self) -> None:
+        if self._disconnect_fired:
+            return
+        self._disconnect_fired = True
+        self._stop.set()
+        context().health_controller.get_system(CriticalSystemType.BARCODE_SCANNER).mark_unhealthy(
+            retry_interval=5,
+            retry_callback=self._reconnect,
+        )
 
-        thread = Thread(target=self._run, daemon=True)
-        thread.start()
+    def _reconnect(self) -> bool:
+        logging.info("attempting barcode scanner reconnect")
+        try:
+            assert self._barcode_scanner
+            if not self._barcode_scanner.reconnect():
+                return False
+            self._stop = threading.Event()
+            self._disconnect_fired = False
+            self._thread = Thread(target=self._run, daemon=True)
+            self._thread.start()
+            return True
+        except Exception as e:
+            logging.error("barcode scanner reconnect failed: %s", e)
+            return False
 
     def _run(self) -> None:
         assert self._barcode_scanner
 
         logging.info("now reading barcodes")
-        scanner_error = False
         try:
-            while True:
-                if scanner_error:
-                    time.sleep(0.5)
-                    if self._barcode_scanner.reconnect():
-                        logging.info("barcode scanner reconnected")
-                        scanner_error = False
-                    continue
-
+            while not self._stop.is_set():
                 try:
                     barcode = self._barcode_scanner.read_barcode()
                 except OSError as e:
                     logging.error("barcode scanner disconnected: %s", e)
-                    scanner_error = True
-                    continue
+                    self.on_scanner_disconnect()
+                    return
 
                 if barcode is None:
                     continue
@@ -62,14 +77,13 @@ class BarcodeScannerController:
                 curr_frame = context().navigation_controller.get_curr_frame()
 
                 if curr_frame == CheckInRFID:
-                    context().dispatcher.call.emit(
-                        lambda b=barcode: context().check_in_controller.handle_by_pid(b)
-                    )
+                    context().check_in_controller.check_in("pid", barcode)
                 elif curr_frame in (CreateAccountBarcode, CreateAccountManual):
                     context().dispatcher.call.emit(
-                        lambda b=barcode: context().account_controller.lookup_by_barcode(b)
+                        lambda b=barcode: context().account_controller.lookup("barcode", b)
                     )
                 else:
                     logging.debug("barcode scanned on unhandled screen: %s", curr_frame)
         except Exception as e:
             logging.exception("barcode scanner thread crashed: %s", e)
+            self.on_scanner_disconnect()

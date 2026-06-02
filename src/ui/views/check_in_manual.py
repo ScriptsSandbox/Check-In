@@ -67,4 +67,4 @@ class CheckInManual(Screen):
         if not pid:
             return
         self.clear_entries()
-        context().check_in_controller.handle_by_pid(pid)
+        context().check_in_controller.check_in("pid", pid)
