@@ -21,10 +21,11 @@ class RFIDReaderController:
     def __init__(self) -> None:
         logging.info("opening RFID reader serial port")
         port = context().usb_port_controller.get_usb_device_port(USBDevice.RFID_READER)
-        def _hung_connect() -> RFIDReaderAITRIP:  # TEMP: simulate wedged hardware to test boot timeout
-            time.sleep(10)
-            return RFIDReaderAITRIP(port)
-        self._reader = run_with_timeout(_hung_connect, "RFID reader")
+        self._reader = run_with_timeout(lambda: RFIDReaderAITRIP(port), "RFID Reader")
+        # def _hung_connect() -> RFIDReaderAITRIP:
+        #     time.sleep(10)
+        #     return RFIDReaderAITRIP(port)
+        # self._reader = run_with_timeout(_hung_connect, "RFID reader")
         self._stop = threading.Event()
         self._thread: Thread | None = None
         self._disconnect_fired = False

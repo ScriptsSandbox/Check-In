@@ -4,13 +4,14 @@ from pathlib import Path
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFontDatabase, QPainter, QPixmap, QColor, QFont, QPaintEvent, QKeyEvent
-from PyQt6.QtWidgets import QMainWindow, QStackedWidget, QApplication, QLabel
+from PyQt6.QtWidgets import QMainWindow, QStackedWidget, QApplication, QWidget, QVBoxLayout
 from pyqttoast import Toast, ToastPosition, ToastPreset
 
 from misc.asset import Asset
 from misc.global_config import config
 from misc.global_context import context
 from ui.components.error_overlay import ErrorOverlay
+from ui.components.label import title_label
 
 
 class MainWindow(QMainWindow):
@@ -28,11 +29,11 @@ class MainWindow(QMainWindow):
 
         self._error = ErrorOverlay(self.central)
 
-        self._boot = QLabel("Booting…", self.central)
-        self._boot.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._boot = QWidget(self.central)
         self._boot.setGeometry(0, 0, config().SCREEN_WIDTH, config().SCREEN_HEIGHT)
-        self._boot.setStyleSheet("background: transparent; color: #F5F0E6; font: bold 32pt Montserrat;")
-        self._boot.raise_()
+        boot_layout = QVBoxLayout(self._boot)
+        boot_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        boot_layout.addWidget(title_label("Booting..."), alignment=Qt.AlignmentFlag.AlignHCenter)
 
         Toast.setPositionRelativeToWidget(self.central)
         Toast.setPosition(ToastPosition.BOTTOM_RIGHT)
@@ -43,8 +44,6 @@ class MainWindow(QMainWindow):
             self.setGeometry(QApplication.screens()[2].geometry())
         self.showFullScreen()
 
-        # paint the background and booting text now, before boot continues into
-        # the (potentially slow/blocking) hardware init and the event loop starts
         QApplication.processEvents()
 
         logging.info("main window initialized")

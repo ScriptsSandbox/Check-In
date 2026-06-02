@@ -15,7 +15,7 @@ from hardware.traffic_light import TrafficLightState
 from ui.views.user_welcome import UserWelcome
 from ui.views.transition_screen import TransitionScreen
 
-_check_in_adapter = TypeAdapter(CheckInResponse)
+_check_in_adapter: TypeAdapter[CheckInResponse] = TypeAdapter(CheckInResponse)
 
 
 class CheckInController:
