@@ -20,7 +20,7 @@ _check_in_adapter = TypeAdapter(CheckInResponse)
 
 class CheckInController:
     def __init__(self) -> None:
-        pass
+        logging.info("check-in controller initialized")
 
     def check_in(self, by: Literal["rfid", "pid"], value: str, welcome_message: str = "Welcome back") -> None:
         accounts_path = f"/accounts/{by}/{value}"

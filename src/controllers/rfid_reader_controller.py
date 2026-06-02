@@ -11,6 +11,7 @@ from threading import Thread
 from controllers.health_controller import CriticalSystemType
 from misc.global_config import config
 from misc.global_context import context
+from misc.timeout import run_with_timeout
 from hardware.rfid_reader_aitrip import RFIDReaderAITRIP
 from hardware.usb_ports import USBDevice
 from ui.views.check_in_rfid import CheckInRFID
@@ -18,12 +19,19 @@ from ui.views.check_in_rfid import CheckInRFID
 
 class RFIDReaderController:
     def __init__(self) -> None:
-        self._reader = RFIDReaderAITRIP(context().usb_port_controller.get_usb_device_port(USBDevice.RFID_READER))
+        logging.info("opening RFID reader serial port")
+        port = context().usb_port_controller.get_usb_device_port(USBDevice.RFID_READER)
+        def _hung_connect() -> RFIDReaderAITRIP:  # TEMP: simulate wedged hardware to test boot timeout
+            time.sleep(10)
+            return RFIDReaderAITRIP(port)
+        self._reader = run_with_timeout(_hung_connect, "RFID reader")
         self._stop = threading.Event()
         self._thread: Thread | None = None
         self._disconnect_fired = False
         self._thread = Thread(target=self._run, args=(self._reader,), daemon=True, name="rfid-reader")
         self._thread.start()
+
+        logging.info("rfid reader controller initialized")
 
     def stop(self) -> None:
         self._stop.set()

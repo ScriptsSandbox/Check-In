@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import threading
 from collections.abc import Callable
 
@@ -12,6 +13,8 @@ class Session:
         self._rfid = ""
         self._rfid_lock = threading.Lock()
         self._continuations: list[Callable[[], None] | None] = []
+
+        logging.info("session initialized")
 
     @property
     def rfid(self) -> str:

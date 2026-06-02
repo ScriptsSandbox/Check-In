@@ -1,9 +1,10 @@
+import logging
 from collections.abc import Callable
 from pathlib import Path
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFontDatabase, QPainter, QPixmap, QColor, QFont, QPaintEvent, QKeyEvent
-from PyQt6.QtWidgets import QMainWindow, QStackedWidget, QApplication
+from PyQt6.QtWidgets import QMainWindow, QStackedWidget, QApplication, QLabel
 from pyqttoast import Toast, ToastPosition, ToastPreset
 
 from misc.asset import Asset
@@ -27,6 +28,12 @@ class MainWindow(QMainWindow):
 
         self._error = ErrorOverlay(self.central)
 
+        self._boot = QLabel("Booting…", self.central)
+        self._boot.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._boot.setGeometry(0, 0, config().SCREEN_WIDTH, config().SCREEN_HEIGHT)
+        self._boot.setStyleSheet("background: transparent; color: #F5F0E6; font: bold 32pt Montserrat;")
+        self._boot.raise_()
+
         Toast.setPositionRelativeToWidget(self.central)
         Toast.setPosition(ToastPosition.BOTTOM_RIGHT)
         Toast.setMaximumOnScreen(3)
@@ -36,16 +43,14 @@ class MainWindow(QMainWindow):
             self.setGeometry(QApplication.screens()[2].geometry())
         self.showFullScreen()
 
-        # QTimer.singleShot(1000, lambda: context().main_window.show_toast_async("test", "subtitle", ToastPreset.SUCCESS))
-        # self.timer = QTimer()
-        # self.timer.timeout.connect(
-        #     lambda: context().main_window.show_toast_async(
-        #         "test test test test",
-        #         "subtitle subtitle subtitle subtitle subtitle subtitle subtitle",
-        #         ToastPreset.SUCCESS
-        #     )
-        # )
-        # self.timer.start(2000)
+        # paint the background and booting text now, before boot continues into
+        # the (potentially slow/blocking) hardware init and the event loop starts
+        QApplication.processEvents()
+
+        logging.info("main window initialized")
+
+    def finish_boot(self) -> None:
+        self._boot.hide()
 
     def show_error(
             self, title:
@@ -55,6 +60,7 @@ class MainWindow(QMainWindow):
             retry_in: int | None = None,
             on_retry: Callable[[], None] | None = None
     ) -> None:
+        self._boot.hide()
         self._error.show_error(title, detail, retry_in=retry_in, on_retry=on_retry)
 
     def hide_error(self) -> None:

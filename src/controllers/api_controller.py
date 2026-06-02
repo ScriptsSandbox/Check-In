@@ -23,7 +23,9 @@ class ApiUnreachableError(Exception):
 
 class APIController:
     def __init__(self) -> None:
-        self.ping()
+        if not self.ping():
+            raise RuntimeError("Could not connect to the API")
+        logging.info("api controller initialized")
 
     def request(self, method: str, path: str, **kwargs: Any) -> requests.Response:
         url = f"{config().CHECK_IN_API_URL}{path}"

@@ -150,6 +150,8 @@ class HealthController:
         self._monitor_thread: Thread | None = None
         self._monitor_thread_running: bool = True
 
+        logging.info("health controller initialized")
+
     def panic(self) -> None:
         pass
 

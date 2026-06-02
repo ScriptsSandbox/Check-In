@@ -7,6 +7,7 @@ from threading import Thread
 from controllers.health_controller import CriticalSystemType
 from misc.global_config import config
 from misc.global_context import context
+from misc.timeout import run_with_timeout
 from hardware.barcode_scanner_netum_nt_em61 import BarcodeScannerNetumNTEM61
 from hardware.usb_ports import USBPortController, USBDevice
 from ui.views.check_in_rfid import CheckInRFID
@@ -21,10 +22,15 @@ class BarcodeScannerController:
         self._stop = threading.Event()
         self._disconnect_fired = False
         self._thread: Thread | None = None
+        self._barcode_scanner: BarcodeScannerNetumNTEM61 | None = None
         if config().HAS_BARCODE_SCANNER:
-            self._barcode_scanner = BarcodeScannerNetumNTEM61(USBPortController.get_usb_device_port(USBDevice.BARCODE_SCANNER))
+            logging.info("opening barcode scanner serial port")
+            port = context().usb_port_controller.get_usb_device_port(USBDevice.BARCODE_SCANNER)
+            self._barcode_scanner = run_with_timeout(lambda: BarcodeScannerNetumNTEM61(port), "barcode scanner")
             self._thread = Thread(target=self._run, daemon=True)
             self._thread.start()
+
+        logging.info("barcode scanner controller initialized")
 
     def on_scanner_disconnect(self) -> None:
         if self._disconnect_fired:
@@ -53,7 +59,6 @@ class BarcodeScannerController:
 
     def _run(self) -> None:
         assert self._barcode_scanner
-
         logging.info("now reading barcodes")
         try:
             while not self._stop.is_set():

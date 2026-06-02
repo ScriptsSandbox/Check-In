@@ -54,7 +54,7 @@ def initiate_boot() -> None:
     global_context.health_controller.register(CriticalSystem.with_monitoring(
         CriticalSystemType.API_CONNECTION,
         global_context.api_controller.ping,
-        period_seconds=10
+        period_seconds=5
     ))
 
 def shutdown() -> None:
@@ -67,6 +67,7 @@ if __name__ == "__main__":
         app = QApplication([])
         assert app
         initiate_boot()
+        context().main_window.finish_boot()
         app.aboutToQuit.connect(shutdown)
         sys.exit(app.exec())
     except Exception as exception:

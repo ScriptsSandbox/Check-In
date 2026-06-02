@@ -13,7 +13,7 @@ from misc.global_context import context
 
 class AccountController:
     def __init__(self) -> None:
-        pass
+        logging.info("account controller initialized")
 
     def lookup(self, by: Literal["pid", "barcode"], value: str) -> None:
         context().main_window.show_toast_async("Looking Up Student", "", ToastPreset.INFORMATION)

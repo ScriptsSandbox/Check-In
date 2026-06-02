@@ -4,6 +4,8 @@ from enum import Enum
 
 import serial.tools.list_ports
 
+from misc.global_config import config
+
 READER_AND_TRAFFIC_LIGHT_VID = 0x1A86
 TRAFFIC_LIGHT_LOCATION = "1-1.1.2"
 BARCODE_SCANNER_VID = 0x9901
@@ -23,6 +25,13 @@ class USBDevice(Enum):
 
 
 class USBPortController:
+    def __init__(self) -> None:
+        self.get_usb_device_port(USBDevice.RFID_READER)
+        if config().HAS_TRAFFIC_LIGHT:
+            self.get_usb_device_port(USBDevice.TRAFFIC_LIGHT)
+        if config().HAS_BARCODE_SCANNER:
+            self.get_usb_device_port(USBDevice.BARCODE_SCANNER)
+        logging.info("usb port controller initialized")
 
     @classmethod
     def get_usb_device_port(cls, device: USBDevice) -> str:

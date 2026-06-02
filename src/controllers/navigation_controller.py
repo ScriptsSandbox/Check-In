@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from collections.abc import Callable
 from typing import TYPE_CHECKING, TypeVar, cast
@@ -60,6 +61,8 @@ class NavigationController:
             self._dev_overlay = DevOverlay(self)
 
         self.navigate(CheckInRFID)
+
+        logging.info("navigation controller initialized")
 
     # ------------------------------------------------------------------
     # Core frame switching
