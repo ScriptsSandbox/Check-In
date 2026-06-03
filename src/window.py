@@ -3,7 +3,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QFontDatabase, QPainter, QPixmap, QColor, QFont, QPaintEvent, QKeyEvent
+from PyQt6.QtGui import QFontDatabase, QPainter, QPixmap, QColor, QPaintEvent, QKeyEvent
 from PyQt6.QtWidgets import QMainWindow, QStackedWidget, QApplication, QWidget, QVBoxLayout
 from pyqttoast import Toast, ToastPosition, ToastPreset
 
@@ -12,6 +12,7 @@ from misc.global_config import config
 from misc.global_context import context
 from ui.misc.error_overlay import ErrorOverlay
 from ui.components.label import title_label
+from ui.theme import app_font
 
 
 class MainWindow(QMainWindow):
@@ -84,8 +85,8 @@ class MainWindow(QMainWindow):
         toast.setShowCloseButton(False)
         toast.setBorderRadius(10)
         toast.setMaximumWidth(400)
-        toast.setTitleFont(QFont("Montserrat", 18, QFont.Weight.Bold))
-        toast.setTextFont(QFont("Montserrat", 14, QFont.Weight.Normal))
+        toast.setTitleFont(app_font(18, bold=True))
+        toast.setTextFont(app_font(14))
         toast.show()
 
     def paintEvent(self, event: QPaintEvent | None) -> None:

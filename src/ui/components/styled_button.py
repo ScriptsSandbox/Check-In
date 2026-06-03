@@ -3,11 +3,11 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PyQt6.QtWidgets import QPushButton, QWidget
-from PyQt6.QtGui import QPainter, QPainterPath, QColor, QPen, QFont, QPaintEvent, QEnterEvent
+from PyQt6.QtGui import QPainter, QPainterPath, QColor, QPen, QPaintEvent, QEnterEvent
 from PyQt6.QtCore import Qt, QRectF, QRect, QEvent
 import qtawesome as qta
 
-from ui.theme import OUTER_MARGIN, INNER_MARGIN, NAV_BTN_SIZE, NAV_ICON_SIZE
+from ui.theme import OUTER_MARGIN, INNER_MARGIN, NAV_BTN_SIZE, NAV_ICON_SIZE, app_font
 
 __all__ = ["StyledButton", "home_button", "OUTER_MARGIN", "INNER_MARGIN", "NAV_BTN_SIZE", "NAV_ICON_SIZE"]
 
@@ -70,7 +70,7 @@ class StyledButton(QPushButton):
                     sz.width(), sz.height(),
                 ))
             else:
-                painter.setFont(QFont("Montserrat", self._font_size))
+                painter.setFont(app_font(self._font_size))
                 painter.setPen(QColor("#F5F0E6"))
                 painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self.text())
         else:
@@ -81,7 +81,7 @@ class StyledButton(QPushButton):
             path.addRoundedRect(rect, self._radius, self._radius)
             painter.fillPath(path, QColor("#E8E4DA") if self._hovered and self.isEnabled() else QColor("#F5F0E6"))
 
-            painter.setFont(QFont("Montserrat", self._font_size))
+            painter.setFont(app_font(self._font_size))
             painter.setPen(QColor("#4EBEEE"))
             painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self.text())
 

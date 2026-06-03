@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QLabel
 
-from ui.theme import CREAM, FONT_FAMILY
+from ui.theme import CREAM, app_font
 
 
 def styled_label(
@@ -17,9 +16,7 @@ def styled_label(
 ) -> QLabel:
     label = QLabel(text)
 
-    font = QFont(FONT_FAMILY, font_size)
-    font.setBold(bold)
-    label.setFont(font)
+    label.setFont(app_font(font_size, bold=bold))
 
     label.setStyleSheet(f"color: {CREAM}")
     label.setAlignment(align)
