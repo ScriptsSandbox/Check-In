@@ -53,3 +53,5 @@ jobs:
           tags: |
             ghcr.io/${{ steps.lowercase.outputs.owner }}/${{ steps.image.outputs.name }}:${{ github.sha }}
             ${{ steps.image.outputs.extra_tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
