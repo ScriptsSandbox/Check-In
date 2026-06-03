@@ -22,6 +22,9 @@ _unresolved: bool = False
 
 
 class _HealthHandler(BaseHTTPRequestHandler):
+    def log_message(self, format: str, *args: Any) -> None:
+        pass
+
     def do_GET(self) -> None:
         if self.path != "/health":
             self.send_response(404)
