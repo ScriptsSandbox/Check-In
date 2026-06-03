@@ -49,14 +49,40 @@ class RFIDReaderController:
             logging.error("RFID reader reconnect failed: %s", e)
             return False
 
+    # The PN532 over UART intermittently fails to return its ACK. This is a
+    # transient serial glitch the reader recovers from, so tolerate a burst of
+    # consecutive failures before treating the reader as genuinely dead.
+    _MAX_CONSECUTIVE_ERRORS = 10
+
     def _run(self, reader: RFIDReaderAITRIP) -> None:
         logging.info("now reading ID cards")
         last_tag: str | None = None
         last_time: float = 0
+        consecutive_errors = 0
 
         try:
             while not self._stop.is_set():
-                tag = reader.read_rfid()
+                try:
+                    tag = reader.read_rfid()
+                except OSError as e:
+                    if not reader.is_present():
+                        raise
+                    consecutive_errors += 1
+                    if consecutive_errors >= self._MAX_CONSECUTIVE_ERRORS:
+                        raise
+                    logging.warning(
+                        "transient RFID read error (%d/%d): %s",
+                        consecutive_errors, self._MAX_CONSECUTIVE_ERRORS, e,
+                    )
+                    context().health_controller.get_system(CriticalSystemType.RFID_READER).notify_log(
+                        f"transient read error ({consecutive_errors}/{self._MAX_CONSECUTIVE_ERRORS}): {e}"
+                    )
+                    reader.flush()
+                    time.sleep(0.05)
+                    continue
+
+                consecutive_errors = 0
+
                 if tag is None:
                     continue
 

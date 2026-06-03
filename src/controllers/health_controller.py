@@ -170,6 +170,21 @@ class CriticalSystem:
         context().main_window.show_toast_async(f"System Error Resolved: {self.system_type.value}",
                                                "Thank you for your patience", ToastPreset.SUCCESS)
 
+    def notify_log(self, message: str = "", *, blocking: bool = False) -> None:
+        """Send an informational Discord log entry for this system. Unlike
+        mark_unhealthy/mark_healthy, this does not change health state, ping a
+        role, or show a toast — it's purely for observing how often something
+        (e.g. a transient reader glitch) occurs."""
+        embed: dict[str, Any] = {
+            "title": f":information_source: {self.system_type.value}",
+            "color": 0x5865F2,
+            "footer": {"text": _HOSTNAME},
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
+        if message:
+            embed["description"] = message
+        _send_embed(embed, blocking=blocking)
+
 
 class HealthController:
     def __init__(self) -> None:

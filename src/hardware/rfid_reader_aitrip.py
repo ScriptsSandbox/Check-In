@@ -64,6 +64,17 @@ class RFIDReaderAITRIP(Thread):
         logging.info("parsed tag: " + tag)
         return tag
 
+    def is_present(self) -> bool:
+        return exists(self._usb_id)
+
+    def flush(self) -> None:
+        if self._pn532 is not None:
+            try:
+                self._pn532._uart.reset_input_buffer()
+                self._pn532._uart.reset_output_buffer()
+            except Exception as e:
+                logging.warning("failed to flush card reader serial port: %s", e)
+
     def can_scan_again(self, last_time: float) -> bool:
         return time.time() - last_time > 3
 
