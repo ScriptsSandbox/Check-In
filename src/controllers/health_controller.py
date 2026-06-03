@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import json
 import logging
 import socket
 import threading
 import time
 from enum import Enum
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 from typing import Callable, Any
 import requests
@@ -17,6 +19,28 @@ _HOSTNAME: str = socket.gethostname()
 _lock = threading.Lock()
 _last_title: str | None = None
 _unresolved: bool = False
+
+
+class _HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self) -> None:
+        if self.path != "/health":
+            self.send_response(404)
+            self.end_headers()
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        body: dict[str, Any] = {
+            "status": "ok",
+        }
+        self.wfile.write(json.dumps(body).encode())
+
+
+def _start_health_server(port: int = 8001) -> None:
+    logging.info("starting health server")
+    srv = ThreadingHTTPServer(("0.0.0.0", port), _HealthHandler)
+    threading.Thread(target=srv.serve_forever, daemon=True, name="health-http").start()
+    logging.info("health server listening on :%d", port)
 
 
 def _send_embed(embed: dict[str, Any], content: str | None = None, *, blocking: bool) -> None:
@@ -89,7 +113,7 @@ class CriticalSystem:
         old = self._is_healthy
         self._is_healthy = True
         if not old:
-            self.notify_resolved()
+            self._notify_resolved()
 
     def mark_unhealthy(
         self,
@@ -99,7 +123,7 @@ class CriticalSystem:
         old = self._is_healthy
         self._is_healthy = False
         if old:
-            self.notify_critical()
+            self._notify_critical()
         if retry_interval is not None and retry_callback is not None:
             def _retry_loop() -> None:
                 retries = 1
@@ -117,7 +141,7 @@ class CriticalSystem:
                     retries += 1
             Thread(target=_retry_loop, daemon=True, name=f"health-retry-{self.system_type.value}").start()
 
-    def notify_critical(self, *, blocking: bool = False) -> None:
+    def _notify_critical(self, *, blocking: bool = False) -> None:
         embed: dict[str, Any] = {
             "title": f":x: Critical System Failure: {self.system_type.value}",
             # "description": f"```\n{detail[:1800]}\n```",
@@ -131,7 +155,7 @@ class CriticalSystem:
         context().main_window.show_toast_async(f"System Error: {self.system_type.value}",
                                                "Please mention this to a staff member", ToastPreset.ERROR)
 
-    def notify_resolved(self, *, blocking: bool = False) -> None:
+    def _notify_resolved(self, *, blocking: bool = False) -> None:
         embed: dict[str, Any] = {
             "title": f":white_check_mark: Resolved: {self.system_type.value}",
             "color": 0x57F287,
@@ -149,6 +173,8 @@ class HealthController:
         self._systems: list[CriticalSystem] = []
         self._monitor_thread: Thread | None = None
         self._monitor_thread_running: bool = True
+
+        _start_health_server(port=config().HEALTH_SERVER_PORT)
 
         logging.info("health controller initialized")
 
