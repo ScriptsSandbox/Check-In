@@ -171,12 +171,8 @@ class CriticalSystem:
                                                "Thank you for your patience", ToastPreset.SUCCESS)
 
     def notify_log(self, message: str = "", *, blocking: bool = False) -> None:
-        """Send an informational Discord log entry for this system. Unlike
-        mark_unhealthy/mark_healthy, this does not change health state, ping a
-        role, or show a toast — it's purely for observing how often something
-        (e.g. a transient reader glitch) occurs."""
         embed: dict[str, Any] = {
-            "title": f":information_source: {self.system_type.value}",
+            "title": f":page_facing_up: {self.system_type.value}",
             "color": 0x5865F2,
             "footer": {"text": _HOSTNAME},
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -193,8 +189,6 @@ class HealthController:
         self._monitor_thread_running: bool = True
 
         _start_health_server(port=config().HEALTH_SERVER_PORT)
-
-        logging.info("health controller initialized")
 
     def panic(self) -> None:
         pass
