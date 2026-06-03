@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout
 
 from .components.outline_frame import OutlineFrame
 from .components.styled_button import home_button
-from .components.theme import OUTER_MARGIN, INNER_MARGIN
+from ui.theme import OUTER_MARGIN, INNER_MARGIN
 
 if TYPE_CHECKING:
     from controllers.navigation_controller import NavigationController
@@ -32,7 +32,7 @@ class Screen(QWidget):
 
     def add_home_row(self) -> None:
         row = QHBoxLayout()
-        row.addWidget(home_button(lambda: self.controller.back_to_main()))
+        row.addWidget(home_button(lambda: self.controller.reset_check_in_session()))
         row.addStretch()
         self.content.addLayout(row)
 

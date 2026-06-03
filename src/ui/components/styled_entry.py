@@ -3,7 +3,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 
 from .label import field_label
-from .theme import ACCENT, CREAM, DARK, FONT_FAMILY, READONLY_TEXT
+from ui.theme import ACCENT, CREAM, DARK, FONT_FAMILY, READONLY_TEXT
 
 
 class StyledEntry(QLineEdit):

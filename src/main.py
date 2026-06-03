@@ -15,10 +15,9 @@ from controllers.navigation_controller import NavigationController
 from controllers.rfid_reader_controller import RFIDReaderController
 from controllers.traffic_light_controller import TrafficLightController
 from hardware.usb_ports import USBPortController
-from misc.dispatcher import MainThreadDispatcher
 from misc.global_config import config
 from misc.global_context import GlobalContext, context
-from misc.session import Session
+from misc.check_in_session import CheckInSession
 from window import MainWindow
 
 
@@ -36,7 +35,6 @@ def initiate_boot() -> None:
 
     global_context.health_controller = HealthController()
     global_context.main_window = MainWindow()
-    global_context.dispatcher = MainThreadDispatcher()
 
     global_context.api_controller = APIController()
 
@@ -49,7 +47,7 @@ def initiate_boot() -> None:
     global_context.barcode_scanner_controller = BarcodeScannerController()
     global_context.traffic_light_controller = TrafficLightController()
 
-    global_context.session = Session()
+    global_context.session = CheckInSession()
 
     global_context.health_controller.register(CriticalSystem.with_monitoring(
         CriticalSystemType.API_CONNECTION,
@@ -67,7 +65,7 @@ if __name__ == "__main__":
         app = QApplication([])
         assert app
         initiate_boot()
-        context().main_window.finish_boot()
+        context().main_window.on_finish_boot()
         app.aboutToQuit.connect(shutdown)
         sys.exit(app.exec())
     except Exception as exception:

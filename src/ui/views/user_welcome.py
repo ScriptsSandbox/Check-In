@@ -65,4 +65,4 @@ class UserWelcome(Screen):
 
         if not self._active_labels:
             self._last_name = None
-            self.controller.back_to_main()
+            self.controller.reset_check_in_session()

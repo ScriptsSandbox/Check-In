@@ -15,10 +15,10 @@ class TransitionScreen(Screen):
     def _build(self, controller: NavigationController) -> None:
         self.content.addStretch()
 
-        self._msg_label = styled_label("", font_size=48)
+        self._msg_label = styled_label("", font_size=48, width=800)
         self.content.addWidget(self._msg_label, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         self.content.addStretch()
 
-    def setup(self, message: str) -> None:
+    def set_message(self, message: str) -> None:
         self._msg_label.setText(message)

@@ -2,19 +2,18 @@ import logging
 import threading
 import time
 
-from controllers.api_controller import APIController
+from hardware.traffic_light import TrafficLight, TrafficLightState
+from hardware.usb_ports import USBDeviceType
 from misc.global_config import config
 from misc.global_context import context
 from misc.timeout import run_with_timeout
-from hardware.traffic_light import TrafficLight, TrafficLightState
-from hardware.usb_ports import USBDevice
 
 
 class TrafficLightController:
     def __init__(self) -> None:
         if config().HAS_TRAFFIC_LIGHT:
             logging.info("opening traffic light serial port")
-            port = context().usb_port_controller.get_usb_device_port(USBDevice.TRAFFIC_LIGHT)
+            port = context().usb_port_controller.get_usb_device_port(USBDeviceType.TRAFFIC_LIGHT)
             self._traffic_light = run_with_timeout(lambda: TrafficLight(port), "traffic light")
             self._stop = threading.Event()
             poller = threading.Thread(target=self._poll_traffic_light, daemon=True, name="traffic-light-poll")
@@ -27,21 +26,21 @@ class TrafficLightController:
         self._stop.set()
 
     def request_state_async(self, state: TrafficLightState) -> None:
-        def push() -> None:
+        def worker() -> None:
             try:
                 context().api_controller.request("POST", "/traffic-light", json={"state": state.value})
             except Exception as e:
                 logging.error(f"error setting traffic light: {e}")
 
-        threading.Thread(target=push, daemon=True).start()
+        threading.Thread(target=worker, daemon=True).start()
 
     def _poll_traffic_light(self) -> None:
         last_state: TrafficLightState | None = None
         while not self._stop.is_set():
-            time.sleep(0.1)
+            time.sleep(0.2)
             try:
-                resp = context().api_controller.request("GET", "/traffic-light")
-                traffic_light_state = TrafficLightState(resp.json().get("state"))
+                response = context().api_controller.request("GET", "/traffic-light")
+                traffic_light_state = TrafficLightState(response.json().get("state"))
             except Exception as e:
                 logging.warning("traffic light poll error: %s", e)
                 continue

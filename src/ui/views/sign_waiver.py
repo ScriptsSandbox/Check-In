@@ -24,17 +24,17 @@ class SignWaiver(Screen):
         left = QVBoxLayout()
         left.setSpacing(0)
 
-        left.addStretch(1)
+        left.addStretch(5)
 
         instruction = styled_label(
-            "Please scan the QR code\non the right and sign the waiver",
+            "Please scan the QR code on the right and sign the waiver",
             font_size=36,
+            width=500
         )
+        instruction.setAlignment(Qt.AlignmentFlag.AlignRight)
         left.addWidget(instruction, alignment=Qt.AlignmentFlag.AlignHCenter)
 
-        left.addStretch(2)
-
-        content.addLayout(left, stretch=1)
+        left.addStretch(7)
 
         right = QVBoxLayout()
         right.setSpacing(0)
@@ -52,11 +52,12 @@ class SignWaiver(Screen):
 
         done_btn = StyledButton("Done Scanning")
         done_btn.setFixedWidth(280)
-        done_btn.clicked.connect(lambda: controller.back_to_main())
+        done_btn.clicked.connect(lambda: controller.reset_check_in_session())
         right.addWidget(done_btn, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         right.addStretch()
 
+        content.addLayout(left, stretch=1)
         content.addLayout(right, stretch=1)
 
         self.content.addLayout(content)

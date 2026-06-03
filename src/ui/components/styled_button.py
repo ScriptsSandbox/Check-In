@@ -7,7 +7,7 @@ from PyQt6.QtGui import QPainter, QPainterPath, QColor, QPen, QFont, QPaintEvent
 from PyQt6.QtCore import Qt, QRectF, QRect, QEvent
 import qtawesome as qta
 
-from .theme import OUTER_MARGIN, INNER_MARGIN, NAV_BTN_SIZE, NAV_ICON_SIZE
+from ui.theme import OUTER_MARGIN, INNER_MARGIN, NAV_BTN_SIZE, NAV_ICON_SIZE
 
 __all__ = ["StyledButton", "home_button", "OUTER_MARGIN", "INNER_MARGIN", "NAV_BTN_SIZE", "NAV_ICON_SIZE"]
 

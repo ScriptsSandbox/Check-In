@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from enum import Enum
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, TypeAdapter, model_validator
 
 """
 IT SHOULD BE ENSURED ANY UPDATES TO THIS FILE ARE ALSO MADE AT THE CORRESPONDING LOCATIONS:
@@ -92,3 +92,4 @@ class CheckInOk(BaseModel):
 
 
 CheckInResponse = CheckInOk | CheckInNoWaiver | CheckInNoAccount
+check_in_response_validator: TypeAdapter[CheckInResponse] = TypeAdapter(CheckInResponse)

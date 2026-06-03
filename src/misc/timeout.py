@@ -6,7 +6,7 @@ from typing import Callable, TypeVar
 T = TypeVar("T")
 
 
-def run_with_timeout(func: Callable[[], T], name: str, timeout: float = 1.0) -> T:
+def run_with_timeout(func: Callable[[], T], name: str, timeout: float = 2.0) -> T:
     result: T | None = None
     error: BaseException | None = None
 

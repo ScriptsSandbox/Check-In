@@ -4,10 +4,13 @@ from typing import TYPE_CHECKING
 
 from PyQt6.QtWidgets import QHBoxLayout
 
+from threading import Thread
+
 from misc.global_context import context
 from ui.base import Screen
 from ui.components.styled_button import StyledButton
 from ui.components.styled_entry import field_row
+from ui.views.create_account_review import CreateAccountReview
 
 if TYPE_CHECKING:
     from controllers.navigation_controller import NavigationController
@@ -41,7 +44,7 @@ class CreateAccountManual(Screen):
         no_pid_btn = StyledButton("No PID →")
         no_pid_btn.setFixedWidth(349)
         no_pid_btn.setMinimumHeight(80)
-        no_pid_btn.clicked.connect(lambda: controller.go_to_create_account_no_pid())
+        no_pid_btn.clicked.connect(lambda: controller.navigate(CreateAccountReview))
         no_pid_row.addStretch()
         no_pid_row.addWidget(no_pid_btn)
         no_pid_row.addStretch()
@@ -63,4 +66,13 @@ class CreateAccountManual(Screen):
     def _go_to_review(self) -> None:
         pid = self.pid_entry.text().strip()
         self.clear_entries()
-        context().account_controller.lookup("pid", pid)
+        def worker() -> None:
+            student = context().account_controller.lookup("pid", pid)
+            if student is None:
+                return
+            context().session.set_student(student)
+            context().main_window.main_thread_dispatcher.emit(
+                lambda: context().navigation_controller.navigate(CreateAccountReview)
+            )
+
+        Thread(target=worker, daemon=True).start()

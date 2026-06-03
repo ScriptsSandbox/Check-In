@@ -12,8 +12,7 @@ if TYPE_CHECKING:
     from controllers.health_controller import HealthController
     from hardware.usb_ports import USBPortController
     from window import MainWindow
-    from misc.dispatcher import MainThreadDispatcher
-    from misc.session import Session
+    from misc.check_in_session import CheckInSession
     from controllers.api_controller import APIController
 
 
@@ -33,8 +32,7 @@ class GlobalContext:
     traffic_light_controller: TrafficLightController
     usb_port_controller: USBPortController
     main_window: MainWindow
-    dispatcher: MainThreadDispatcher
-    session: Session
+    session: CheckInSession
     api_controller: APIController
 
     def __init__(self) -> None:

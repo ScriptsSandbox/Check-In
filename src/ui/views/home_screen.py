@@ -9,13 +9,14 @@ import qtawesome as qta
 from ui.base import Screen
 from ui.components.styled_button import StyledButton, NAV_BTN_SIZE, NAV_ICON_SIZE
 from ui.components.label import styled_label, title_label
-from .qr_codes import QRCodes
+from ui.views.check_in_manual import CheckInManual
+from ui.views.qr_codes import QRCodes
 
 if TYPE_CHECKING:
     from controllers.navigation_controller import NavigationController
 
 
-class CheckInRFID(Screen):
+class HomeScreen(Screen):
     def _build(self, controller: NavigationController) -> None:
         top_row = QHBoxLayout()
         top_row.setContentsMargins(0, 0, 0, 0)
@@ -28,7 +29,7 @@ class CheckInRFID(Screen):
 
         no_id_btn = StyledButton("No ID", font_size=20, ghost=True)
         no_id_btn.setFixedSize(NAV_BTN_SIZE, NAV_BTN_SIZE)
-        no_id_btn.clicked.connect(lambda: controller.go_to_no_id())
+        no_id_btn.clicked.connect(lambda: controller.navigate(CheckInManual))
 
         top_row.addWidget(qr_btn)
         top_row.addStretch()
