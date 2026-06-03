@@ -87,6 +87,7 @@ class MainWindow(QMainWindow):
         toast.setMaximumWidth(400)
         toast.setTitleFont(app_font(18, bold=True))
         toast.setTextFont(app_font(14))
+        toast.setResetDurationOnHover(False)
         toast.show()
 
     def paintEvent(self, event: QPaintEvent | None) -> None:
