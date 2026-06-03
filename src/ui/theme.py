@@ -12,7 +12,7 @@ FONT_FAMILY: str = "Montserrat"
 
 def app_font(size: int, *, bold: bool = False) -> QFont:
     font = QFont(FONT_FAMILY)
-    font.setPixelSize(size)
+    font.setPixelSize(size) # using pixel size (px) over font size (pt) as it is consistent operating systems
     font.setBold(bold)
     return font
 
