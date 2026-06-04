@@ -96,8 +96,8 @@ class CreateAccountReview(Screen):
                 success = context().account_controller.create_account(first_name=first, last_name=last, email=email)
             if success:
                 context().check_in_controller.check_in(
-                    context().session.check_in_method,
-                    context().session.check_in_identifier,
+                    "rfid",
+                    context().session.rfid,
                     welcome_message="Thank you for registering",
                 )
             else:

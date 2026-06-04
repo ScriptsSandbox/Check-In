@@ -60,6 +60,14 @@ class CheckInController:
                     )
                     return
 
+                if not context().session.rfid:
+                    context().navigation_controller.navigate_via_transition(
+                        "Looks like you don't have an account. Please tap an RFID card to create one!",
+                        delay_ms=5000,
+                        next_action=context().navigation_controller.reset_check_in_session,
+                    )
+                    return
+
                 context().session.check_in_method = method
                 context().session.check_in_identifier = identifier
                 context().navigation_controller.navigate(CreateAccountBarcode)
