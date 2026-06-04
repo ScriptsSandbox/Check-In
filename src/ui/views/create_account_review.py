@@ -90,10 +90,9 @@ class CreateAccountReview(Screen):
         self.clear_entries()
 
         def worker() -> None:
-            if has_pid:
-                success = context().account_controller.create_account(pid=pid)
-            else:
-                success = context().account_controller.create_account(first_name=first, last_name=last, email=email)
+            success = context().account_controller.create_account(
+                first_name=first, last_name=last, email=email, pid=pid
+            )
             if success:
                 context().check_in_controller.check_in(
                     "rfid",
