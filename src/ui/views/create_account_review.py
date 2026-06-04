@@ -100,5 +100,9 @@ class CreateAccountReview(Screen):
                     context().session.check_in_identifier,
                     welcome_message="Thank you for registering",
                 )
+            else:
+                context().main_window.main_thread_dispatcher.emit(
+                    context().navigation_controller.reset_check_in_session
+                )
 
         Thread(target=worker, daemon=True).start()

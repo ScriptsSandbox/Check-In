@@ -23,10 +23,10 @@ class APIController:
             raise RuntimeError("Could not connect to the API")
         logging.info("api controller initialized")
 
-    def request(self, method: str, path: str, **kwargs: Any) -> requests.Response:
+    def request(self, method: str, path: str, *, timeout: float = 3, **kwargs: Any) -> requests.Response:
         url = f"{config().CHECK_IN_API_URL}{path}"
         start: float = time.time()
-        response = requests.request(method, url, timeout=3, **kwargs)
+        response = requests.request(method, url, timeout=timeout, **kwargs)
         req_duration = (time.time() - start) * 1000
         # 502 is the error code used by the api server to signal that the server error was upstream
         # and not directly caused by a failure of the check-in api

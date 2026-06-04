@@ -52,7 +52,7 @@ class AccountController:
             "email": email,
         }.items() if v is not None}
         try:
-            response = context().api_controller.request("POST", "/accounts", json=payload)
+            response = context().api_controller.request("POST", "/accounts", json=payload, timeout=8)
             response.raise_for_status()
             CreateAccountResponse.model_validate(response.json())
             logging.info("account creation succeeded")
