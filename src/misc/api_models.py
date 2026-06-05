@@ -51,6 +51,8 @@ class AccountRequest(BaseModel):
 
     @model_validator(mode="after")
     def check_inputs(self) -> AccountRequest:
+        if not self.rfid.strip():
+            raise ValueError("rfid must not be empty")
         has_lookup = self.barcode or self.pid
         has_manual = self.first_name and self.last_name and self.email
         if not has_lookup and not has_manual:
