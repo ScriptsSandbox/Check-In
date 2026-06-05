@@ -22,3 +22,4 @@ class TransitionScreen(Screen):
 
     def set_message(self, message: str) -> None:
         self._msg_label.setText(message)
+        self._msg_label.setMinimumHeight(self._msg_label.heightForWidth(self._msg_label.width()))
