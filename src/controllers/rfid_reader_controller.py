@@ -15,6 +15,8 @@ from ui.views.home_screen import HomeScreen
 
 
 class RFIDReaderController:
+    _MAX_CONSECUTIVE_ERRORS = 10
+
     def __init__(self) -> None:
         logging.info("opening RFID reader serial port")
 
@@ -48,11 +50,6 @@ class RFIDReaderController:
         except Exception as e:
             logging.error("RFID reader reconnect failed: %s", e)
             return False
-
-    # The PN532 over UART intermittently fails to return its ACK. This is a
-    # transient serial glitch the reader recovers from, so tolerate a burst of
-    # consecutive failures before treating the reader as genuinely dead.
-    _MAX_CONSECUTIVE_ERRORS = 10
 
     def _run(self, reader: RFIDReaderAITRIP) -> None:
         logging.info("now reading ID cards")
