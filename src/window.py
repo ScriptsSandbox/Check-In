@@ -1,136 +1,105 @@
+import logging
+from collections.abc import Callable
 from pathlib import Path
-from PyQt6.QtWidgets import QMainWindow, QWidget, QStackedWidget, QLabel, QVBoxLayout
-from PyQt6.QtGui import QFontDatabase, QPainter, QPixmap, QColor
-from PyQt6.QtCore import QTimer, Qt
 
-import notifier
+from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QFontDatabase, QPainter, QPixmap, QColor, QPaintEvent, QKeyEvent
+from PyQt6.QtWidgets import QMainWindow, QStackedWidget, QApplication, QWidget, QVBoxLayout
+from pyqttoast import Toast, ToastPosition, ToastPreset
 
-ASSETS_PATH = Path(__file__).parent / "assets" / "shared"
-
-
-class _RootWidget(QWidget):
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        bg_path = ASSETS_PATH / "background_main.png"
-        self._bg = QPixmap(str(bg_path)) if bg_path.exists() else QPixmap()
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor("#153246"))
-        if not self._bg.isNull():
-            x = (self.width() - self._bg.width()) // 2
-            y = (self.height() - self._bg.height()) // 2
-            painter.drawPixmap(x, y, self._bg)
+from misc.asset import Asset
+from misc.global_config import config
+from misc.global_context import context
+from ui.misc.error_overlay import ErrorOverlay
+from ui.components.label import title_label
+from ui.theme import app_font
 
 
-class CheckInWindow(QMainWindow):
-    def __init__(self):
+class MainWindow(QMainWindow):
+    main_thread_dispatcher = pyqtSignal(object)
+
+    def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Check-In")
-        self.setFixedSize(1280, 720)
+        self.main_thread_dispatcher.connect(lambda fn: fn())
+        self.setWindowTitle("Check In")
+        self.setFixedSize(config().SCREEN_WIDTH, config().SCREEN_HEIGHT)
 
-        fonts_dir = Path(__file__).parent.parent / "fonts"
-        if fonts_dir.exists():
-            for font_file in fonts_dir.glob("*.ttf"):
-                QFontDatabase.addApplicationFont(str(font_file))
+        if config().DEV_MODE:
+            # TODO: this is just some temporary code that opens the ui on the screen I want it to
+            self.setGeometry(QApplication.screens()[1].geometry())
 
-        self.central = _RootWidget()
+        fonts_dir = Path(Asset.FONTS_DIR.get_path())
+        for font_file in fonts_dir.glob("*.ttf"):
+            QFontDatabase.addApplicationFont(str(font_file))
+
+        self.central = QStackedWidget()
         self.setCentralWidget(self.central)
 
-        self.stacked = QStackedWidget(self.central)
-        self.stacked.setGeometry(0, 0, 1280, 720)
-        self.stacked.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.stacked.setStyleSheet("background: transparent;")
+        self._error = ErrorOverlay(self.central)
 
-        self._error = QWidget(self.central)
-        self._error.setGeometry(0, 0, 1280, 720)
-        self._error.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self._error.setStyleSheet("background-color: rgba(0, 0, 0, 110);")
-        self._error.hide()
-        layout = QVBoxLayout(self._error)
-        layout.setContentsMargins(120, 120, 120, 120)
-        layout.setSpacing(20)
-        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._error_heading = QLabel("ERROR", self._error)
-        self._error_heading.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._error_heading.setStyleSheet("background: transparent; color: #FF6B6B; font: bold 28pt Montserrat; letter-spacing: 6px;")
-        self._error_title = QLabel("", self._error)
-        self._error_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._error_title.setWordWrap(True)
-        self._error_title.setStyleSheet("background: transparent; color: #F5F0E6; font: bold 40pt Montserrat;")
-        self._error_detail = QLabel("", self._error)
-        self._error_detail.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-        self._error_detail.setWordWrap(True)
-        self._error_detail.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self._error_detail.setStyleSheet(
-            "background-color: rgba(0, 0, 0, 160);"
-            "color: #E6E1D6;"
-            "font: 11pt 'Menlo', 'Monaco', 'Courier New', monospace;"
-            "border: 1px solid rgba(255, 255, 255, 40);"
-            "border-radius: 6px;"
-            "padding: 14px 18px;"
-        )
-        self._error_detail.setFixedWidth(900)
-        self._error_countdown = QLabel("", self._error)
-        self._error_countdown.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._error_countdown.setStyleSheet("background: transparent; color: #F5F0E6; font: 16pt Montserrat;")
-        layout.addWidget(self._error_heading)
-        layout.addWidget(self._error_title)
-        layout.addWidget(self._error_detail, alignment=Qt.AlignmentFlag.AlignHCenter)
-        layout.addWidget(self._error_countdown)
+        Toast.setPositionRelativeToWidget(self.central)
+        Toast.setPosition(ToastPosition.BOTTOM_RIGHT)
+        Toast.setMaximumOnScreen(3)
 
-        self._retry_timer = QTimer(self)
-        self._retry_timer.setInterval(1000)
-        self._retry_timer.timeout.connect(self._tick_retry)
-        self._retry_remaining = 0
-        self._retry_callback = None
+        # simple widget to display booting text when booting
+        self._boot = QWidget(self.central)
+        self._boot.setGeometry(0, 0, config().SCREEN_WIDTH, config().SCREEN_HEIGHT)
+        boot_layout = QVBoxLayout(self._boot)
+        boot_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        boot_layout.addWidget(title_label("Booting..."), alignment=Qt.AlignmentFlag.AlignHCenter)
 
-        self._escape_handler = None
+        self.showFullScreen()
 
-    def show_error(self, title, detail, *, retry_in=None, on_retry=None):
-        self._error_title.setText(title)
-        self._error_detail.setText(detail)
-        self._retry_timer.stop()
-        self._retry_callback = on_retry
-        if retry_in is not None and on_retry is not None:
-            self._retry_remaining = int(retry_in)
-            self._error_countdown.setText(f"Retrying in {self._retry_remaining}s…")
-            self._error_countdown.show()
-            self._retry_timer.start()
-        else:
-            self._error_countdown.clear()
-            self._error_countdown.hide()
-        self._error.show()
-        self._error.raise_()
-        notifier.notify_critical(title, detail)
+        # force process ui events before main loop starts to render "booting" screen
+        QApplication.processEvents()
 
-    def hide_error(self):
-        self._retry_timer.stop()
-        self._retry_callback = None
-        self._error.hide()
-        notifier.notify_resolved()
+        logging.info("main window initialized")
 
-    def is_error_visible(self):
+    def on_finish_boot(self) -> None:
+        self._boot.hide()
+
+    def show_error(
+            self, title:
+            str, detail:
+            str,
+            *,
+            retry_in: int | None = None,
+            on_retry: Callable[[], None] | None = None
+    ) -> None:
+        self._boot.hide()
+        self._error.show_error(title, detail, retry_in=retry_in, on_retry=on_retry)
+
+    def hide_error(self) -> None:
+        self._error.hide_error()
+
+    def show_toast_async(self, title: str, text: str = "", toast_preset: ToastPreset = ToastPreset.INFORMATION) -> None:
+        self.main_thread_dispatcher.emit(lambda: self._show_toast(title, text, toast_preset))
+
+    def _show_toast(self, title: str, text: str = "", toast_preset: ToastPreset = ToastPreset.INFORMATION) -> None:
+        toast = Toast(self)
+        toast.setTitle(title)
+        if text:
+            toast.setText(text)
+        toast.applyPreset(toast_preset)
+        toast.setDuration(7_000)
+        toast.setShowCloseButton(False)
+        toast.setBorderRadius(10)
+        toast.setMaximumWidth(400)
+        toast.setTitleFont(app_font(18, bold=True))
+        toast.setTextFont(app_font(14))
+        toast.setResetDurationOnHover(False)
+        toast.show()
+
+    def paintEvent(self, event: QPaintEvent | None) -> None:
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor("#153246"))
+        painter.drawPixmap(0, 0, QPixmap(Asset.BACKGROUND.get_path()))
+
+    def is_error_visible(self) -> bool:
         return self._error.isVisible()
 
-    def _tick_retry(self):
-        self._retry_remaining -= 1
-        if self._retry_remaining <= 0:
-            self._retry_timer.stop()
-            self._error_countdown.setText("Retrying…")
-            cb = self._retry_callback
-            self._retry_callback = None
-            if cb:
-                cb()
-        else:
-            self._error_countdown.setText(f"Retrying in {self._retry_remaining}s…")
-
-    def set_escape_handler(self, fn):
-        self._escape_handler = fn
-
-    def keyPressEvent(self, event):
-        if event.key() == Qt.Key.Key_Escape and self._escape_handler:
-            self._escape_handler()
+    def keyPressEvent(self, event: QKeyEvent | None) -> None:
+        if event and event.key() == Qt.Key.Key_Escape:
+            context().navigation_controller.reset_check_in_session()
         else:
             super().keyPressEvent(event)

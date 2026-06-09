@@ -11,10 +11,4 @@ for arg in "$@"; do
     fi
 done
 
-output_file="log.txt"
-
-echo "" >> "$output_file"
-
-date "+%Y-%m-%d %H:%M:%S" >> "$output_file"
-
-python src/main.py "$@" 2>&1 | tee -a log.txt
+python src/main.py "$@"

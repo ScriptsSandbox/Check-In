@@ -1,60 +1,89 @@
+from __future__ import annotations
+
 import logging
-import time
+import threading
 from threading import Thread
 
-from views.check_in_manual import CheckInManual
-from views.create_account_barcode import CreateAccountBarcode
-from views.create_account_manual import CreateAccountManual
+from controllers.health_controller import CriticalSystemType
+from hardware.barcode_scanner_netum_nt_em61 import BarcodeScannerNetumNTEM61
+from hardware.usb_ports import USBDeviceType
+from misc.global_config import config
+from misc.global_context import context
+from misc.timeout import run_with_timeout
+from ui.views.create_account_barcode import CreateAccountBarcode
+from ui.views.create_account_manual import CreateAccountManual
+from ui.views.create_account_review import CreateAccountReview
+from ui.views.home_screen import HomeScreen
 
 
 class BarcodeScannerController:
-    def __init__(self, ctx):
-        self.ctx = ctx
+    _barcode_scanner: BarcodeScannerNetumNTEM61 | None
 
-    def start(self, scanner):
-        thread = Thread(target=self._run, args=(scanner,), daemon=True)
-        thread.start()
+    def __init__(self) -> None:
+        self._stop = threading.Event()
+        self._thread: Thread | None = None
+        self._barcode_scanner: BarcodeScannerNetumNTEM61 | None = None
 
-    def _run(self, scanner):
-        logging.info("now reading barcodes")
-        scanner_error = False
+        if config().HAS_BARCODE_SCANNER:
+            logging.info("opening barcode scanner serial port")
+            port = context().usb_port_controller.get_usb_device_port(USBDeviceType.BARCODE_SCANNER)
+            self._barcode_scanner = run_with_timeout(lambda: BarcodeScannerNetumNTEM61(port), "barcode scanner")
+            self._thread = Thread(target=self._run, daemon=True)
+            self._thread.start()
+
+        logging.info("barcode scanner controller initialized")
+
+    def _reconnect(self) -> bool:
+        logging.info("attempting barcode scanner reconnect")
         try:
-            while True:
-                if scanner_error:
-                    time.sleep(0.5)
-                    if scanner.reconnect():
-                        logging.info("barcode scanner reconnected")
-                        scanner_error = False
-                    continue
+            assert self._barcode_scanner
+            if not self._barcode_scanner.reconnect():
+                return False
 
-                try:
-                    barcode = scanner.read_barcode()
-                except OSError as e:
-                    logging.error("barcode scanner disconnected: %s", e)
-                    scanner_error = True
-                    continue
+            self._stop = threading.Event()
+            self._thread = Thread(target=self._run, daemon=True)
+            self._thread.start()
+            return True
+        except Exception as e:
+            logging.error("barcode scanner reconnect failed: %s", e)
+            return False
 
+    def _run(self) -> None:
+        assert self._barcode_scanner
+        logging.info("now reading barcodes")
+
+        try:
+            while not self._stop.is_set():
+                barcode = self._barcode_scanner.read_barcode()
                 if barcode is None:
                     continue
 
                 logging.debug("raw barcode received: %r", barcode)
 
-                if not scanner.is_valid(barcode):
+                if not self._barcode_scanner.is_valid(barcode):
                     logging.warning("invalid barcode rejected: %r", barcode)
                     continue
 
                 logging.info("barcode scanned: %r", barcode)
-                curr_frame = self.ctx.nav.get_curr_frame()
+                curr_screen = context().navigation_controller.get_curr_screen()
 
-                if curr_frame == CheckInManual:
-                    self.ctx.dispatcher.call.emit(
-                        lambda b=barcode: self.ctx.check_in.handle_by_pid(b)
-                    )
-                elif curr_frame in (CreateAccountBarcode, CreateAccountManual):
-                    self.ctx.dispatcher.call.emit(
-                        lambda b=barcode: self.ctx.account.go_to_review_from_barcode(b)
-                    )
+                if curr_screen == HomeScreen:
+                    context().check_in_controller.check_in("pid", barcode)
+                elif curr_screen in (CreateAccountBarcode, CreateAccountManual):
+                    student = context().account_controller.lookup("barcode", barcode)
+                    if student is not None:
+                        context().session.set_student(student)
+                        context().main_window.main_thread_dispatcher.emit(
+                            lambda: context().navigation_controller.navigate(CreateAccountReview)
+                        )
                 else:
-                    logging.debug("barcode scanned on unhandled screen: %s", curr_frame)
+                    logging.debug("barcode scanned on ignored screen: %s", curr_screen)
         except Exception as e:
             logging.exception("barcode scanner thread crashed: %s", e)
+
+            self._stop.set()
+
+            context().health_controller.get_system(CriticalSystemType.BARCODE_SCANNER).mark_unhealthy(
+                retry_interval=5,
+                retry_callback=self._reconnect,
+            )

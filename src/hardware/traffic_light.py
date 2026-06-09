@@ -1,32 +1,24 @@
+from enum import Enum
+
 import serial
-import serial.tools.list_ports as list_ports
-import time
+
+
+class TrafficLightState(Enum):
+    OFF = "off"
+    RED = "red"
+    YELLOW = "yellow"
+    GREEN = "green"
 
 
 class TrafficLight:
-    def __init__(self, addr=None, baud=115200):
-        self.ser = None
+    def __init__(self, addr: str | None = None, baud: int = 115200) -> None:
+        self.ser: serial.Serial | None = None
 
         if addr:
             self.ser = serial.Serial(addr, baud)
             self.ser.reset_input_buffer()
 
-    @property
-    def connected(self) -> bool:
-        return self.ser is not None
-
-    def set_off(self):
+    def set_state(self, state: TrafficLightState) -> None:
         if self.ser:
-            self.ser.write(b"off\n")
-
-    def set_red(self):
-        if self.ser:
-            self.ser.write(b"red\n")
-
-    def set_yellow(self):
-        if self.ser:
-            self.ser.write(b"yellow\n")
-
-    def set_green(self):
-        if self.ser:
-            self.ser.write(b"green\n")
+            data_string = state.value + "\n"
+            self.ser.write(data_string.encode())

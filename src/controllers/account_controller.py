@@ -1,107 +1,66 @@
+from __future__ import annotations
+
 import logging
-from threading import Thread
+from typing import Literal
 
-from PyQt6.QtCore import QTimer
+from pyqttoast import ToastPreset
 
-from controllers.api_controller import ApiController, ExternalApiError
+from controllers.api_controller import ExternalApiError
+from misc.api_models import CreateAccountResponse, Student, StudentResponse
+from misc.global_context import context
 
 
 class AccountController:
-    def __init__(self, ctx):
-        self.ctx = ctx
+    def __init__(self) -> None:
+        logging.info("account controller initialized")
 
-    def go_to_review_from_barcode(self, barcode):
-        self.ctx.nav.show_status("Looking up student...")
-        logging.info(f"looking up student by barcode: {barcode}")
-        Thread(target=self._lookup_barcode_worker, args=(barcode,), daemon=True).start()
-
-    def _lookup_barcode_worker(self, barcode):
+    def lookup(self, by: Literal["pid", "barcode"], value: str) -> Student | None:
+        context().main_window.show_toast_async("Looking Up Student", "", ToastPreset.INFORMATION)
+        logging.info(f"looking up student by {by}: {value}")
         try:
-            student = ApiController.lookup_by_barcode(barcode)
+            response = context().api_controller.request("GET", f"/accounts/{by}/{value}")
+            if response.status_code == 404:
+                context().main_window.show_toast_async("Student Not Found", "Please enter your details manually", ToastPreset.ERROR)
+                return None
+            response.raise_for_status()
+            return StudentResponse.model_validate(response.json()).student
         except ExternalApiError as e:
-            self.ctx.dispatcher.call.emit(lambda: self._on_external_api_error(e.api))
-            return
-        self.ctx.dispatcher.call.emit(lambda s=student: self._on_barcode_result(s))
+            context().main_window.show_toast_async(f"System Error: {e.api}", "Please talk to a staff member", ToastPreset.ERROR)
+            return None
+        except Exception as e:
+            logging.error(f"error looking up student by {by}: {e}")
+            context().main_window.show_toast_async("Student Not Found", "Please enter your details manually", ToastPreset.ERROR)
+            return None
 
-    def _on_barcode_result(self, student):
-        self.ctx.nav.hide_status()
-        if student is None:
-            self.ctx.nav.show_status("Student not found. Please enter your details manually.")
-            QTimer.singleShot(3000, self.ctx.nav.hide_status)
-            return
-        self.ctx.nav.go_to_create_account_review(
-            pid=student["pid"],
-            first_name=student["first_name"],
-            last_name=student["last_name"],
-            email=student["email"],
-        )
-
-    def go_to_review_from_pid(self, pid):
-        self.ctx.nav.show_status("Looking up student...")
-        logging.info(f"looking up student by PID: {pid}")
-        Thread(target=self._lookup_pid_worker, args=(pid,), daemon=True).start()
-
-    def _lookup_pid_worker(self, pid):
-        try:
-            student = ApiController.lookup_by_pid(pid)
-        except ExternalApiError as e:
-            self.ctx.dispatcher.call.emit(lambda: self._on_external_api_error(e.api))
-            return
-        self.ctx.dispatcher.call.emit(lambda s=student: self._on_pid_result(s, pid))
-
-    def _on_pid_result(self, student, pid):
-        self.ctx.nav.hide_status()
-        if student is None:
-            self.ctx.nav.show_status("Student not found. Please check your PID.")
-            QTimer.singleShot(3000, self.ctx.nav.hide_status)
-            return
-        self.ctx.nav.go_to_create_account_review(
-            pid=pid,
-            first_name=student["first_name"],
-            last_name=student["last_name"],
-            email=student["email"],
-        )
-
-    def create_account_from_review(self, *, first_name, last_name, email, pid):
-        if pid:
-            self._create(pid=pid)
-        else:
-            self._create(first_name=first_name, last_name=last_name, email=email)
-
-    def _create(self, *, barcode=None, pid=None, first_name=None, last_name=None, email=None):
-        self.ctx.nav.show_status("Account creation in progress!")
+    def create_account(
+        self,
+        *,
+        barcode: str | None = None,
+        pid: str | None = None,
+        first_name: str | None = None,
+        last_name: str | None = None,
+        email: str | None = None,
+    ) -> bool:
+        context().main_window.show_toast_async("Account creation in progress!", "", ToastPreset.INFORMATION)
         logging.info(f"creating account: pid={pid} barcode={barcode}")
-        Thread(
-            target=self._create_worker,
-            kwargs=dict(barcode=barcode, pid=pid, first_name=first_name, last_name=last_name, email=email),
-            daemon=True,
-        ).start()
-
-    def _on_external_api_error(self, api: str):
-        self.ctx.nav.hide_status()
-        self.ctx.nav.show_status(f"system error ({api.upper()} api). please talk to a staff member.")
-        QTimer.singleShot(4000, self.ctx.nav.hide_status)
-
-    def _create_worker(self, *, barcode, pid, first_name, last_name, email):
+        payload = {k: v for k, v in {
+            "rfid": context().session.rfid,
+            "barcode": barcode,
+            "pid": pid,
+            "first_name": first_name,
+            "last_name": last_name,
+            "email": email,
+        }.items() if v is not None}
         try:
-            result = ApiController.create_account(
-                self.ctx.rfid,
-                barcode=barcode,
-                pid=pid,
-                first_name=first_name,
-                last_name=last_name,
-                email=email,
-            )
+            response = context().api_controller.request("POST", "/accounts", json=payload, timeout=8)
+            response.raise_for_status()
+            CreateAccountResponse.model_validate(response.json())
+            logging.info("account creation succeeded")
+            return True
         except ExternalApiError as e:
-            self.ctx.dispatcher.call.emit(lambda: self._on_external_api_error(e.api))
-            return
-        self.ctx.dispatcher.call.emit(lambda r=result: self._on_create_result(r))
-
-    def _on_create_result(self, result):
-        self.ctx.nav.hide_status()
-        if result is None:
-            self.ctx.nav.show_status("ERROR! Could not create account, please try manually.")
-            QTimer.singleShot(3000, self.ctx.nav.hide_status)
-            return
-        logging.info("account creation succeeded")
-        self.ctx.nav.pop()
+            context().main_window.show_toast_async(f"System Error: {e.api}", "Please talk to a staff member", ToastPreset.ERROR)
+            return False
+        except Exception as e:
+            logging.error(f"error creating account: {e}")
+            context().main_window.show_toast_async("Account Creation Failed", "Please try again or talk to a staff member", ToastPreset.ERROR)
+            return False

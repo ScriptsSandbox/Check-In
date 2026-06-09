@@ -1,185 +1,89 @@
-import sys
+from __future__ import annotations
+
 import logging
-import argparse
-import os
-from sys import stdout
+import signal
+import sys
 
 from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import QTimer
 
-import health_server
-from window import CheckInWindow
-from dispatcher import MainThreadDispatcher
-from controllers.navigation_controller import NavigationController
-from controllers.barcode_scanner_controller import BarcodeScannerController
-from hardware.barcode_scanner import BarcodeScanner
-from controllers.check_in_controller import CheckInController
 from controllers.account_controller import AccountController
-from controllers.rfid_reader_controller import RfidReaderController
-from hardware.rfid_reader import Reader
-from views.create_account_manual import CreateAccountManual
-from views.create_account_no_pid import CreateAccountNoPid
-from views.create_account_review import CreateAccountReview
-from views.check_in_manual import CheckInManual
-from hardware.usb_ports import get_usb_ids
-from app_context import AppContext
-from controllers.api_controller import ApiController, ApiUnreachableError
-
-API_RETRY_DELAY_S = 10
-API_MONITOR_INTERVAL_S = 15
-HARDWARE_RETRY_DELAY_S = 5
-
-
-def clear_and_return(ctx: AppContext):
-    ctx.nav.back_to_main()
-    ctx.nav.get_frame(CreateAccountManual).clear_entries()
-    ctx.nav.get_frame(CreateAccountNoPid).clear_entries()
-    ctx.nav.get_frame(CreateAccountReview).clear_entries()
-    ctx.nav.get_frame(CheckInManual).clear_entries()
+from controllers.api_controller import APIController
+from controllers.barcode_scanner_controller import BarcodeScannerController
+from controllers.check_in_controller import CheckInController
+from controllers.health_controller import HealthController, CriticalSystem, CriticalSystemType
+from controllers.navigation_controller import NavigationController
+from controllers.rfid_reader_controller import RFIDReaderController
+from controllers.traffic_light_controller import TrafficLightController
+from hardware.usb_ports import USBPortController
+from misc.global_config import config
+from misc.global_context import GlobalContext, context
+from misc.check_in_session import CheckInSession
+from window import MainWindow
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Makerspace Check-in System",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    )
-    parser.add_argument("-v", "--verbose", action="store_true", help="Increase verbosity (print debug info)")
-    parser.add_argument("-d", "--dev", action="store_true", help="Enable dev mode with on-screen navigation overlay")
-    args = parser.parse_args()
-
-    if args.verbose:
-        logging.basicConfig(level=logging.DEBUG, stream=stdout)
+def prepare_boot() -> None:
+    if config().VERBOSE_LOGGING:
+        logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
     else:
         logging.basicConfig(level=logging.INFO)
 
-    dev_mode = args.dev or os.environ.get("DEV_MODE") == "1"
-
-    health_server.start(port=int(os.environ.get("HEALTH_PORT", "8001")))
-    health_server.start_watchdog()
-
-    app = QApplication(sys.argv)
-
-    import signal
     signal.signal(signal.SIGINT, signal.SIG_DFL)
 
-    window = CheckInWindow()
-    window.showFullScreen()
 
-    heartbeat_timer = QTimer()
-    heartbeat_timer.setInterval(1000)
-    heartbeat_timer.timeout.connect(health_server.heartbeat)
-    heartbeat_timer.start()
-    QTimer.singleShot(0, health_server.mark_ui_ready)
+def initiate_boot() -> None:
+    global_context = GlobalContext()
 
-    state = {
-        "app_initialized": False,
-        "reader_attached": False,
-        "monitor_started": False,
-        "ctx": None,
-    }
+    global_context.health_controller = HealthController()
+    global_context.main_window = MainWindow()
 
-    def monitor_api():
-        try:
-            ApiController.ping()
-        except ApiUnreachableError as e:
-            window.show_error(
-                "Lost connection to API",
-                str(e),
-                retry_in=API_RETRY_DELAY_S,
-                on_retry=monitor_api,
-            )
-            return
-        if window.is_error_visible():
-            window.hide_error()
-        QTimer.singleShot(API_MONITOR_INTERVAL_S * 1000, monitor_api)
+    global_context.api_controller = APIController()
 
-    def build_app_context():
-        ctx = AppContext.create(get_usb_ids().traffic_light)
-        ctx.dispatcher = MainThreadDispatcher()
-        nav = NavigationController(window, ctx, dev_mode=dev_mode)
-        ctx.window = window
-        ctx.nav = nav
-        ctx.check_in = CheckInController(ctx)
-        ctx.account = AccountController(ctx)
-        ctx.traffic_light.request_off()
-        window.set_escape_handler(lambda: clear_and_return(ctx))
-        return ctx
+    global_context.navigation_controller = NavigationController()
+    global_context.check_in_controller = CheckInController()
+    global_context.account_controller = AccountController()
 
-    def on_reader_disconnect(reason):
-        logging.warning("RFID reader disconnected: %s", reason)
-        state["reader_attached"] = False
-        window.show_error(
-            "Card reader not detected",
-            reason,
-            retry_in=HARDWARE_RETRY_DELAY_S,
-            on_retry=startup,
-        )
+    global_context.usb_port_controller = USBPortController()
+    global_context.rfid_reader_controller = RFIDReaderController()
+    global_context.barcode_scanner_controller = BarcodeScannerController()
+    global_context.traffic_light_controller = TrafficLightController()
 
-    def attach_reader(ctx):
-        usb = get_usb_ids()
-        reader = Reader(usb.reader)
-        card_reader = RfidReaderController(ctx)
-        card_reader.start(reader, on_disconnect=on_reader_disconnect)
-        ctx.card_reader = card_reader
+    global_context.session = CheckInSession()
 
-        if usb.barcode:
-            ctx.has_barcode_scanner = True
-            barcode_scanner = BarcodeScanner(usb.barcode)
-            barcode_controller = BarcodeScannerController(ctx)
-            barcode_controller.start(barcode_scanner)
+    global_context.health_controller.register(CriticalSystem.with_monitoring(
+        CriticalSystemType.API_CONNECTION,
+        global_context.api_controller.ping,
+        period_seconds=5
+    ))
+
+def shutdown() -> None:
+    context().rfid_reader_controller.stop()
+
+if __name__ == "__main__":
+    app: QApplication | None = None
+    try:
+        prepare_boot()
+        app = QApplication([])
+        assert app
+        initiate_boot()
+        context().main_window.on_finish_boot()
+        app.aboutToQuit.connect(shutdown)
+        sys.exit(app.exec())
+    except Exception as exception:
+        if app is None or context() is None or context().health_controller is None:
+            # if this has occurred the system has failed so completely it will be unable to alert that it has failed
+            logging.error(f"rip: {exception}")
+
+        elif context().main_window is None:
+            # if this occurred the system failed before the UI loaded
+            context().health_controller.get_system(CriticalSystemType.SYSTEM_BOOT).mark_unhealthy()
+            logging.error(f"UI Failed to load: {exception}")
+
         else:
-            logging.warning("no barcode scanner found, barcode scanning disabled")
+            # if this occurred something else failed to initialize, and we should retry after a while
+            context().main_window.show_error("System Boot Failure", str(exception), retry_in=60, on_retry=lambda: sys.exit(1))
+            context().health_controller.get_system(CriticalSystemType.SYSTEM_BOOT).mark_unhealthy()
+            logging.error(f"System Boot Failure: {exception}")
+            app.exec() # need to start the pyqt ui loop otherwise nothing will render
 
-    def shutdown():
-        ctx = state.get("ctx")
-        if ctx is not None and getattr(ctx, "card_reader", None) is not None:
-            ctx.card_reader.stop()
+        sys.exit(1)
 
-    app.aboutToQuit.connect(shutdown)
-
-    def startup():
-        try:
-            ApiController.ping()
-        except ApiUnreachableError as e:
-            window.show_error(
-                "Cannot reach API",
-                str(e),
-                retry_in=API_RETRY_DELAY_S,
-                on_retry=startup,
-            )
-            return
-
-        if not state["app_initialized"]:
-            try:
-                ctx = build_app_context()
-            except BaseException as e:
-                logging.critical("fatal error during kiosk app init", exc_info=True)
-                window.show_error(
-                    "Kiosk failed to initialize",
-                    f"{type(e).__name__}: {e}",
-                )
-                return
-            state["ctx"] = ctx
-            state["app_initialized"] = True
-
-        if not state["reader_attached"]:
-            try:
-                attach_reader(state["ctx"])
-            except RuntimeError as e:
-                window.show_error(
-                    "Card reader not detected",
-                    str(e),
-                    retry_in=HARDWARE_RETRY_DELAY_S,
-                    on_retry=startup,
-                )
-                return
-            state["reader_attached"] = True
-
-        window.hide_error()
-        logging.info("made it to app start")
-        if not state["monitor_started"]:
-            state["monitor_started"] = True
-            QTimer.singleShot(API_MONITOR_INTERVAL_S * 1000, monitor_api)
-
-    QTimer.singleShot(0, startup)
-    sys.exit(app.exec())

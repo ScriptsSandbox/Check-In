@@ -1,7 +1,0 @@
-from PyQt6.QtCore import QSize
-
-OUTER_MARGIN = 14
-INNER_MARGIN = 24
-
-NAV_BTN_SIZE = 100
-NAV_ICON_SIZE = QSize(52, 52)

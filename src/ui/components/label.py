@@ -1,0 +1,35 @@
+from __future__ import annotations
+
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QLabel
+
+from ui.theme import CREAM, app_font
+
+
+def styled_label(
+    text: str = "",
+    *,
+    font_size: int,
+    bold: bool = False,
+    align: Qt.AlignmentFlag = Qt.AlignmentFlag.AlignHCenter,
+    width: int = 1000,
+) -> QLabel:
+    label = QLabel(text)
+
+    label.setFont(app_font(font_size, bold=bold))
+
+    label.setStyleSheet(f"color: {CREAM}")
+    label.setAlignment(align)
+
+    label.setWordWrap(True)
+    label.setFixedWidth(width)
+    label.setMinimumHeight(label.heightForWidth(width))
+
+    return label
+
+
+def title_label(text: str) -> QLabel:
+    return styled_label(text, font_size=80, bold=True)
+
+def field_label(text: str) -> QLabel:
+    return styled_label(text, font_size=18)

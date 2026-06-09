@@ -1,115 +1,108 @@
-import time
+from __future__ import annotations
+
 import logging
+import threading
+import time
 import traceback
-from os.path import exists
-from threading import Thread, Event
+from threading import Thread
 
-from controllers.api_controller import ApiController
-from views.create_account_manual import CreateAccountManual
-import notifier
+from controllers.health_controller import CriticalSystemType
+from hardware.rfid_reader_aitrip import RFIDReaderAITRIP
+from hardware.usb_ports import USBDeviceType
+from misc.global_context import context
+from misc.timeout import run_with_timeout
+from ui.views.home_screen import HomeScreen
 
 
-class RfidReaderController:
-    def __init__(self, ctx):
-        self.ctx = ctx
-        self._stop = Event()
-        self._thread = None
-        self._reader = None
-        self._on_disconnect = None
-        self._disconnect_fired = False
+class RFIDReaderController:
+    _MAX_CONSECUTIVE_ERRORS = 10
 
-    def start(self, reader, on_disconnect):
-        self._reader = reader
-        self._on_disconnect = on_disconnect
-        self._stop.clear()
-        self._disconnect_fired = False
-        self._thread = Thread(target=self._run_safe, args=(reader,), daemon=True, name="rfid-reader")
+    def __init__(self) -> None:
+        logging.info("opening RFID reader serial port")
+
+        port = context().usb_port_controller.get_usb_device_port(USBDeviceType.RFID_READER)
+        self._reader = run_with_timeout(lambda: RFIDReaderAITRIP(port), "RFID Reader")
+
+        self._stop = threading.Event()
+
+        self._thread: Thread | None = None
+        self._thread = Thread(target=self._run, args=(self._reader,), daemon=True, name="rfid-reader")
         self._thread.start()
-        if self.ctx.traffic_light.connected:
-            poller = Thread(target=self._poll_traffic_light, daemon=True, name="traffic-light-poll")
-            poller.start()
 
-    def stop(self):
+        logging.info("rfid reader controller initialized")
+
+    def stop(self) -> None:
         self._stop.set()
         if self._thread is not None and self._thread.is_alive():
             self._thread.join(timeout=3)
         if self._reader is not None:
             self._reader.close()
 
-    def _fire_disconnect(self, reason):
-        if self._disconnect_fired:
-            return
-        self._disconnect_fired = True
-        self._stop.set()
-        cb = self._on_disconnect
-        if cb is not None:
-            self.ctx.dispatcher.call.emit(lambda: cb(reason))
-
-    def _run_safe(self, reader):
+    def _reconnect(self) -> bool:
+        logging.info("attempting RFID reader reconnect")
         try:
-            self._run(reader)
-        except BaseException as e:
-            tb = traceback.format_exc()
-            logging.critical("RFID reader thread died: %s\n%s", e, tb)
-            notifier.notify_critical(
-                "RFID reader thread died",
-                f"{type(e).__name__}: {e}\n\n{tb[-1500:]}",
-            )
-            self._fire_disconnect(f"{type(e).__name__}: {e}")
+            port = context().usb_port_controller.get_usb_device_port(USBDeviceType.RFID_READER)
+            self._reader = RFIDReaderAITRIP(port)
+            self._stop = threading.Event()
+            self._thread = Thread(target=self._run, args=(self._reader,), daemon=True, name="rfid-reader")
+            self._thread.start()
+            return True
+        except Exception as e:
+            logging.error("RFID reader reconnect failed: %s", e)
+            return False
 
-    def _run(self, reader):
+    def _run(self, reader: RFIDReaderAITRIP) -> None:
         logging.info("now reading ID cards")
-        last_tag = 0
-        last_time = 0
+        last_tag: str | None = None
+        last_time: float = 0
+        consecutive_errors = 0
 
-        while not self._stop.is_set():
-            try:
-                in_waiting = reader.get_ser_in_waiting()
-            except OSError as e:
-                if not exists(reader._usb_id):
-                    logging.error("card reader disconnected: %s", e)
-                    self._fire_disconnect(f"Card reader at {reader._usb_id} no longer present")
-                    return
-                logging.debug("card reader transient error, retrying: %s", e)
-                time.sleep(0.2)
-                continue
+        try:
+            while not self._stop.is_set():
+                try:
+                    tag = reader.read_rfid()
+                except OSError as e:
+                    if not reader.is_present():
+                        raise
+                    consecutive_errors += 1
+                    if consecutive_errors >= self._MAX_CONSECUTIVE_ERRORS:
+                        raise
+                    logging.warning(
+                        "transient RFID read error (%d/%d): %s",
+                        consecutive_errors, self._MAX_CONSECUTIVE_ERRORS, e,
+                    )
+                    context().health_controller.get_system(CriticalSystemType.RFID_READER).notify_log(
+                        f"transient read error ({consecutive_errors}/{self._MAX_CONSECUTIVE_ERRORS}): {e}"
+                    )
+                    reader.flush()
+                    time.sleep(0.05)
+                    continue
 
-            if in_waiting >= 14:
-                self.ctx.dispatcher.call.emit(
-                    lambda: self.ctx.nav.get_frame(CreateAccountManual).clear_entries()
-                )
-                tag = reader.grab_rfid()
+                consecutive_errors = 0
 
-                if " " in tag:
+                if tag is None:
                     continue
 
                 if tag == last_tag and not reader.can_scan_again(last_time):
                     logging.debug("suppressing repeat scan")
                     continue
 
-                s_reason = reader.check_rfid(tag)
-
-                if s_reason != "good":
-                    logging.debug(s_reason)
+                if context().navigation_controller.get_curr_screen() != HomeScreen:
+                    logging.debug("ignoring card tap off home screen")
                     continue
-                else:
-                    logging.debug("RFID check succeeded")
-
-                self.ctx.rfid = tag
-                self.ctx.check_in.handle_by_uuid(tag)
 
                 last_tag = tag
                 last_time = time.time()
 
-    def _poll_traffic_light(self):
-        last_color = None
-        while not self._stop.is_set():
-            time.sleep(0.1)
-            try:
-                color = ApiController.get_traffic_light()
-            except Exception as e:
-                logging.warning("traffic light poll error: %s", e)
-                continue
-            if color != last_color:
-                last_color = color
-                self.ctx.traffic_light.drive(color)
+                context().session.rfid = tag
+                context().check_in_controller.check_in("rfid", tag)
+        except Exception as exception:
+            tb = traceback.format_exc()
+            logging.critical("RFID reader thread died: %s\n%s", exception, tb)
+
+            self._stop.set()
+
+            context().health_controller.get_system(CriticalSystemType.RFID_READER).mark_unhealthy(
+                retry_interval=5,
+                retry_callback=self._reconnect,
+            )
