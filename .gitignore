@@ -9,3 +9,4 @@ log*
 ignore-*
 .env
 raw_*
+.DS_Store
