@@ -46,5 +46,5 @@ class HomeScreen(Screen):
 
         self.content.addStretch(3)
 
-        instruction = styled_label("Please tap ID on the blue box to start", font_size=24)
+        instruction = styled_label("Please tap ID on the blue box to your right to start", font_size=24)
         self.content.addWidget(instruction, alignment=Qt.AlignmentFlag.AlignHCenter)
