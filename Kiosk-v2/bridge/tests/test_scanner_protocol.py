@@ -27,6 +27,17 @@ class DuplicateGuardTests(unittest.TestCase):
         self.assertTrue(guard.accept("04A1B2C3", now=10))
         self.assertTrue(guard.accept("04FFFFFF", now=10.1))
 
+    def test_default_window_outlasts_a_slow_backend_request(self) -> None:
+        guard = DuplicateGuard()
+        self.assertTrue(guard.accept("04A1B2C3", now=10))
+        self.assertFalse(guard.accept("04A1B2C3", now=18))
+
+    def test_forget_allows_immediate_retry_after_backend_failure(self) -> None:
+        guard = DuplicateGuard(window_seconds=15)
+        self.assertTrue(guard.accept("04A1B2C3", now=10))
+        guard.forget("04A1B2C3")
+        self.assertTrue(guard.accept("04A1B2C3", now=11))
+
 
 if __name__ == "__main__":
     unittest.main()
