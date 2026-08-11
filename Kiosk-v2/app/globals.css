@@ -467,6 +467,9 @@ input:focus { border-color: var(--orange); }
 .qr-placeholder { display: grid; grid-template-columns: repeat(8, 1fr); aspect-ratio: 1; padding: 14px; gap: 2px; background: var(--cream); }
 .qr-placeholder i { background: var(--navy); }
 .qr-placeholder i:nth-child(3n), .qr-placeholder i:nth-child(5n), .qr-placeholder i:nth-child(7n) { background: var(--cream); }
+.qr-code { width: 210px; padding: 14px; background: var(--cream); color: var(--navy); display: grid; place-items: center; gap: 10px; box-sizing: border-box; }
+.qr-code svg { display: block; width: 100%; height: auto; }
+.qr-code span { font-family: "Jost"; font-size: 13px; font-weight: 800; letter-spacing: .14em; }
 
 .success-plane {
   position: absolute;
@@ -601,7 +604,7 @@ button:focus-visible { outline: 3px solid var(--orange); outline-offset: 4px; }
   .utility-bar { position: fixed; padding: 20px; }
   .clock { display: none; }
   .onboarding-grid { grid-template-columns: 1fr; }
-  .qr-placeholder { width: 190px; }
+  .qr-placeholder, .qr-code { width: 190px; }
   .staff-panel { grid-template-columns: 1fr; overflow-y: auto; }
   .staff-poster { display: none; }
   .staff-panel > form { overflow: visible; }

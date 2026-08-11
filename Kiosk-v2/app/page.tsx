@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { QRCodeSVG } from "qrcode.react";
 
 type Screen =
   | "home"
@@ -23,6 +24,8 @@ type Announcement = {
   body: string;
   closingTime: string;
 };
+
+const REGISTRATION_URL = "https://ucsd.co1.qualtrics.com/jfe/form/SV_eFdO6o26XrasxoO";
 
 type ScannerStatus = "demo" | "connecting" | "connected" | "disconnected";
 
@@ -71,6 +74,7 @@ export default function Home() {
   const [screen, setScreen] = useState<Screen>("home");
   const [demoOpen, setDemoOpen] = useState(false);
   const [pid, setPid] = useState("");
+  const [checkInMethod, setCheckInMethod] = useState<"card" | "identifier">("card");
   const [affiliation, setAffiliation] = useState("");
   const [detail, setDetail] = useState("");
   const [claimCode, setClaimCode] = useState("");
@@ -133,6 +137,7 @@ export default function Home() {
           if (event.type === "card_detected" && screenRef.current === "home") {
             cardDetectedAtRef.current = performance.now();
             setScannerResult(null);
+            setCheckInMethod("card");
             setScreen("reading");
           } else if (
             event.type === "card_read" &&
@@ -140,6 +145,7 @@ export default function Home() {
           ) {
             if (screenRef.current === "home") {
               cardDetectedAtRef.current = performance.now();
+              setCheckInMethod("card");
               setScreen("reading");
             }
             setScannerResult(event);
@@ -269,6 +275,7 @@ export default function Home() {
     });
     setWelcomeName("Sandbox member");
     setVisitCount(null);
+    setCheckInMethod("card");
     setScreen("reading");
   }
 
@@ -278,6 +285,7 @@ export default function Home() {
     setWelcomeName("Sandbox member");
     setVisitCount(null);
     setScreen("home");
+    setCheckInMethod("card");
     setPid("");
     setAffiliation("");
     setDetail("");
@@ -292,7 +300,9 @@ export default function Home() {
 
     cardDetectedAtRef.current = performance.now();
     setScannerResult(null);
+    setCheckInMethod("identifier");
     setScreen("reading");
+    setPid("");
     try {
       const response = await fetch("http://127.0.0.1:8765/check-in/identifier", {
         method: "POST",
@@ -397,9 +407,15 @@ export default function Home() {
         {screen === "reading" && (
           <div className="status-content screen-content">
             <div className="signal" aria-hidden="true"><i /><i /><i /></div>
-            <p className="eyebrow">CARD DETECTED</p>
+            <p className="eyebrow">
+              {checkInMethod === "identifier" ? "ID SUBMITTED" : "CARD DETECTED"}
+            </p>
             <h1>Checking<br />you in…</h1>
-            <p className="lede">Card detected. You can remove it while we record your visit.</p>
+            <p className="lede">
+              {checkInMethod === "identifier"
+                ? "We found your ID. Please wait while we record your visit."
+                : "Card detected. You can remove it while we record your visit."}
+            </p>
           </div>
         )}
 
@@ -556,36 +572,22 @@ export default function Home() {
             <button className="back" onClick={() => setScreen("home")}><Arrow direction="left" /> Back</button>
             <p className="eyebrow">WELCOME TO THE SANDBOX</p>
             <h1>Make something<br />unexpected.</h1>
-            {demoControlsEnabled ? (
-              <>
-                <div className="onboarding-grid">
-                  <div>
-                    <p className="lede">Create your profile, sign the waiver, and see orientation times.</p>
-                    <ol>
-                      <li><b>01</b><span>Create your profile</span></li>
-                      <li><b>02</b><span>Complete orientation</span></li>
-                      <li><b>03</b><span>Start making</span></li>
-                    </ol>
-                  </div>
-                  <div className="qr-placeholder" aria-label="Prototype QR code placeholder">
-                    {Array.from({ length: 64 }, (_, index) => <i key={index} />)}
-                  </div>
-                </div>
-                <a className="outline-action onboarding-link" href="/join">Open the prototype registration form</a>
-                <button className="outline-action" onClick={() => setScreen("pid")}>I already registered</button>
-              </>
-            ) : (
-              <div className="onboarding-grid">
-                <div>
-                  <p className="lede">Online account creation is not connected yet. Please ask a Sandbox staff member to create your account and confirm your waiver.</p>
-                  <ol>
-                    <li><b>01</b><span>Ask staff for account help</span></li>
-                    <li><b>02</b><span>Complete the liability waiver</span></li>
-                    <li><b>03</b><span>Return with your UC San Diego ID</span></li>
-                  </ol>
-                </div>
+            <div className="onboarding-grid">
+              <div>
+                <p className="lede">Scan with your phone to submit your Sandbox profile. After the waiver, ask staff to finish setup and connect your card.</p>
+                <ol>
+                  <li><b>01</b><span>Submit your profile</span></li>
+                  <li><b>02</b><span>Complete the liability waiver</span></li>
+                  <li><b>03</b><span>Ask staff to activate your account</span></li>
+                </ol>
               </div>
-            )}
+              <div className="qr-code" aria-label="QR code for the Scripps Sandbox registration form">
+                <QRCodeSVG value={REGISTRATION_URL} size={178} level="M" bgColor="#f2eee3" fgColor="#092235" />
+                <span>SCAN TO JOIN</span>
+              </div>
+            </div>
+            <a className="outline-action onboarding-link" href={REGISTRATION_URL} target="_blank" rel="noreferrer">Open the registration form</a>
+            <button className="outline-action" onClick={() => setScreen("pid")}>I already registered</button>
           </div>
         )}
       </section>
