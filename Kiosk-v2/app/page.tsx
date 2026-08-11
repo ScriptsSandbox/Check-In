@@ -33,6 +33,7 @@ type ScannerEvent = {
   outcome: ScannerOutcome;
   display_name: string | null;
   message: string;
+  visit_count: number | null;
   read_at: string;
   sequence: number;
 };
@@ -73,6 +74,7 @@ export default function Home() {
   const [scannerStatus, setScannerStatus] = useState<ScannerStatus>("demo");
   const [scannerResult, setScannerResult] = useState<ScannerEvent | null>(null);
   const [welcomeName, setWelcomeName] = useState("Sandbox member");
+  const [visitCount, setVisitCount] = useState<number | null>(null);
   const demoControlsEnabled = process.env.NEXT_PUBLIC_KIOSK_DEMO === "true";
   const screenRef = useRef<Screen>("home");
 
@@ -151,6 +153,7 @@ export default function Home() {
       }
       if (scannerResult.outcome === "success") {
         setWelcomeName(scannerResult.display_name || "Sandbox member");
+        setVisitCount(scannerResult.visit_count);
         setScreen("success");
       } else if (scannerResult.outcome === "unknown_card") {
         setScreen("unknown-card");
@@ -231,12 +234,14 @@ export default function Home() {
   function startDemoCheckIn() {
     setScannerResult(null);
     setWelcomeName("Sandbox member");
+    setVisitCount(null);
     setScreen("reading");
   }
 
   function reset() {
     setScannerResult(null);
     setWelcomeName("Sandbox member");
+    setVisitCount(null);
     setScreen("home");
     setPid("");
     setAffiliation("");
@@ -323,8 +328,8 @@ export default function Home() {
               </div>
             )}
             <div className="primary-actions">
-              <button className="text-action" onClick={() => setScreen("pid")}>
-                <span><small>NO ID?</small>Check in with PID or employee ID</span>
+              <button className="text-action" onClick={() => setScreen(demoControlsEnabled ? "pid" : "new-here")}>
+                <span><small>NO ID?</small>{demoControlsEnabled ? "Check in with PID or employee ID" : "Ask staff for check-in help"}</span>
                 <Arrow />
               </button>
               <button className="text-action" onClick={() => setScreen("new-here")}>
@@ -388,12 +393,19 @@ export default function Home() {
             <p className="eyebrow warning">CARD NOT CONNECTED</p>
             <h1>We don’t know<br />this card yet.</h1>
             <p className="lede">Already registered online? Use your card-connection code. Existing members can use their PID or employee ID.</p>
-            <div className="stacked-actions">
-              <button className="solid-action" onClick={() => setScreen("link-card")}>Enter connection code <Arrow /></button>
-              <button className="outline-action" onClick={() => setScreen("pid")}>Use my PID or employee ID</button>
-              <button className="outline-action" onClick={() => setScreen("new-here")}>I’m new here</button>
-              <button className="quiet-action" onClick={() => setScreen("home")}>Try the card again</button>
-            </div>
+            {demoControlsEnabled ? (
+              <div className="stacked-actions">
+                <button className="solid-action" onClick={() => setScreen("link-card")}>Enter connection code <Arrow /></button>
+                <button className="outline-action" onClick={() => setScreen("pid")}>Use my PID or employee ID</button>
+                <button className="outline-action" onClick={() => setScreen("new-here")}>I’m new here</button>
+                <button className="quiet-action" onClick={() => setScreen("home")}>Try the card again</button>
+              </div>
+            ) : (
+              <div className="stacked-actions">
+                <button className="solid-action" onClick={() => setScreen("new-here")}>Ask staff for help <Arrow /></button>
+                <button className="quiet-action" onClick={() => setScreen("home")}>Try the card again</button>
+              </div>
+            )}
           </div>
         )}
 
@@ -499,21 +511,36 @@ export default function Home() {
             <button className="back" onClick={() => setScreen("home")}><Arrow direction="left" /> Back</button>
             <p className="eyebrow">WELCOME TO THE SANDBOX</p>
             <h1>Make something<br />unexpected.</h1>
-            <div className="onboarding-grid">
-              <div>
-                <p className="lede">Scan to create your profile, sign the waiver, and see orientation times.</p>
-                <ol>
-                  <li><b>01</b><span>Create your profile</span></li>
-                  <li><b>02</b><span>Complete orientation</span></li>
-                  <li><b>03</b><span>Start making</span></li>
-                </ol>
+            {demoControlsEnabled ? (
+              <>
+                <div className="onboarding-grid">
+                  <div>
+                    <p className="lede">Create your profile, sign the waiver, and see orientation times.</p>
+                    <ol>
+                      <li><b>01</b><span>Create your profile</span></li>
+                      <li><b>02</b><span>Complete orientation</span></li>
+                      <li><b>03</b><span>Start making</span></li>
+                    </ol>
+                  </div>
+                  <div className="qr-placeholder" aria-label="Prototype QR code placeholder">
+                    {Array.from({ length: 64 }, (_, index) => <i key={index} />)}
+                  </div>
+                </div>
+                <a className="outline-action onboarding-link" href="/join">Open the prototype registration form</a>
+                <button className="outline-action" onClick={() => setScreen("pid")}>I already registered</button>
+              </>
+            ) : (
+              <div className="onboarding-grid">
+                <div>
+                  <p className="lede">Online account creation is not connected yet. Please ask a Sandbox staff member to create your account and confirm your waiver.</p>
+                  <ol>
+                    <li><b>01</b><span>Ask staff for account help</span></li>
+                    <li><b>02</b><span>Complete the liability waiver</span></li>
+                    <li><b>03</b><span>Return with your UC San Diego ID</span></li>
+                  </ol>
+                </div>
               </div>
-              <div className="qr-placeholder" aria-label="Placeholder QR code for Sandbox registration">
-                {Array.from({ length: 64 }, (_, index) => <i key={index} />)}
-              </div>
-            </div>
-            <a className="outline-action onboarding-link" href="/join">Open the registration form on this screen</a>
-            <button className="outline-action" onClick={() => setScreen("pid")}>I already registered</button>
+            )}
           </div>
         )}
       </section>
@@ -533,7 +560,7 @@ export default function Home() {
           <div className="visit-card">
             <span>TODAY</span>
             <b>{timeLabel}</b>
-            <span>VISIT 24</span>
+            <span>{visitCount === null ? "CHECKED IN" : `VISIT DAY ${visitCount}`}</span>
           </div>
           <button className="solid-action navy" onClick={reset}>Done</button>
           <p className="reset-note">Returning home in {countdown} seconds</p>
