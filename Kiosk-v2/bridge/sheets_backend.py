@@ -19,12 +19,15 @@ class CheckInResult:
     outcome: str
     display_name: str | None = None
     message: str = ""
+    visit_count: int | None = None
 
 
 class SheetsProvider(Protocol):
     def user_records(self) -> list[dict[str, Any]]: ...
 
     def waiver_records(self) -> list[dict[str, Any]]: ...
+
+    def activity_rows(self) -> list[list[Any]]: ...
 
     def append_activity(self, row: list[Any]) -> None: ...
 
@@ -111,6 +114,11 @@ class GoogleSheetsProvider:
             self._refresh_if_needed()
             return list(self._waivers or [])
 
+    def activity_rows(self) -> list[list[Any]]:
+        with self._lock:
+            self._connect()
+            return self._activity_sheet.get_all_values()
+
     def append_activity(self, row: list[Any]) -> None:
         with self._lock:
             self._connect()
@@ -165,8 +173,19 @@ class SheetsCheckInBackend:
             )
 
         display_name = str(user.get("Name", "")).strip() or "Sandbox member"
+        local_now = self.local_datetime()
+        today = local_now.strftime("%m/%d/%Y")
+        visit_dates = {
+            str(row[0]).split()[0]
+            for row in self.provider.activity_rows()[1:]
+            if len(row) >= 5
+            and str(row[3]).strip().upper() == normalized_uid
+            and str(row[4]).strip() == "User Checkin"
+            and str(row[0]).strip()
+        }
+        visit_count = len(visit_dates | {today})
         row = [
-            self.local_datetime().strftime("%m/%d/%Y %H:%M:%S"),
+            local_now.strftime("%m/%d/%Y %H:%M:%S"),
             int(self.now()),
             display_name,
             normalized_uid,
@@ -180,4 +199,5 @@ class SheetsCheckInBackend:
             outcome="success",
             display_name=display_name,
             message="Check-in recorded.",
+            visit_count=visit_count,
         )
