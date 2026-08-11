@@ -15,6 +15,7 @@ import serial
 from serial.tools import list_ports
 
 from scanner_protocol import DuplicateGuard, normalize_uid
+from sheets_backend import CheckInResult, GoogleSheetsProvider, SheetsCheckInBackend
 
 
 logging.basicConfig(level=os.getenv("SCANNER_LOG_LEVEL", "INFO"))
@@ -22,23 +23,54 @@ LOGGER = logging.getLogger("sandbox-scanner")
 BAUD_RATE = int(os.getenv("SCANNER_BAUD", "115200"))
 SERIAL_PORT = os.getenv("SCANNER_SERIAL_PORT", "").strip()
 SIMULATION_ENABLED = os.getenv("SCANNER_SIMULATE", "false").lower() == "true"
+BACKEND_MODE = os.getenv("SCANNER_CHECKIN_BACKEND", "demo").strip().lower()
+if BACKEND_MODE not in {"demo", "sheets"}:
+    raise RuntimeError("SCANNER_CHECKIN_BACKEND must be 'demo' or 'sheets'")
+
+
+def build_checkin_backend() -> SheetsCheckInBackend | None:
+    # Simulation is deliberately write-free, even if a stale environment file
+    # also asks for the Sheets backend.
+    if SIMULATION_ENABLED or BACKEND_MODE == "demo":
+        return None
+    return SheetsCheckInBackend(GoogleSheetsProvider.from_environment())
 
 
 class BridgeState:
-    def __init__(self) -> None:
+    def __init__(self, backend: SheetsCheckInBackend | None = None) -> None:
         self.reader_status = "simulation" if SIMULATION_ENABLED else "searching"
         self.reader_port: str | None = None
         self.sequence = 0
         self.clients: set[asyncio.Queue[dict[str, Any]]] = set()
         self.guard = DuplicateGuard()
+        self.backend = backend
 
     async def publish(self, uid: str) -> bool:
         if not self.guard.accept(uid):
             return False
+
+        if self.backend is None:
+            result = CheckInResult(
+                outcome="demo",
+                display_name="Sandbox member",
+                message="Demo read accepted without writing a check-in.",
+            )
+        else:
+            try:
+                result = await asyncio.to_thread(self.backend.check_in, uid)
+            except Exception:
+                LOGGER.exception("Check-in backend failed while processing a card")
+                result = CheckInResult(
+                    outcome="backend_error",
+                    message="The check-in could not be recorded. Please see staff.",
+                )
+
         self.sequence += 1
         event = {
             "type": "card_read",
-            "uid": uid,
+            "outcome": result.outcome,
+            "display_name": result.display_name,
+            "message": result.message,
             "read_at": datetime.now(timezone.utc).isoformat(),
             "sequence": self.sequence,
         }
@@ -46,11 +78,11 @@ class BridgeState:
             if client.full():
                 client.get_nowait()
             client.put_nowait(event)
-        LOGGER.info("Card read accepted (UID ending %s)", uid[-4:])
+        LOGGER.info("Card read processed with outcome %s", result.outcome)
         return True
 
 
-STATE = BridgeState()
+STATE = BridgeState(build_checkin_backend())
 
 
 def choose_serial_port() -> str | None:
@@ -113,6 +145,7 @@ async def health() -> dict[str, Any]:
         "reader": STATE.reader_status,
         "port": STATE.reader_port,
         "clients": len(STATE.clients),
+        "backend": "demo" if STATE.backend is None else "sheets",
     }
 
 
