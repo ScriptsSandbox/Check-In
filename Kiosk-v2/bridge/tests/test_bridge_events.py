@@ -20,6 +20,11 @@ class BlockingBackend:
         )
 
 
+class FailingBackend:
+    def check_in(self, uid: str) -> CheckInResult:
+        raise RuntimeError("temporary Sheets failure")
+
+
 def test_detection_is_broadcast_before_backend_finishes() -> None:
     async def scenario() -> None:
         backend = BlockingBackend()
@@ -41,5 +46,24 @@ def test_detection_is_broadcast_before_backend_finishes() -> None:
         assert completed["outcome"] == "success"
         assert completed["sequence"] == detected["sequence"]
         assert isinstance(completed["processing_ms"], int)
+        assert completed["backend_timings_ms"] == {}
+
+    asyncio.run(scenario())
+
+
+def test_backend_failure_is_display_safe_and_allows_immediate_retry() -> None:
+    async def scenario() -> None:
+        state = BridgeState(FailingBackend())
+        queue: asyncio.Queue[dict[str, object]] = asyncio.Queue(maxsize=20)
+        state.clients.add(queue)
+
+        assert await state.publish("0123456789ABCD") is True
+        assert (await queue.get())["type"] == "card_detected"
+        failed = await queue.get()
+        assert failed["type"] == "card_read"
+        assert failed["outcome"] == "backend_error"
+        assert "temporary Sheets failure" not in str(failed)
+
+        assert await state.publish("0123456789ABCD") is True
 
     asyncio.run(scenario())
