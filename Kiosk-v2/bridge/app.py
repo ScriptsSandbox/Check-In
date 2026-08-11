@@ -71,6 +71,7 @@ class BridgeState:
             "outcome": result.outcome,
             "display_name": result.display_name,
             "message": result.message,
+            "visit_count": result.visit_count,
             "read_at": datetime.now(timezone.utc).isoformat(),
             "sequence": self.sequence,
         }
