@@ -9,6 +9,8 @@ type Screen =
   | "pid"
   | "not-found"
   | "unknown-card"
+  | "waiver-required"
+  | "backend-error"
   | "link-card"
   | "reader-error"
   | "profile"
@@ -24,8 +26,13 @@ type Announcement = {
 
 type ScannerStatus = "demo" | "connecting" | "connected" | "disconnected";
 
+type ScannerOutcome = "demo" | "success" | "unknown_card" | "waiver_required" | "backend_error";
+
 type ScannerEvent = {
   type: "card_read";
+  outcome: ScannerOutcome;
+  display_name: string | null;
+  message: string;
   read_at: string;
   sequence: number;
 };
@@ -64,6 +71,9 @@ export default function Home() {
   const [staffOpen, setStaffOpen] = useState(false);
   const [demoClosingMinutes, setDemoClosingMinutes] = useState<number | null>(null);
   const [scannerStatus, setScannerStatus] = useState<ScannerStatus>("demo");
+  const [scannerResult, setScannerResult] = useState<ScannerEvent | null>(null);
+  const [welcomeName, setWelcomeName] = useState("Sandbox member");
+  const demoControlsEnabled = process.env.NEXT_PUBLIC_KIOSK_DEMO === "true";
   const screenRef = useRef<Screen>("home");
 
   useEffect(() => {
@@ -109,6 +119,7 @@ export default function Home() {
         try {
           const event = JSON.parse(message.data) as ScannerEvent;
           if (event.type === "card_read" && screenRef.current === "home") {
+            setScannerResult(event);
             setScreen("reading");
           }
         } catch {
@@ -133,9 +144,24 @@ export default function Home() {
 
   useEffect(() => {
     if (screen !== "reading") return;
-    const timer = window.setTimeout(() => setScreen("success"), 950);
+    const timer = window.setTimeout(() => {
+      if (!scannerResult || scannerResult.outcome === "demo") {
+        setScreen("success");
+        return;
+      }
+      if (scannerResult.outcome === "success") {
+        setWelcomeName(scannerResult.display_name || "Sandbox member");
+        setScreen("success");
+      } else if (scannerResult.outcome === "unknown_card") {
+        setScreen("unknown-card");
+      } else if (scannerResult.outcome === "waiver_required") {
+        setScreen("waiver-required");
+      } else {
+        setScreen("backend-error");
+      }
+    }, 700);
     return () => window.clearTimeout(timer);
-  }, [screen]);
+  }, [screen, scannerResult]);
 
   useEffect(() => {
     if (screen !== "success") return;
@@ -202,7 +228,15 @@ export default function Home() {
     window.localStorage.setItem("sandbox-kiosk-announcement", JSON.stringify(next));
   }
 
+  function startDemoCheckIn() {
+    setScannerResult(null);
+    setWelcomeName("Sandbox member");
+    setScreen("reading");
+  }
+
   function reset() {
+    setScannerResult(null);
+    setWelcomeName("Sandbox member");
     setScreen("home");
     setPid("");
     setAffiliation("");
@@ -215,7 +249,7 @@ export default function Home() {
     event.preventDefault();
     const normalized = pid.trim().toUpperCase();
     if (normalized === "A12345678" || normalized === "12345678") {
-      setScreen("reading");
+      startDemoCheckIn();
     } else if (normalized === "A87654321" || normalized === "87654321") {
       setScreen("profile");
     } else {
@@ -234,13 +268,13 @@ export default function Home() {
         <div className="utility-right">
           <span className="clock" aria-label="Current time">{timeLabel}</span>
           <button className="staff-toggle" onClick={openStaffEditor}>STAFF</button>
-          <button
+          {demoControlsEnabled && <button
             className={`demo-toggle ${demoOpen ? "active" : ""}`}
             onClick={() => setDemoOpen((open) => !open)}
             aria-expanded={demoOpen}
           >
             DEMO
-          </button>
+          </button>}
         </div>
       </header>
 
@@ -248,8 +282,8 @@ export default function Home() {
         <section className="brand-plane" aria-label="Scripps Sandbox Makerspace">
           <button
             className="logo-tap-target"
-            onClick={() => setScreen("reading")}
-            aria-label="Simulate tapping a recognized UC San Diego ID"
+            onClick={() => { if (demoControlsEnabled) startDemoCheckIn(); }}
+            aria-label="Scripps Sandbox mark"
           >
             <img src="/assets/scripps-sandbox-mark.png" alt="Scripps Sandbox mark" />
             <span className="orange-tag">CHECK IN</span>
@@ -298,7 +332,7 @@ export default function Home() {
                 <Arrow />
               </button>
             </div>
-            <p className="tap-hint">For this mockup, tap the large Sandbox mark—or open <b>DEMO</b>.</p>
+            {demoControlsEnabled && <p className="tap-hint">For this mockup, tap the large Sandbox mark—or open <b>DEMO</b>.</p>}
           </div>
         )}
 
@@ -363,13 +397,34 @@ export default function Home() {
           </div>
         )}
 
+        {screen === "waiver-required" && (
+          <div className="status-content screen-content">
+            <p className="eyebrow warning">WAIVER REQUIRED</p>
+            <h1>One step before<br />you check in.</h1>
+            <p className="lede">We found your Sandbox account, but not a current waiver. Please ask staff for help before using the space.</p>
+            <div className="button-row">
+              <button className="solid-action" onClick={() => setScreen("home")}>Done</button>
+              <button className="outline-action" onClick={() => setScreen("pid")}>Use another ID</button>
+            </div>
+          </div>
+        )}
+
+        {screen === "backend-error" && (
+          <div className="status-content screen-content">
+            <p className="eyebrow warning">CHECK-IN NOT RECORDED</p>
+            <h1>Please check in<br />with staff.</h1>
+            <p className="lede">The card reader worked, but the attendance log did not. Staff can let you through while the kiosk reconnects.</p>
+            <button className="solid-action" onClick={() => setScreen("home")}>Try again</button>
+          </div>
+        )}
+
         {screen === "link-card" && (
           <div className="form-content screen-content">
             <button className="back" onClick={() => setScreen("unknown-card")}><Arrow direction="left" /> Back</button>
             <p className="eyebrow">CONNECT THIS CARD</p>
             <h1>Enter your<br />connection code.</h1>
             <p className="lede compact">It’s the eight-character code shown after you created your Sandbox account online.</p>
-            <form onSubmit={(event) => { event.preventDefault(); setScreen("reading"); }}>
+            <form onSubmit={(event) => { event.preventDefault(); startDemoCheckIn(); }}>
               <label htmlFor="claim-code">CARD-CONNECTION CODE</label>
               <input
                 id="claim-code"
@@ -467,7 +522,7 @@ export default function Home() {
         <section className="success-plane">
           <div className="success-mark" aria-hidden="true">✓</div>
           <p className="eyebrow">CHECK-IN COMPLETE</p>
-          <h1>Welcome back,<br />Maya.</h1>
+          <h1>Welcome back,<br />{welcomeName}.</h1>
           <p className="lede">You’re checked in to the Scripps Sandbox.</p>
           {minutesUntilClose !== null && (
             <div className="success-closing-alert" role="alert">
@@ -485,7 +540,7 @@ export default function Home() {
         </section>
       )}
 
-      {demoOpen && (
+      {demoControlsEnabled && demoOpen && (
         <aside className="demo-panel" aria-label="Prototype controls">
           <div className="demo-heading">
             <div><small>PROTOTYPE CONTROLS</small><b>Simulate an event</b></div>
@@ -495,7 +550,7 @@ export default function Home() {
             <span aria-hidden="true" />
             <div><small>LOCAL CARD READER</small><b>{scannerStatus === "demo" ? "Demo mode" : scannerStatus}</b></div>
           </div>
-          <button onClick={() => { setScreen("reading"); setDemoOpen(false); }}>Tap recognized ID <Arrow /></button>
+          <button onClick={() => { startDemoCheckIn(); setDemoOpen(false); }}>Tap recognized ID <Arrow /></button>
           <button onClick={() => { setScreen("profile"); setDemoOpen(false); }}>Tap ID · missing info <Arrow /></button>
           <button onClick={() => { setScreen("unknown-card"); setDemoOpen(false); }}>Tap unknown ID <Arrow /></button>
           <button onClick={() => { setScreen("reader-error"); setDemoOpen(false); }}>Card reader error <Arrow /></button>
