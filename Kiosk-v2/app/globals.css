@@ -91,6 +91,61 @@ a { color: inherit; }
 .waiver-action > div b { font-family: "Jost", sans-serif; font-size: 12px; letter-spacing: .16em; }
 .privacy-note { max-width: 760px; margin: 32px 0 0; font-size: 14px; opacity: .72; }
 
+.join-embed-page {
+  position: relative;
+  display: grid;
+  width: 100%;
+  min-height: 100svh;
+  grid-template-rows: 1fr auto;
+  overflow: hidden;
+  background: var(--navy);
+  color: var(--cream);
+  font-family: "Source Sans 3", sans-serif;
+}
+.join-embed-signal {
+  position: absolute;
+  top: clamp(22px, 5vw, 52px);
+  right: clamp(-70px, -4vw, -24px);
+  width: clamp(190px, 34vw, 410px);
+  aspect-ratio: 1;
+  transform: rotate(-12deg);
+  transform-origin: center;
+}
+.join-embed-signal::before {
+  position: absolute;
+  inset: -13%;
+  border: clamp(12px, 2.2vw, 28px) solid var(--orange);
+  border-radius: 50%;
+  content: "";
+}
+.join-embed-signal img { position: relative; z-index: 1; display: block; width: 100%; height: 100%; object-fit: contain; }
+.join-embed-copy {
+  position: relative;
+  z-index: 2;
+  width: min(64%, 720px);
+  align-self: center;
+  padding: clamp(32px, 7vw, 92px) 0 clamp(24px, 5vw, 60px) clamp(28px, 8vw, 104px);
+}
+.join-embed-eyebrow { margin: 0 0 clamp(12px, 2vw, 24px); color: var(--orange); font-family: "Jost", sans-serif; font-size: clamp(11px, 1.3vw, 16px); font-weight: 820; letter-spacing: .18em; }
+.join-embed-copy h1 { margin: 0; font-family: "Jost", sans-serif; font-size: clamp(40px, 7.4vw, 96px); font-weight: 560; letter-spacing: -.06em; line-height: .88; }
+.join-embed-lede { max-width: 590px; margin: clamp(17px, 2.8vw, 34px) 0 0; font-size: clamp(15px, 1.8vw, 23px); line-height: 1.35; }
+.join-embed-steps { display: grid; max-width: 590px; grid-template-columns: repeat(3, 1fr); margin: clamp(22px, 4vw, 50px) 0 clamp(20px, 3vw, 38px); padding: 0; border-top: 1px solid rgba(242,238,227,.44); list-style: none; }
+.join-embed-steps li { display: grid; gap: 4px; padding: clamp(10px, 1.5vw, 18px) 8px 0 0; }
+.join-embed-steps b { color: var(--orange); font-family: "Jost", sans-serif; font-size: clamp(10px, 1.1vw, 13px); letter-spacing: .12em; }
+.join-embed-steps span { font-size: clamp(13px, 1.5vw, 18px); }
+.join-embed-action { display: flex; width: min(100%, 590px); min-height: clamp(52px, 6.5vw, 72px); align-items: center; justify-content: space-between; gap: 20px; padding: 12px clamp(16px, 2.5vw, 28px); background: var(--orange); color: var(--navy); font-family: "Jost", sans-serif; font-size: clamp(15px, 1.6vw, 20px); font-weight: 780; text-decoration: none; }
+.join-embed-action:focus-visible { outline: 4px solid var(--cream); outline-offset: 5px; }
+.join-embed-action b { font-size: clamp(22px, 2.8vw, 34px); }
+.join-embed-copy > small { display: block; margin-top: 9px; font-size: clamp(10px, 1.1vw, 13px); opacity: .72; }
+.join-embed-footer { position: relative; z-index: 2; display: flex; min-height: clamp(48px, 7vw, 74px); align-items: center; justify-content: space-between; gap: 24px; padding: 0 clamp(28px, 8vw, 104px); border-top: 1px solid rgba(242,238,227,.25); font-family: "Jost", sans-serif; font-size: clamp(8px, 1.1vw, 12px); font-weight: 720; letter-spacing: .13em; }
+.join-embed-footer b { color: var(--orange); }
+
+@media (max-aspect-ratio: 1/1) {
+  .join-embed-copy { width: 78%; padding-left: 28px; }
+  .join-embed-signal { top: 6%; right: -120px; opacity: .48; }
+  .join-embed-footer { padding-inline: 28px; }
+}
+
 .staff-app { min-height: 100svh; padding-bottom: 80px; background: #e8e5dd; color: var(--navy); font-family: "Source Sans 3", sans-serif; }
 .staff-app-header { display: flex; min-height: 84px; align-items: center; justify-content: space-between; padding: 0 clamp(24px, 5vw, 72px); background: var(--navy); color: var(--cream); }
 .staff-app-header > div { display: flex; align-items: center; gap: 12px; font-family: "Jost", sans-serif; font-size: 13px; letter-spacing: .13em; }

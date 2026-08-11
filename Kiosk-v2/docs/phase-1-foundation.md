@@ -32,11 +32,14 @@ The current waiver sheet fields are `Name`, `Email`, `Date_Signed`, and `A_Numbe
 
 Raw card identifiers must not be stored in the application database. The production card-link service will store an HMAC digest and the last four characters for support display.
 
+The waiver matcher is now implemented as deterministic, tested application logic. A unique normalized ID match is sufficient. If no ID match exists, both normalized email and normalized name must match uniquely. Email-only, name-only, unsigned, duplicate, and otherwise ambiguous rows never activate an account automatically.
+
 ## Staff authorization model
 
 - UC San Diego Google sign-in establishes staff identity.
 - An application role determines whether the user may view presence, check visitors out, edit kiosk messages, manage people, or administer staff access.
 - Tool-specific trainer authorization determines which certifications a staff member can grant.
+- Only administrators may grant trainer status.
 - Certifications and trainer authorizations have optional expiration fields but do not expire by default.
 - Every checkout, permission change, certification, revocation, card link, and staff message is written to the audit log.
 
@@ -63,3 +66,5 @@ Drive is for project documentation, procedures, and approved exports—not the l
 - Implement kiosk-to-database API calls, encrypted local offline queueing, retry behavior, and conflict handling.
 - Shadow-write and compare the new system with the current Sheets before enabling production writes.
 - Complete a retention decision for account, visit, and audit records; eight years is the current planning assumption, not yet policy.
+
+The owner-facing dependency queue is maintained in `docs/owner-action-stack.md`; WordPress placement options are in `docs/wordpress-embed.md`.
