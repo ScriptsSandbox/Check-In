@@ -8,9 +8,11 @@ This service turns the ESP32 reader's USB serial output into live browser events
 2. Create a Python virtual environment and install `requirements.txt`.
 3. Copy `systemd/sandbox-scanner-bridge.service` to `/etc/systemd/system/`, adjusting the user and paths if needed.
 4. If automatic port detection is ambiguous, set `SCANNER_SERIAL_PORT=/dev/ttyACM0` in `/etc/sandbox-kiosk/scanner.env`.
-5. Enable and start the service. Confirm `http://127.0.0.1:8765/health` reports a connected reader.
+5. Enable and start the service. Confirm `http://127.0.0.1:8765/health` reports a connected reader and `backend_ready: true` before displaying the kiosk.
 
 When the kiosk UI is served from `localhost`, it automatically connects to `ws://127.0.0.1:8765/ws`. A different endpoint can be supplied at build time with `NEXT_PUBLIC_SCANNER_WS_URL`.
+
+The Sheets backend warms its user, waiver, and activity caches at startup. The user and waiver cache defaults to five minutes; the activity cache defaults to one hour and is updated after every successful append. Override these with `SHEETS_CACHE_SECONDS` and `SHEETS_ACTIVITY_CACHE_SECONDS` when needed.
 
 ## Test without hardware
 
@@ -22,12 +24,12 @@ curl -X POST http://127.0.0.1:8765/simulate \
   -d '{"uid":"04A1B2C3"}'
 ```
 
-The simulation route does not exist unless simulation is explicitly enabled. The bridge suppresses repeated reads of the same card for two seconds and never writes full UIDs to its logs.
+The simulation route does not exist unless simulation is explicitly enabled. The bridge suppresses repeated reads of the same card for 15 seconds by default—long enough to outlast a slow Sheets request—and never writes full UIDs to its logs. Set `SCANNER_DUPLICATE_SECONDS` to adjust the window.
 
-## Run the dependency-free tests
+## Run the tests
 
 From the `bridge` directory:
 
 ```sh
-PYTHONPATH=. python3 -m unittest discover -s tests
+PYTHONPATH=. python3 -m pytest -q
 ```
