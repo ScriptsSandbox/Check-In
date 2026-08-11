@@ -1,0 +1,21 @@
+[Unit]
+Description=Scripps Sandbox card-reader bridge
+After=network.target
+
+[Service]
+Type=simple
+User=sandbox-kiosk
+Group=sandbox-kiosk
+WorkingDirectory=/opt/sandbox-kiosk/bridge
+EnvironmentFile=-/etc/sandbox-kiosk/scanner.env
+ExecStart=/opt/sandbox-kiosk/venv/bin/uvicorn app:app --host 127.0.0.1 --port 8765
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=-/var/lib/sandbox-kiosk
+
+[Install]
+WantedBy=multi-user.target
