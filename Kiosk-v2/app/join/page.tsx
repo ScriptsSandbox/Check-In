@@ -38,8 +38,16 @@ export default function JoinPage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ ...payload, consent: form.get("consent") === "on" }),
       });
-      const data = (await response.json()) as RegistrationResult & { error?: string };
-      if (!response.ok) throw new Error(data.error || "Registration could not be saved.");
+      const responseText = await response.text();
+      let data: (RegistrationResult & { error?: string }) | null = null;
+      try {
+        data = JSON.parse(responseText) as RegistrationResult & { error?: string };
+      } catch {
+        // Local kiosk builds cannot load the hosted Cloudflare database binding.
+      }
+      if (!response.ok || !data) {
+        throw new Error(data?.error || "Online registration is not available on this kiosk yet. Please ask Sandbox staff for help.");
+      }
       setResult(data);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (submissionError) {
