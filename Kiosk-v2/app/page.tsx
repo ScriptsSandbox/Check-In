@@ -9,6 +9,7 @@ type Screen =
   | "pid"
   | "not-found"
   | "unknown-card"
+  | "link-card"
   | "reader-error"
   | "profile"
   | "profile-detail"
@@ -55,6 +56,7 @@ export default function Home() {
   const [pid, setPid] = useState("");
   const [affiliation, setAffiliation] = useState("");
   const [detail, setDetail] = useState("");
+  const [claimCode, setClaimCode] = useState("");
   const [countdown, setCountdown] = useState(8);
   const [now, setNow] = useState<Date | null>(null);
   const [announcement, setAnnouncement] = useState<Announcement>(emptyAnnouncement);
@@ -205,6 +207,7 @@ export default function Home() {
     setPid("");
     setAffiliation("");
     setDetail("");
+    setClaimCode("");
     setDemoOpen(false);
   }
 
@@ -350,12 +353,36 @@ export default function Home() {
           <div className="status-content screen-content">
             <p className="eyebrow warning">CARD NOT CONNECTED</p>
             <h1>We don’t know<br />this card yet.</h1>
-            <p className="lede">Already have a Sandbox profile? Check in with your PID and we’ll connect this card.</p>
+            <p className="lede">Already registered online? Use your card-connection code. Existing members can use their PID or employee ID.</p>
             <div className="stacked-actions">
-              <button className="solid-action" onClick={() => setScreen("pid")}>Use my PID <Arrow /></button>
+              <button className="solid-action" onClick={() => setScreen("link-card")}>Enter connection code <Arrow /></button>
+              <button className="outline-action" onClick={() => setScreen("pid")}>Use my PID or employee ID</button>
               <button className="outline-action" onClick={() => setScreen("new-here")}>I’m new here</button>
               <button className="quiet-action" onClick={() => setScreen("home")}>Try the card again</button>
             </div>
+          </div>
+        )}
+
+        {screen === "link-card" && (
+          <div className="form-content screen-content">
+            <button className="back" onClick={() => setScreen("unknown-card")}><Arrow direction="left" /> Back</button>
+            <p className="eyebrow">CONNECT THIS CARD</p>
+            <h1>Enter your<br />connection code.</h1>
+            <p className="lede compact">It’s the eight-character code shown after you created your Sandbox account online.</p>
+            <form onSubmit={(event) => { event.preventDefault(); setScreen("reading"); }}>
+              <label htmlFor="claim-code">CARD-CONNECTION CODE</label>
+              <input
+                id="claim-code"
+                value={claimCode}
+                onChange={(event) => setClaimCode(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8))}
+                autoCapitalize="characters"
+                autoComplete="off"
+                placeholder="7MK4Q2HP"
+                autoFocus
+              />
+              <button className="solid-action" type="submit" disabled={claimCode.length !== 8}>Connect card and check in <Arrow /></button>
+            </form>
+            <button className="quiet-action align-left" onClick={() => setScreen("pid")}>I don’t have my code</button>
           </div>
         )}
 
@@ -430,6 +457,7 @@ export default function Home() {
                 {Array.from({ length: 64 }, (_, index) => <i key={index} />)}
               </div>
             </div>
+            <a className="outline-action onboarding-link" href="/join">Open the registration form on this screen</a>
             <button className="outline-action" onClick={() => setScreen("pid")}>I already registered</button>
           </div>
         )}

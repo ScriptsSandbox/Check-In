@@ -2,11 +2,11 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Scripps Sandbox Makerspace Check-in",
-  description: "Interactive kiosk prototype for the Scripps Sandbox Makerspace.",
+  title: "Scripps Sandbox Makerspace",
+  description: "Check in, create a Sandbox account, and manage makerspace operations.",
   openGraph: {
-    title: "Scripps Sandbox Interactive Check-in Prototype",
-    description: "Explore the complete check-in, exception, and onboarding flows.",
+    title: "Scripps Sandbox Makerspace",
+    description: "Check-in, first-visit registration, and staff operations for the Scripps Sandbox.",
     images: ["/scripps-sandbox-prototype-og.png"],
   },
 };
