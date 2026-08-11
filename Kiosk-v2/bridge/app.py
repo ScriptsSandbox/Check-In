@@ -24,6 +24,7 @@ BAUD_RATE = int(os.getenv("SCANNER_BAUD", "115200"))
 SERIAL_PORT = os.getenv("SCANNER_SERIAL_PORT", "").strip()
 SIMULATION_ENABLED = os.getenv("SCANNER_SIMULATE", "false").lower() == "true"
 BACKEND_MODE = os.getenv("SCANNER_CHECKIN_BACKEND", "demo").strip().lower()
+DUPLICATE_WINDOW_SECONDS = float(os.getenv("SCANNER_DUPLICATE_SECONDS", "15"))
 if BACKEND_MODE not in {"demo", "sheets"}:
     raise RuntimeError("SCANNER_CHECKIN_BACKEND must be 'demo' or 'sheets'")
 
@@ -42,8 +43,9 @@ class BridgeState:
         self.reader_port: str | None = None
         self.sequence = 0
         self.clients: set[asyncio.Queue[dict[str, Any]]] = set()
-        self.guard = DuplicateGuard()
+        self.guard = DuplicateGuard(window_seconds=DUPLICATE_WINDOW_SECONDS)
         self.backend = backend
+        self.backend_ready = backend is None
 
     def broadcast(self, event: dict[str, Any]) -> None:
         for client in tuple(self.clients):
@@ -53,6 +55,10 @@ class BridgeState:
 
     async def publish(self, uid: str) -> bool:
         if not self.guard.accept(uid):
+            LOGGER.info(
+                "Suppressed repeated card read inside the %.1fs duplicate window",
+                self.guard.window_seconds,
+            )
             return False
 
         self.sequence += 1
@@ -87,6 +93,11 @@ class BridgeState:
                     message="The check-in could not be recorded. Please see staff.",
                 )
 
+        if result.outcome == "backend_error":
+            self.guard.forget(uid)
+        elif self.backend is not None:
+            self.backend_ready = True
+
         processing_ms = round(
             (asyncio.get_running_loop().time() - started_at) * 1000
         )
@@ -99,12 +110,14 @@ class BridgeState:
             "read_at": read_at,
             "sequence": sequence,
             "processing_ms": processing_ms,
+            "backend_timings_ms": result.timings_ms,
         }
         self.broadcast(event)
         LOGGER.info(
-            "Card read processed with outcome %s in %sms",
+            "Card read processed with outcome %s in %sms; backend stages=%s",
             result.outcome,
             processing_ms,
+            result.timings_ms,
         )
         return True
 
@@ -151,15 +164,27 @@ async def serial_reader() -> None:
             await asyncio.sleep(3)
 
 
+async def warm_backend() -> None:
+    if STATE.backend is None:
+        return
+    try:
+        timings = await asyncio.to_thread(STATE.backend.warm_up)
+    except Exception:
+        STATE.backend_ready = False
+        LOGGER.exception("Sheets cache warm-up failed; the first scan will retry")
+        return
+    STATE.backend_ready = True
+    LOGGER.info("Sheets cache warm-up complete; stages=%s", timings)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    task = asyncio.create_task(serial_reader())
+    reader_task = asyncio.create_task(serial_reader())
+    warm_task = asyncio.create_task(warm_backend())
     yield
-    task.cancel()
-    try:
-        await task
-    except asyncio.CancelledError:
-        pass
+    for task in (reader_task, warm_task):
+        task.cancel()
+    await asyncio.gather(reader_task, warm_task, return_exceptions=True)
 
 
 app = FastAPI(title="Scripps Sandbox Scanner Bridge", lifespan=lifespan)
@@ -173,6 +198,7 @@ async def health() -> dict[str, Any]:
         "port": STATE.reader_port,
         "clients": len(STATE.clients),
         "backend": "demo" if STATE.backend is None else "sheets",
+        "backend_ready": STATE.backend_ready,
     }
 
 
