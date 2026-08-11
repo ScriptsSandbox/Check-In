@@ -6,8 +6,8 @@ This list is deliberately ordered so development can continue without waiting on
 
 - Choose the visitor-facing entry point: a normal button on the Sandbox WordPress site (recommended) or the purpose-built 4:3 `/join/embed` card.
 - Choose or request the public registration hostname. The current `rjatplay.chatgpt.site` address is an owner-only staging site, not the final public identity.
-- Supply or approve the short privacy notice and the contact address visitors should use for corrections or account questions.
-- Supply the first production roster of administrators, staff, trainers, and each trainer's authorized tools.
+- Confirm that `scripps-sandbox@ucsd.edu` is an actively monitored shared mailbox. It is the proposed first-line contact for account corrections and Sandbox-specific privacy questions; the UC San Diego Campus Privacy Office remains the escalation point.
+- Supply UC San Diego email addresses for the approved staff roster when Google sign-in is configured. Names, roles, and initial trainer authorizations are already recorded.
 
 ## 2. Institutional access / IT items
 
@@ -38,3 +38,16 @@ This list is deliberately ordered so development can continue without waiting on
 - Tool certifications and trainer authorizations do not expire for now, but may later.
 - Only administrators grant trainer status; trainers grant only the tool certifications they are authorized to teach.
 - Eight years is the provisional retention assumption pending UC San Diego confirmation.
+
+## Initial access roster
+
+| Person | Initial role | Trainer authorizations |
+| --- | --- | --- |
+| Riley Meehan | Administrator | Administrator may separately receive tool-specific trainer authorization |
+| Rita McBean | Staff | Laser cutter |
+| Arnav Dev | Staff | Laser cutter |
+| Nathan Park | Staff | Laser cutter |
+| Sofia Oliveira | Staff | Laser cutter |
+| Bryan Solabac | Staff | Laser cutter |
+
+No personal passwords or UC San Diego sign-in credentials are collected by this project. Staff will sign in directly through UC San Diego Google Workspace after the application has an institutional OAuth client ID and approved redirect URI.
