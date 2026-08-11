@@ -28,7 +28,13 @@ type ScannerStatus = "demo" | "connecting" | "connected" | "disconnected";
 
 type ScannerOutcome = "demo" | "success" | "unknown_card" | "waiver_required" | "backend_error";
 
-type ScannerEvent = {
+type ScannerDetectedEvent = {
+  type: "card_detected";
+  read_at: string;
+  sequence: number;
+};
+
+type ScannerResultEvent = {
   type: "card_read";
   outcome: ScannerOutcome;
   display_name: string | null;
@@ -36,7 +42,10 @@ type ScannerEvent = {
   visit_count: number | null;
   read_at: string;
   sequence: number;
+  processing_ms?: number;
 };
+
+type ScannerEvent = ScannerDetectedEvent | ScannerResultEvent;
 
 const emptyAnnouncement: Announcement = {
   active: false,
@@ -72,11 +81,12 @@ export default function Home() {
   const [staffOpen, setStaffOpen] = useState(false);
   const [demoClosingMinutes, setDemoClosingMinutes] = useState<number | null>(null);
   const [scannerStatus, setScannerStatus] = useState<ScannerStatus>("demo");
-  const [scannerResult, setScannerResult] = useState<ScannerEvent | null>(null);
+  const [scannerResult, setScannerResult] = useState<ScannerResultEvent | null>(null);
   const [welcomeName, setWelcomeName] = useState("Sandbox member");
   const [visitCount, setVisitCount] = useState<number | null>(null);
   const demoControlsEnabled = process.env.NEXT_PUBLIC_KIOSK_DEMO === "true";
   const screenRef = useRef<Screen>("home");
+  const cardDetectedAtRef = useRef<number | null>(null);
 
   useEffect(() => {
     screenRef.current = screen;
@@ -120,9 +130,19 @@ export default function Home() {
       socket.addEventListener("message", (message) => {
         try {
           const event = JSON.parse(message.data) as ScannerEvent;
-          if (event.type === "card_read" && screenRef.current === "home") {
-            setScannerResult(event);
+          if (event.type === "card_detected" && screenRef.current === "home") {
+            cardDetectedAtRef.current = performance.now();
+            setScannerResult(null);
             setScreen("reading");
+          } else if (
+            event.type === "card_read" &&
+            (screenRef.current === "home" || screenRef.current === "reading")
+          ) {
+            if (screenRef.current === "home") {
+              cardDetectedAtRef.current = performance.now();
+              setScreen("reading");
+            }
+            setScannerResult(event);
           }
         } catch {
           // Ignore malformed local bridge messages; the bridge will keep listening.
@@ -145,9 +165,12 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (screen !== "reading") return;
+    if (screen !== "reading" || !scannerResult) return;
+    const detectedAt = cardDetectedAtRef.current ?? performance.now();
+    const minimumFeedbackMs = 500;
+    const delay = Math.max(0, minimumFeedbackMs - (performance.now() - detectedAt));
     const timer = window.setTimeout(() => {
-      if (!scannerResult || scannerResult.outcome === "demo") {
+      if (scannerResult.outcome === "demo") {
         setScreen("success");
         return;
       }
@@ -162,7 +185,7 @@ export default function Home() {
       } else {
         setScreen("backend-error");
       }
-    }, 700);
+    }, delay);
     return () => window.clearTimeout(timer);
   }, [screen, scannerResult]);
 
@@ -232,13 +255,23 @@ export default function Home() {
   }
 
   function startDemoCheckIn() {
-    setScannerResult(null);
+    cardDetectedAtRef.current = performance.now();
+    setScannerResult({
+      type: "card_read",
+      outcome: "demo",
+      display_name: "Sandbox member",
+      message: "Demo read accepted.",
+      visit_count: null,
+      read_at: new Date().toISOString(),
+      sequence: 0,
+    });
     setWelcomeName("Sandbox member");
     setVisitCount(null);
     setScreen("reading");
   }
 
   function reset() {
+    cardDetectedAtRef.current = null;
     setScannerResult(null);
     setWelcomeName("Sandbox member");
     setVisitCount(null);
@@ -345,8 +378,8 @@ export default function Home() {
           <div className="status-content screen-content">
             <div className="signal" aria-hidden="true"><i /><i /><i /></div>
             <p className="eyebrow">CARD DETECTED</p>
-            <h1>Reading<br />your ID…</h1>
-            <p className="lede">Keep your card near the reader.</p>
+            <h1>Checking<br />you in…</h1>
+            <p className="lede">Card detected. You can remove it while we record your visit.</p>
           </div>
         )}
 
