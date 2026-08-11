@@ -43,7 +43,7 @@ This list is deliberately ordered so development can continue without waiting on
 
 | Person | Initial role | Trainer authorizations |
 | --- | --- | --- |
-| Riley Meehan | Administrator | Administrator may separately receive tool-specific trainer authorization |
+| Riley Meehan | Administrator | Laser cutter |
 | Rita McBean | Staff | Laser cutter |
 | Arnav Dev | Staff | Laser cutter |
 | Nathan Park | Staff | Laser cutter |
