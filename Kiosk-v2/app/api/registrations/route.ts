@@ -1,4 +1,3 @@
-import { getDb } from "@/db";
 import {
   auditEvents,
   cardLinkSessions,
@@ -37,12 +36,17 @@ const allowedIdentifierTypes = new Set(["pid", "employee_id", "other"]);
 function validEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
+
 function errorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : "Unexpected registration error";
   if (message.includes("UNIQUE constraint failed")) {
     return "An account already exists for that email or UC San Diego ID. Please use the existing-account option at the kiosk or ask staff for help.";
   }
-  if (message.includes("D1 binding") || message.includes("no such table")) {
+  if (
+    message.includes("D1 binding") ||
+    message.includes("cloudflare:workers") ||
+    message.includes("no such table")
+  ) {
     return "Registration storage is not ready yet. No information was saved.";
   }
   return "We could not save the registration. Please try again or ask Sandbox staff for help.";
@@ -80,6 +84,10 @@ export async function POST(request: Request) {
       return Response.json({ error: "Consent is required to create an account." }, { status: 400 });
     }
 
+    // Loading the Cloudflare binding only after validation keeps the local Pi
+    // route importable. A missing hosted DB is then handled as a JSON response
+    // instead of escaping as a plain-text module-load error.
+    const { getDb } = await import("@/db");
     const userId = id("usr");
     const identifierId = id("uid");
     const waiverId = id("wvr");
