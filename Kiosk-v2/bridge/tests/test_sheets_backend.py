@@ -1,6 +1,10 @@
 from datetime import datetime
 
-from sheets_backend import SheetsCheckInBackend, normalize_person_id
+from sheets_backend import (
+    GoogleSheetsProvider,
+    SheetsCheckInBackend,
+    normalize_person_id,
+)
 
 
 class FakeProvider:
@@ -11,17 +15,22 @@ class FakeProvider:
             ["Timestamp", "Epoch", "Name", "Card UUID", "Action"]
         ]
         self.appended_rows = []
+        self.calls = {"users": 0, "waivers": 0, "activity": 0, "append": 0}
 
     def user_records(self):
+        self.calls["users"] += 1
         return self.users
 
     def waiver_records(self):
+        self.calls["waivers"] += 1
         return self.waivers
 
     def activity_rows(self):
+        self.calls["activity"] += 1
         return self.existing_activity
 
     def append_activity(self, row):
+        self.calls["append"] += 1
         self.appended_rows.append(row)
 
 
@@ -31,6 +40,42 @@ def backend_for(provider):
         now=lambda: 1_723_377_600.9,
         local_datetime=lambda: datetime(2024, 8, 11, 9, 30, 0),
     )
+
+
+class FakeActivitySheet:
+    def __init__(self):
+        self.rows = [["Timestamp", "Epoch", "Name", "Card UUID", "Action"]]
+        self.reads = 0
+        self.appends = 0
+
+    def get_all_values(self):
+        self.reads += 1
+        return [list(row) for row in self.rows]
+
+    def append_row(self, row):
+        self.appends += 1
+        self.rows.append(list(row))
+
+
+def test_activity_cache_avoids_full_sheet_read_after_append():
+    sheet = FakeActivitySheet()
+    provider = GoogleSheetsProvider("credentials", "users", "waivers", "activity")
+    provider._activity_sheet = sheet
+
+    assert len(provider.activity_rows()) == 1
+    provider.append_activity(["08/11/2024 09:30:00", "", "Maker", "CARD", "User Checkin"])
+    assert len(provider.activity_rows()) == 2
+    assert sheet.reads == 1
+    assert sheet.appends == 1
+
+
+def test_warm_up_loads_all_read_heavy_sources():
+    provider = FakeProvider()
+
+    timings = backend_for(provider).warm_up()
+
+    assert provider.calls == {"users": 1, "waivers": 1, "activity": 1, "append": 0}
+    assert set(timings) == {"users", "waivers", "activity", "total"}
 
 
 def test_known_card_with_waiver_appends_existing_activity_shape():
@@ -51,6 +96,13 @@ def test_known_card_with_waiver_appends_existing_activity_shape():
     assert result.outcome == "success"
     assert result.display_name == "Test Maker"
     assert result.visit_count == 1
+    assert set(result.timings_ms) == {
+        "user_lookup",
+        "waiver_lookup",
+        "activity_lookup",
+        "activity_append",
+        "total",
+    }
     assert provider.appended_rows == [
         [
             "08/11/2024 09:30:00",
@@ -65,16 +117,17 @@ def test_known_card_with_waiver_appends_existing_activity_shape():
     ]
 
 
-def test_unknown_card_does_not_write_activity():
+def test_unknown_card_does_not_read_waivers_or_activity_or_write():
     provider = FakeProvider()
 
     result = backend_for(provider).check_in("ABCDEF12345678")
 
     assert result.outcome == "unknown_card"
+    assert provider.calls == {"users": 1, "waivers": 0, "activity": 0, "append": 0}
     assert provider.appended_rows == []
 
 
-def test_known_card_without_waiver_does_not_write_activity():
+def test_known_card_without_waiver_does_not_read_activity_or_write():
     provider = FakeProvider(
         users=[
             {
@@ -90,6 +143,7 @@ def test_known_card_without_waiver_does_not_write_activity():
     result = backend_for(provider).check_in("ABCDEF12345678")
 
     assert result.outcome == "waiver_required"
+    assert provider.calls == {"users": 1, "waivers": 1, "activity": 0, "append": 0}
     assert provider.appended_rows == []
 
 
@@ -118,7 +172,7 @@ def test_person_id_normalization_preserves_legacy_sheet_behavior():
     assert normalize_person_id("") == ""
 
 
-def test_visit_count_uses_unique_calendar_days():
+def test_visit_count_uses_unique_calendar_days_while_recording_each_checkin():
     provider = FakeProvider(
         users=[
             {
