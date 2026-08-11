@@ -212,6 +212,55 @@ class SheetsCheckInBackend:
                 timings_ms=timings,
             )
 
+        return self._check_in_user(user, normalized_uid, total_started, timings)
+
+    def check_in_identifier(self, identifier: str) -> CheckInResult:
+        total_started = time.monotonic()
+        timings: dict[str, int] = {}
+        normalized_identifier = normalize_person_id(identifier)
+
+        stage_started = time.monotonic()
+        users = self.provider.user_records()
+        matches = [
+            record
+            for record in users
+            if normalized_identifier
+            and normalize_person_id(record.get("Student ID")) == normalized_identifier
+        ]
+        timings["user_lookup"] = elapsed_ms(stage_started)
+        if not matches:
+            timings["total"] = elapsed_ms(total_started)
+            return CheckInResult(
+                outcome="unknown_identifier",
+                message="We could not find that PID or employee ID.",
+                timings_ms=timings,
+            )
+        if len(matches) > 1:
+            timings["total"] = elapsed_ms(total_started)
+            return CheckInResult(
+                outcome="backend_error",
+                message="More than one account uses that identifier. Please see staff.",
+                timings_ms=timings,
+            )
+
+        user = matches[0]
+        card_uid = str(user.get("Card UUID", "")).strip().upper()
+        activity_identifier = card_uid or normalized_identifier.upper()
+        return self._check_in_user(
+            user,
+            activity_identifier,
+            total_started,
+            timings,
+        )
+
+    def _check_in_user(
+        self,
+        user: dict[str, Any],
+        activity_identifier: str,
+        total_started: float,
+        timings: dict[str, int],
+    ) -> CheckInResult:
+
         user_id = normalize_person_id(user.get("Student ID"))
         user_email = normalize_email(user.get("Email Address"))
         stage_started = time.monotonic()
@@ -245,7 +294,7 @@ class SheetsCheckInBackend:
             str(row[0]).split()[0]
             for row in activity_rows[1:]
             if len(row) >= 5
-            and str(row[3]).strip().upper() == normalized_uid
+            and str(row[3]).strip().upper() == activity_identifier
             and str(row[4]).strip() == "User Checkin"
             and str(row[0]).strip()
         }
@@ -255,7 +304,7 @@ class SheetsCheckInBackend:
             local_now.strftime("%m/%d/%Y %H:%M:%S"),
             int(self.now()),
             display_name,
-            normalized_uid,
+            activity_identifier,
             "User Checkin",
             "",
             "",

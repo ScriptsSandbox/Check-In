@@ -26,7 +26,7 @@ type Announcement = {
 
 type ScannerStatus = "demo" | "connecting" | "connected" | "disconnected";
 
-type ScannerOutcome = "demo" | "success" | "unknown_card" | "waiver_required" | "backend_error";
+type ScannerOutcome = "demo" | "success" | "unknown_card" | "unknown_identifier" | "waiver_required" | "backend_error";
 
 type ScannerDetectedEvent = {
   type: "card_detected";
@@ -180,6 +180,8 @@ export default function Home() {
         setScreen("success");
       } else if (scannerResult.outcome === "unknown_card") {
         setScreen("unknown-card");
+    } else if (scannerResult.outcome === "unknown_identifier") {
+      setScreen("not-found");
       } else if (scannerResult.outcome === "waiver_required") {
         setScreen("waiver-required");
       } else {
@@ -283,15 +285,33 @@ export default function Home() {
     setDemoOpen(false);
   }
 
-  function submitPid(event: FormEvent) {
+  async function submitPid(event: FormEvent) {
     event.preventDefault();
     const normalized = pid.trim().toUpperCase();
-    if (normalized === "A12345678" || normalized === "12345678") {
-      startDemoCheckIn();
-    } else if (normalized === "A87654321" || normalized === "87654321") {
-      setScreen("profile");
-    } else {
-      setScreen("not-found");
+    if (!normalized) return;
+
+    cardDetectedAtRef.current = performance.now();
+    setScannerResult(null);
+    setScreen("reading");
+    try {
+      const response = await fetch("http://127.0.0.1:8765/check-in/identifier", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier: normalized }),
+      });
+      if (!response.ok) throw new Error("Identifier check-in failed");
+      const result = await response.json() as ScannerResultEvent;
+      setScannerResult(result);
+    } catch {
+      setScannerResult({
+        type: "card_read",
+        outcome: "backend_error",
+        display_name: null,
+        message: "The check-in could not be recorded. Please see staff.",
+        visit_count: null,
+        read_at: new Date().toISOString(),
+        sequence: 0,
+      });
     }
   }
 
@@ -361,8 +381,8 @@ export default function Home() {
               </div>
             )}
             <div className="primary-actions">
-              <button className="text-action" onClick={() => setScreen(demoControlsEnabled ? "pid" : "new-here")}>
-                <span><small>NO ID?</small>{demoControlsEnabled ? "Check in with PID or employee ID" : "Ask staff for check-in help"}</span>
+              <button className="text-action" onClick={() => setScreen("pid")}>
+                <span><small>NO CARD?</small>Check in with PID or employee ID</span>
                 <Arrow />
               </button>
               <button className="text-action" onClick={() => setScreen("new-here")}>
@@ -404,7 +424,7 @@ export default function Home() {
                 Check in <Arrow />
               </button>
             </form>
-            <p className="demo-note">Try A12345678 for a complete profile or A87654321 for a missing-info flow.</p>
+            {demoControlsEnabled && <p className="demo-note">Demo IDs: A12345678 or A87654321.</p>}
           </div>
         )}
 
@@ -426,19 +446,11 @@ export default function Home() {
             <p className="eyebrow warning">CARD NOT CONNECTED</p>
             <h1>We don’t know<br />this card yet.</h1>
             <p className="lede">Already registered online? Use your card-connection code. Existing members can use their PID or employee ID.</p>
-            {demoControlsEnabled ? (
-              <div className="stacked-actions">
-                <button className="solid-action" onClick={() => setScreen("link-card")}>Enter connection code <Arrow /></button>
-                <button className="outline-action" onClick={() => setScreen("pid")}>Use my PID or employee ID</button>
-                <button className="outline-action" onClick={() => setScreen("new-here")}>I’m new here</button>
-                <button className="quiet-action" onClick={() => setScreen("home")}>Try the card again</button>
-              </div>
-            ) : (
-              <div className="stacked-actions">
-                <button className="solid-action" onClick={() => setScreen("new-here")}>Ask staff for help <Arrow /></button>
-                <button className="quiet-action" onClick={() => setScreen("home")}>Try the card again</button>
-              </div>
-            )}
+          <div className="stacked-actions">
+            <button className="solid-action" onClick={() => setScreen("pid")}>Use my PID or employee ID <Arrow /></button>
+            <button className="outline-action" onClick={() => setScreen("new-here")}>I’m new here</button>
+            <button className="quiet-action" onClick={() => setScreen("home")}>Try the card again</button>
+          </div>
           </div>
         )}
 

@@ -10,6 +10,7 @@ import os
 from typing import Any, AsyncIterator
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import serial
 from serial.tools import list_ports
@@ -188,6 +189,15 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="Scripps Sandbox Scanner Bridge", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://127.0.0.1:3000",
+        "http://localhost:3000",
+    ],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
+)
 
 
 @app.get("/health")
@@ -233,6 +243,62 @@ async def scanner_events(websocket: WebSocket) -> None:
 
 class SimulatedRead(BaseModel):
     uid: str
+
+
+class IdentifierCheckIn(BaseModel):
+    identifier: str
+
+
+@app.post("/check-in/identifier")
+async def check_in_with_identifier(read: IdentifierCheckIn) -> dict[str, Any]:
+    identifier = read.identifier.strip()
+    if not identifier or len(identifier) > 64:
+        raise HTTPException(status_code=422, detail="Enter a valid PID or employee ID")
+
+    read_at = datetime.now(timezone.utc).isoformat()
+    started_at = asyncio.get_running_loop().time()
+    STATE.sequence += 1
+    sequence = STATE.sequence
+    if STATE.backend is None:
+        result = CheckInResult(
+            outcome="demo",
+            display_name="Sandbox member",
+            message="Demo check-in accepted without writing to Sheets.",
+        )
+    else:
+        try:
+            result = await asyncio.to_thread(
+                STATE.backend.check_in_identifier,
+                identifier,
+            )
+            STATE.backend_ready = True
+        except Exception:
+            LOGGER.exception("Check-in backend failed while processing an identifier")
+            result = CheckInResult(
+                outcome="backend_error",
+                message="The check-in could not be recorded. Please see staff.",
+            )
+
+    processing_ms = round(
+        (asyncio.get_running_loop().time() - started_at) * 1000
+    )
+    LOGGER.info(
+        "Identifier check-in processed with outcome %s in %sms; backend stages=%s",
+        result.outcome,
+        processing_ms,
+        result.timings_ms,
+    )
+    return {
+        "type": "card_read",
+        "outcome": result.outcome,
+        "display_name": result.display_name,
+        "message": result.message,
+        "visit_count": result.visit_count,
+        "read_at": read_at,
+        "sequence": sequence,
+        "processing_ms": processing_ms,
+        "backend_timings_ms": result.timings_ms,
+    }
 
 
 @app.post("/simulate")

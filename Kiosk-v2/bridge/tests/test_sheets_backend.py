@@ -197,3 +197,51 @@ def test_visit_count_uses_unique_calendar_days_while_recording_each_checkin():
     assert result.outcome == "success"
     assert result.visit_count == 2
     assert len(provider.appended_rows) == 1
+
+def test_identifier_checkin_uses_the_existing_card_activity_key():
+    provider = FakeProvider(
+        users=[
+            {
+                "Card UUID": "ABCDEF12345678",
+                "Student ID": "A12345678",
+                "Email Address": "maker@ucsd.edu",
+                "Name": "Test Maker",
+            }
+        ],
+        waivers=[{"A_Number": "12345678", "Email": ""}],
+    )
+
+    result = backend_for(provider).check_in_identifier("a12345678")
+
+    assert result.outcome == "success"
+    assert result.display_name == "Test Maker"
+    assert provider.appended_rows[0][3] == "ABCDEF12345678"
+
+
+def test_identifier_checkin_supports_accounts_without_cards():
+    provider = FakeProvider(
+        users=[
+            {
+                "Card UUID": "",
+                "Student ID": "A12345678",
+                "Email Address": "maker@ucsd.edu",
+                "Name": "Test Maker",
+            }
+        ],
+        waivers=[{"A_Number": "12345678", "Email": ""}],
+    )
+
+    result = backend_for(provider).check_in_identifier("12345678")
+
+    assert result.outcome == "success"
+    assert provider.appended_rows[0][3] == "12345678"
+
+
+def test_unknown_identifier_does_not_read_waivers_or_write():
+    provider = FakeProvider()
+
+    result = backend_for(provider).check_in_identifier("A99999999")
+
+    assert result.outcome == "unknown_identifier"
+    assert provider.calls == {"users": 1, "waivers": 0, "activity": 0, "append": 0}
+    assert provider.appended_rows == []
