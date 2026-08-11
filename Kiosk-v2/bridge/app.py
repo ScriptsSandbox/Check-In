@@ -45,9 +45,31 @@ class BridgeState:
         self.guard = DuplicateGuard()
         self.backend = backend
 
+    def broadcast(self, event: dict[str, Any]) -> None:
+        for client in tuple(self.clients):
+            if client.full():
+                client.get_nowait()
+            client.put_nowait(event)
+
     async def publish(self, uid: str) -> bool:
         if not self.guard.accept(uid):
             return False
+
+        self.sequence += 1
+        sequence = self.sequence
+        read_at = datetime.now(timezone.utc).isoformat()
+        started_at = asyncio.get_running_loop().time()
+        self.broadcast(
+            {
+                "type": "card_detected",
+                "read_at": read_at,
+                "sequence": sequence,
+            }
+        )
+        LOGGER.info(
+            "Card detected; notified %s kiosk client(s) before backend processing",
+            len(self.clients),
+        )
 
         if self.backend is None:
             result = CheckInResult(
@@ -65,21 +87,25 @@ class BridgeState:
                     message="The check-in could not be recorded. Please see staff.",
                 )
 
-        self.sequence += 1
+        processing_ms = round(
+            (asyncio.get_running_loop().time() - started_at) * 1000
+        )
         event = {
             "type": "card_read",
             "outcome": result.outcome,
             "display_name": result.display_name,
             "message": result.message,
             "visit_count": result.visit_count,
-            "read_at": datetime.now(timezone.utc).isoformat(),
-            "sequence": self.sequence,
+            "read_at": read_at,
+            "sequence": sequence,
+            "processing_ms": processing_ms,
         }
-        for client in tuple(self.clients):
-            if client.full():
-                client.get_nowait()
-            client.put_nowait(event)
-        LOGGER.info("Card read processed with outcome %s", result.outcome)
+        self.broadcast(event)
+        LOGGER.info(
+            "Card read processed with outcome %s in %sms",
+            result.outcome,
+            processing_ms,
+        )
         return True
 
 
