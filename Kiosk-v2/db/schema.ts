@@ -27,7 +27,7 @@ export const users = sqliteTable(
     notes: text("notes"),
   },
   (table) => [
-    uniqueIndex("idx_users_primary_email").on(table.primaryEmail),
+    index("idx_users_primary_email").on(table.primaryEmail),
     index("idx_users_status_name").on(table.status, table.lastName, table.firstName),
   ],
 );
@@ -344,4 +344,85 @@ export const auditEvents = sqliteTable(
     detailJson: text("detail_json"),
   },
   (table) => [index("idx_audit_entity_at").on(table.entityType, table.entityId, table.occurredAt)],
+);
+
+export const migrationRuns = sqliteTable(
+  "migration_runs",
+  {
+    id: text("id").primaryKey(),
+    mode: text("mode").notNull().default("staging"),
+    status: text("status").notNull().default("planned"),
+    sourceSnapshotAt: text("source_snapshot_at").notNull(),
+    manifestJson: text("manifest_json").notNull(),
+    approvedByUserId: text("approved_by_user_id").references(() => users.id),
+    approvedAt: text("approved_at"),
+    startedAt: text("started_at"),
+    completedAt: text("completed_at"),
+    rolledBackAt: text("rolled_back_at"),
+    errorCode: text("error_code"),
+    errorDetail: text("error_detail"),
+    createdAt: timestamp("created_at"),
+  },
+  (table) => [
+    index("idx_migration_runs_status_created").on(table.status, table.createdAt),
+  ],
+);
+
+export const migrationSourceRecords = sqliteTable(
+  "migration_source_records",
+  {
+    id: text("id").primaryKey(),
+    migrationRunId: text("migration_run_id")
+      .notNull()
+      .references(() => migrationRuns.id, { onDelete: "cascade" }),
+    sourceSystem: text("source_system").notNull(),
+    sourceSheet: text("source_sheet").notNull(),
+    sourceRowNumber: integer("source_row_number").notNull(),
+    entityType: text("entity_type").notNull(),
+    entityId: text("entity_id").notNull(),
+    action: text("action").notNull().default("created"),
+    createdAt: timestamp("created_at"),
+  },
+  (table) => [
+    uniqueIndex("idx_migration_source_entity_row").on(
+      table.migrationRunId,
+      table.sourceSystem,
+      table.sourceSheet,
+      table.sourceRowNumber,
+      table.entityType,
+      table.entityId,
+    ),
+    index("idx_migration_source_run_entity").on(
+      table.migrationRunId,
+      table.entityType,
+      table.entityId,
+    ),
+  ],
+);
+
+export const quarantinedActivityEvents = sqliteTable(
+  "quarantined_activity_events",
+  {
+    id: text("id").primaryKey(),
+    migrationRunId: text("migration_run_id")
+      .notNull()
+      .references(() => migrationRuns.id, { onDelete: "cascade" }),
+    sourceSystem: text("source_system").notNull().default("Activity Log SIO"),
+    sourceRowNumber: integer("source_row_number").notNull(),
+    eventAt: text("event_at"),
+    eventType: text("event_type").notNull(),
+    cardUidDigest: text("card_uid_digest").notNull(),
+    cardUidLastFour: text("card_uid_last_four").notNull(),
+    quarantineReason: text("quarantine_reason").notNull(),
+    detailJson: text("detail_json"),
+    createdAt: timestamp("created_at"),
+  },
+  (table) => [
+    uniqueIndex("idx_quarantine_source_row").on(
+      table.migrationRunId,
+      table.sourceSystem,
+      table.sourceRowNumber,
+    ),
+    index("idx_quarantine_reason_event").on(table.quarantineReason, table.eventAt),
+  ],
 );

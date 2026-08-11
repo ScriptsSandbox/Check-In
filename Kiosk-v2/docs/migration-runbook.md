@@ -32,6 +32,10 @@ Before the first private staging import:
 - Confirm the staging database is owner-only and separate from production.
 - Re-run reconciliation immediately before import and compare the manifest with the approved baseline.
 
+The staging writer uses deterministic private IDs and HMAC card digests, inserts records in bounded transactional batches, records provenance beside each created entity, and refuses to rerun an incomplete migration until it is rolled back. Stored failure messages are deliberately generic so database diagnostics cannot leak names, identifiers, emails, or raw card values.
+
+Rollback deletes only entities recorded as created by that migration run, in dependency-safe order. Shared tool definitions remain in place.
+
 ## Production cutover gate
 
 Production import requires a second explicit approval after staging verification and the physical-kiosk test. The current Sheets remain authoritative until that approval and the agreed cutover time.

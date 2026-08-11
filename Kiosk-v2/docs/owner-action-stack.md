@@ -7,7 +7,7 @@ This list is deliberately ordered so development can continue without waiting on
 - Choose the visitor-facing entry point: a normal button on the Sandbox WordPress site (recommended) or the purpose-built 4:3 `/join/embed` card.
 - Choose or request the public registration hostname. The current `rjatplay.chatgpt.site` address is an owner-only staging site, not the final public identity.
 - Confirm that `scripps-sandbox@ucsd.edu` is an actively monitored shared mailbox. It is the proposed first-line contact for account corrections and Sandbox-specific privacy questions; the UC San Diego Campus Privacy Office remains the escalation point.
-- Supply UC San Diego email addresses for the approved staff roster when Google sign-in is configured. Names, roles, and initial trainer authorizations are already recorded.
+- Confirm Nathan Park's exact UC San Diego email address when Google sign-in is configured. Exact UC San Diego addresses for the other five approved people were resolved from the existing user sheet and stored only in protected staging configuration—not in Git.
 
 ## 2. Institutional access / IT items
 
