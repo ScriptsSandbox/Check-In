@@ -20,7 +20,7 @@ def normalize_uid(raw_line: str | bytes) -> str | None:
 class DuplicateGuard:
     """Suppress repeated reads of the same card inside a short time window."""
 
-    def __init__(self, window_seconds: float = 2.0) -> None:
+    def __init__(self, window_seconds: float = 15.0) -> None:
         self.window_seconds = window_seconds
         self._last_uid: str | None = None
         self._last_seen = 0.0
@@ -34,3 +34,9 @@ class DuplicateGuard:
         self._last_uid = uid
         self._last_seen = observed_at
         return not is_duplicate
+
+    def forget(self, uid: str) -> None:
+        """Allow an immediate retry after a recoverable backend failure."""
+        if uid == self._last_uid:
+            self._last_uid = None
+            self._last_seen = 0.0
