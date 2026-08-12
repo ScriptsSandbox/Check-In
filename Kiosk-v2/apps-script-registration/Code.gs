@@ -2,6 +2,7 @@ const REGISTRATION_CONFIG_ = {
   spreadsheetProperty: "USER_DATABASE_SPREADSHEET_ID",
   waiverUrlProperty: "WAIVER_POWERFORM_URL",
   sheetName: "Form Responses 1",
+  reviewSheetName: "Registration Review Log",
   consentVersion: "2026-08-11",
   baseHeaders: [
     "Name",
@@ -30,8 +31,7 @@ const REGISTRATION_CONFIG_ = {
 function doGet() {
   return HtmlService.createTemplateFromFile("Index")
     .evaluate()
-    .setTitle("Create a Scripps Sandbox account")
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.SAMEORIGIN);
+    .setTitle("Create a Scripps Sandbox account");
 }
 
 function setupRegistrationSheet() {
@@ -45,24 +45,12 @@ function setupRegistrationSheet() {
     }
   });
 
-  const missing = REGISTRATION_CONFIG_.reviewHeaders.filter(function (header) {
-    return headers.indexOf(header) === -1;
-  });
-  if (missing.length) {
-    const startColumn = headers.length + 1;
-    const range = sheet.getRange(1, startColumn, 1, missing.length);
-    range.setValues([missing]);
-    range.setBackground("#d9e2f3").setFontWeight("bold").setWrap(true);
-  }
-
-  const finalHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getDisplayValues()[0];
+  const reviewSheet = openRegistrationReviewSheet_(true);
   return {
     ok: true,
     spreadsheetId: sheet.getParent().getId(),
     sheetName: sheet.getName(),
-    reviewColumns: REGISTRATION_CONFIG_.reviewHeaders.map(function (header) {
-      return finalHeaders.indexOf(header) + 1;
-    }),
+    reviewSheetName: reviewSheet.getName(),
   };
 }
 
@@ -73,6 +61,7 @@ function registrationStatus() {
     spreadsheetId: sheet.getParent().getId(),
     spreadsheetName: sheet.getParent().getName(),
     sheetName: sheet.getName(),
+    reviewSheetName: openRegistrationReviewSheet_(false).getName(),
     waiverConfigured: Boolean(
       PropertiesService.getScriptProperties().getProperty(REGISTRATION_CONFIG_.waiverUrlProperty)
     ),
@@ -136,7 +125,20 @@ function submitRegistration(payload) {
     const row = headers.map(function (header) {
       return Object.prototype.hasOwnProperty.call(valuesByHeader, header) ? valuesByHeader[header] : "";
     });
+    const reviewSheet = openRegistrationReviewSheet_(false);
+    const reviewHeaders = reviewSheet.getRange(1, 1, 1, reviewSheet.getLastColumn()).getDisplayValues()[0];
+    const userDatabaseRow = sheet.getLastRow() + 1;
+    const reviewRow = reviewHeaders.map(function (header) {
+      if (header === "User Database Row") return userDatabaseRow;
+      return Object.prototype.hasOwnProperty.call(valuesByHeader, header) ? valuesByHeader[header] : "";
+    });
     sheet.appendRow(row);
+    try {
+      reviewSheet.appendRow(reviewRow);
+    } catch (reviewError) {
+      sheet.deleteRow(userDatabaseRow);
+      throw reviewError;
+    }
 
     return {
       ok: true,
@@ -161,6 +163,26 @@ function openRegistrationSheet_() {
   return sheet;
 }
 
+function openRegistrationReviewSheet_(createIfMissing) {
+  const spreadsheetId = getRequiredScriptProperty_(REGISTRATION_CONFIG_.spreadsheetProperty);
+  const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+  let sheet = spreadsheet.getSheetByName(REGISTRATION_CONFIG_.reviewSheetName);
+  const headers = ["Student ID", "User Database Row"].concat(REGISTRATION_CONFIG_.reviewHeaders);
+  if (!sheet && createIfMissing) {
+    sheet = spreadsheet.insertSheet(REGISTRATION_CONFIG_.reviewSheetName);
+    const headerRange = sheet.getRange(1, 1, 1, headers.length);
+    headerRange.setValues([headers]);
+    headerRange.setBackground("#d9e2f3").setFontWeight("bold").setWrap(true);
+    sheet.setFrozenRows(1);
+  }
+  if (!sheet) throw new Error("Registration review sheet setup is incomplete.");
+  const actual = sheet.getRange(1, 1, 1, headers.length).getDisplayValues()[0];
+  headers.forEach(function (header, index) {
+    if (actual[index] !== header) throw new Error("Registration review sheet layout does not match the expected schema.");
+  });
+  return sheet;
+}
+
 function getRequiredScriptProperty_(name) {
   const value = PropertiesService.getScriptProperties().getProperty(name);
   if (!value) throw new Error("Registration deployment is not configured.");
@@ -168,7 +190,7 @@ function getRequiredScriptProperty_(name) {
 }
 
 function assertRegistrationHeaders_(headers) {
-  REGISTRATION_CONFIG_.baseHeaders.concat(REGISTRATION_CONFIG_.reviewHeaders).forEach(function (header) {
+  REGISTRATION_CONFIG_.baseHeaders.forEach(function (header) {
     if (headers.indexOf(header) === -1) {
       throw new Error("Registration sheet setup is incomplete.");
     }
