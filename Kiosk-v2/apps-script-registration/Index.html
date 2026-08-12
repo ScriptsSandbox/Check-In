@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <base target="_top">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+      :root { color-scheme: light; --navy:#071e33; --blue:#00629b; --orange:#f5a623; --paper:#f4f1ea; --ink:#13263a; --line:#c8d2dc; --error:#9d202c; }
+      * { box-sizing:border-box; }
+      body { margin:0; background:var(--paper); color:var(--ink); font:17px/1.45 Arial, sans-serif; }
+      header { background:var(--navy); color:white; padding:20px clamp(20px,5vw,72px); letter-spacing:.04em; }
+      header strong { display:block; font-size:22px; }
+      header span { color:var(--orange); font-size:13px; font-weight:700; }
+      main { width:min(1080px,100%); margin:auto; display:grid; grid-template-columns:minmax(280px,.8fr) minmax(0,1.2fr); gap:clamp(28px,5vw,72px); padding:clamp(32px,6vw,76px) 24px 72px; }
+      h1 { margin:10px 0 18px; color:var(--navy); font-size:clamp(42px,6vw,72px); line-height:.94; letter-spacing:-.045em; }
+      h2 { margin:0 0 8px; color:var(--navy); font-size:28px; }
+      .eyebrow { margin:0; color:var(--blue); font-size:13px; font-weight:800; letter-spacing:.12em; }
+      .steps { list-style:none; padding:0; margin:38px 0 0; }
+      .steps li { display:grid; grid-template-columns:42px 1fr; gap:12px; padding:15px 0; border-top:1px solid var(--line); }
+      .steps b { color:var(--orange); }
+      form, .complete { background:white; padding:clamp(24px,4vw,44px); border-top:8px solid var(--orange); box-shadow:0 14px 40px rgba(7,30,51,.1); }
+      fieldset { border:0; padding:0; margin:0 0 30px; }
+      legend { width:100%; padding:0 0 8px; margin-bottom:16px; border-bottom:1px solid var(--line); color:var(--navy); font-size:13px; font-weight:800; letter-spacing:.1em; }
+      label { display:block; margin:0 0 18px; font-size:14px; font-weight:700; }
+      label small { font-weight:400; color:#5c6d7c; }
+      input, select { width:100%; min-height:50px; margin-top:7px; border:1px solid #91a2b1; border-radius:3px; background:white; color:var(--ink); padding:10px 12px; font:inherit; }
+      input:focus, select:focus { outline:3px solid rgba(0,98,155,.22); border-color:var(--blue); }
+      .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+      .consent { display:grid; grid-template-columns:24px 1fr; gap:12px; align-items:start; font-weight:400; }
+      .consent input { width:22px; min-height:22px; margin:2px 0 0; }
+      .honeypot { position:absolute !important; left:-10000px !important; width:1px !important; height:1px !important; overflow:hidden !important; }
+      button, .waiver { display:flex; justify-content:space-between; align-items:center; width:100%; min-height:58px; border:0; border-radius:3px; background:var(--blue); color:white; padding:13px 18px; font:700 17px Arial,sans-serif; text-decoration:none; cursor:pointer; }
+      button:disabled { opacity:.55; cursor:wait; }
+      .error { min-height:24px; color:var(--error); font-weight:700; }
+      .privacy { margin-top:20px; color:#526676; font-size:13px; }
+      .complete { grid-column:1 / -1; width:min(720px,100%); margin:auto; }
+      .complete p { font-size:19px; }
+      .waiver { margin-top:28px; }
+      [hidden] { display:none !important; }
+      @media (max-width:760px) { main { grid-template-columns:1fr; } .grid { grid-template-columns:1fr; gap:0; } h1 { font-size:48px; } }
+    </style>
+  </head>
+  <body>
+    <header><strong>SCRIPPS SANDBOX</strong><span>MAKERSPACE ACCOUNT REGISTRATION</span></header>
+    <main>
+      <section id="intro">
+        <p class="eyebrow">BEFORE YOUR FIRST VISIT</p>
+        <h1>Create your Sandbox account.</h1>
+        <p>Your account becomes available immediately. You must also complete the liability waiver before checking in.</p>
+        <ol class="steps">
+          <li><b>01</b><span>Enter your account information</span></li>
+          <li><b>02</b><span>Complete the DocuSign liability waiver</span></li>
+          <li><b>03</b><span>Tap your UC San Diego ID at the kiosk</span></li>
+        </ol>
+      </section>
+
+      <form id="registration" novalidate>
+        <fieldset>
+          <legend>YOUR NAME</legend>
+          <div class="grid">
+            <label>First name<input name="firstName" autocomplete="given-name" maxlength="80" required></label>
+            <label>Last name<input name="lastName" autocomplete="family-name" maxlength="80" required></label>
+          </div>
+          <label>Preferred first name <small>optional</small><input name="preferredName" autocomplete="nickname" maxlength="80"></label>
+        </fieldset>
+
+        <fieldset>
+          <legend>YOUR CONNECTION TO UC SAN DIEGO</legend>
+          <label>Role
+            <select name="role" required>
+              <option value="">Choose one</option>
+              <option>Undergraduate student</option><option>Graduate student</option><option>Postdoctoral scholar</option>
+              <option>Faculty</option><option>Staff</option><option>Visiting scholar or visitor</option><option>Community member or other</option>
+            </select>
+          </label>
+          <label>Program, department, or organization
+            <select name="affiliation" id="affiliation" required>
+              <option value="">Choose the closest match</option>
+              <optgroup label="Scripps Oceanography">
+                <option>Scripps – Biological Oceanography</option><option>Scripps – Climate Sciences</option><option>Scripps – Geophysics</option>
+                <option>Scripps – Marine Biology</option><option>Scripps – Marine Chemistry and Geochemistry</option><option>Scripps – Physical Oceanography</option>
+                <option>Scripps staff – Director's Office</option><option>Scripps staff – other program or unit</option>
+              </optgroup>
+              <optgroup label="UC San Diego engineering">
+                <option>UC San Diego – Mechanical and Aerospace Engineering</option><option>UC San Diego – Bioengineering</option>
+                <option>UC San Diego – Computer Science and Engineering</option><option>UC San Diego – Electrical and Computer Engineering</option>
+                <option>UC San Diego – NanoEngineering</option><option>UC San Diego – Structural Engineering</option>
+                <option>UC San Diego – Chemical Engineering</option><option>UC San Diego – other engineering program</option>
+              </optgroup>
+              <optgroup label="Other UC San Diego programs">
+                <option>UC San Diego – Biological Sciences</option><option>UC San Diego – Physical Sciences</option><option>UC San Diego – Social Sciences</option>
+                <option>UC San Diego – Arts and Humanities</option><option>UC San Diego – Health Sciences</option>
+                <option>UC San Diego – Rady School of Management</option><option>UC San Diego – School of Global Policy and Strategy</option>
+                <option>UC San Diego undergraduate – undeclared</option><option>UC San Diego – other academic program</option>
+              </optgroup>
+              <optgroup label="UC San Diego staff">
+                <option>UC San Diego staff – central administration</option><option>UC San Diego staff – academic department or unit</option><option>UC San Diego staff – other unit</option>
+              </optgroup>
+              <optgroup label="Other affiliations">
+                <option>External university or institution</option><option>Community member – no institutional affiliation</option><option>Other</option>
+              </optgroup>
+            </select>
+          </label>
+          <label id="other-wrap" hidden>Please specify<input name="otherAffiliation" maxlength="120"></label>
+          <div class="grid">
+            <label>ID type<select name="identifierType" required><option>Student PID</option><option>Employee ID</option><option>Other UC San Diego ID</option></select></label>
+            <label>ID number<input name="identifier" autocomplete="off" autocapitalize="characters" maxlength="32" placeholder="A12345678" required></label>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>CONTACT</legend>
+          <label>Primary email<input name="primaryEmail" type="email" autocomplete="email" maxlength="254" required></label>
+          <label>Secondary email <small>optional</small><input name="secondaryEmail" type="email" maxlength="254"></label>
+        </fieldset>
+
+        <label class="honeypot" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
+        <label class="consent"><input name="consent" type="checkbox" required><span>I understand that the Sandbox will use this information to manage makerspace access, training, safety records, and visits.</span></label>
+        <p id="error" class="error" role="alert" aria-live="assertive"></p>
+        <button id="submit" type="submit"><span>Create account and continue</span><span>→</span></button>
+        <p class="privacy">Do not enter a Social Security number, birth date, medical information, or payment information. Your physical card number is connected only at the makerspace.</p>
+      </form>
+
+      <section id="complete" class="complete" hidden>
+        <p class="eyebrow">ACCOUNT CREATED</p>
+        <h2>Next: complete the liability waiver.</h2>
+        <p>Your Sandbox account is available immediately. Check-in will begin working after your signed waiver appears in the Sandbox waiver records.</p>
+        <a id="waiver" class="waiver" rel="noreferrer"><span>Open the DocuSign waiver</span><span>↗</span></a>
+        <p class="privacy">Sandbox staff may review this registration afterward and contact you if anything needs clarification.</p>
+      </section>
+    </main>
+
+    <script>
+      const form = document.getElementById("registration");
+      const affiliation = document.getElementById("affiliation");
+      const otherWrap = document.getElementById("other-wrap");
+      const startedAt = Date.now();
+
+      affiliation.addEventListener("change", () => {
+        const other = affiliation.value === "Other";
+        otherWrap.hidden = !other;
+        otherWrap.querySelector("input").required = other;
+      });
+
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        if (!form.reportValidity()) return;
+        const button = document.getElementById("submit");
+        const error = document.getElementById("error");
+        button.disabled = true;
+        button.firstElementChild.textContent = "Creating account…";
+        error.textContent = "";
+        const data = Object.fromEntries(new FormData(form).entries());
+        data.consent = form.elements.consent.checked;
+        data.formStartedAt = startedAt;
+
+        google.script.run
+          .withSuccessHandler((result) => {
+            button.disabled = false;
+            button.firstElementChild.textContent = "Create account and continue";
+            if (!result || !result.ok) {
+              error.textContent = result && result.message ? result.message : "Registration could not be saved.";
+              return;
+            }
+            document.getElementById("intro").hidden = true;
+            form.hidden = true;
+            const complete = document.getElementById("complete");
+            complete.hidden = false;
+            document.getElementById("waiver").href = result.waiverUrl;
+            complete.scrollIntoView({ behavior: "smooth", block: "start" });
+          })
+          .withFailureHandler(() => {
+            button.disabled = false;
+            button.firstElementChild.textContent = "Create account and continue";
+            error.textContent = "Registration could not be saved. Please try again or ask Sandbox staff for help.";
+          })
+          .submitRegistration(data);
+      });
+    </script>
+  </body>
+</html>
