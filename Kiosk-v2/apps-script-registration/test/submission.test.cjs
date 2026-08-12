@@ -8,28 +8,39 @@ const root = path.join(__dirname, "..");
 const coreSource = fs.readFileSync(path.join(root, "RegistrationCore.gs"), "utf8");
 const appSource = fs.readFileSync(path.join(root, "Code.gs"), "utf8");
 
-const headers = [
+const userHeaders = [
   "Name", "Timestamp", "Card UUID", "Student ID", "Type", "Email Address",
-  "Secondary Email", "Waiver Signed?", "Planer", "Review Status",
-  "Registration Source", "Registration Submitted At", "Reviewed By", "Reviewed At",
+  "Secondary Email", "Waiver Signed?", "Planer",
+];
+const reviewHeaders = [
+  "Student ID", "User Database Row", "Review Status", "Registration Source",
+  "Registration Submitted At", "Reviewed By", "Reviewed At",
   "Program / Department", "Role", "Identifier Type", "DocuSign Status", "Consent Version",
 ];
 
 function makeHarness(existingRows = []) {
-  const appended = [];
+  const appendedUsers = [];
+  const appendedReviews = [];
   const sheet = {
-    getLastColumn: () => headers.length,
-    getLastRow: () => existingRows.length + 1,
+    getLastColumn: () => userHeaders.length,
+    getLastRow: () => existingRows.length + appendedUsers.length + 1,
     getName: () => "Form Responses 1",
     getParent: () => ({ getId: () => "test-sheet-id", getName: () => "Testing User Database SIO" }),
     getRange(row, column, rowCount) {
-      if (row === 1) return { getDisplayValues: () => [headers] };
+      if (row === 1) return { getDisplayValues: () => [userHeaders] };
       if (row === 2 && column === 4 && rowCount === existingRows.length) {
         return { getDisplayValues: () => existingRows };
       }
       throw new Error(`Unexpected range ${row},${column},${rowCount}`);
     },
-    appendRow: (row) => appended.push(row),
+    appendRow: (row) => appendedUsers.push(row),
+    deleteRow: () => appendedUsers.pop(),
+  };
+  const reviewSheet = {
+    getLastColumn: () => reviewHeaders.length,
+    getName: () => "Registration Review Log",
+    getRange: () => ({ getDisplayValues: () => [reviewHeaders] }),
+    appendRow: (row) => appendedReviews.push(row),
   };
   let released = false;
   const context = vm.createContext({
@@ -40,7 +51,9 @@ function makeHarness(existingRows = []) {
       }),
     },
     SpreadsheetApp: {
-      openById: () => ({ getSheetByName: () => sheet }),
+      openById: () => ({
+        getSheetByName: (name) => name === "Registration Review Log" ? reviewSheet : sheet,
+      }),
     },
     LockService: {
       getScriptLock: () => ({ tryLock: () => true, releaseLock: () => { released = true; } }),
@@ -48,7 +61,7 @@ function makeHarness(existingRows = []) {
   });
   vm.runInContext(coreSource, context);
   vm.runInContext(appSource, context);
-  return { context, appended, wasReleased: () => released };
+  return { context, appendedUsers, appendedReviews, wasReleased: () => released };
 }
 
 function validPayload(overrides = {}) {
@@ -74,12 +87,15 @@ test("appends an immediately active row with after-the-fact review metadata", ()
   harness.context.payload = validPayload();
   const result = vm.runInContext("submitRegistration(payload)", harness.context);
   assert.equal(result.ok, true);
-  assert.equal(harness.appended.length, 1);
-  const row = harness.appended[0];
-  assert.equal(row[headers.indexOf("Student ID")], "A12345678");
-  assert.equal(row[headers.indexOf("Review Status")], "Unreviewed");
-  assert.equal(row[headers.indexOf("DocuSign Status")], "Awaiting verification");
-  assert.equal(row[headers.indexOf("Card UUID")], "");
+  assert.equal(harness.appendedUsers.length, 1);
+  assert.equal(harness.appendedReviews.length, 1);
+  const userRow = harness.appendedUsers[0];
+  const reviewRow = harness.appendedReviews[0];
+  assert.equal(userRow[userHeaders.indexOf("Student ID")], "A12345678");
+  assert.equal(userRow[userHeaders.indexOf("Card UUID")], "");
+  assert.equal(reviewRow[reviewHeaders.indexOf("Review Status")], "Unreviewed");
+  assert.equal(reviewRow[reviewHeaders.indexOf("DocuSign Status")], "Awaiting verification");
+  assert.equal(reviewRow[reviewHeaders.indexOf("User Database Row")], 2);
   assert.equal(harness.wasReleased(), true);
 });
 
@@ -89,7 +105,8 @@ test("does not overwrite or append when an ID already exists", () => {
   const result = vm.runInContext("submitRegistration(payload)", harness.context);
   assert.equal(result.ok, false);
   assert.equal(result.code, "ALREADY_EXISTS");
-  assert.equal(harness.appended.length, 0);
+  assert.equal(harness.appendedUsers.length, 0);
+  assert.equal(harness.appendedReviews.length, 0);
 });
 
 test("does not append when the primary email already exists", () => {
@@ -98,5 +115,6 @@ test("does not append when the primary email already exists", () => {
   const result = vm.runInContext("submitRegistration(payload)", harness.context);
   assert.equal(result.ok, false);
   assert.equal(result.code, "ALREADY_EXISTS");
-  assert.equal(harness.appended.length, 0);
+  assert.equal(harness.appendedUsers.length, 0);
+  assert.equal(harness.appendedReviews.length, 0);
 });
