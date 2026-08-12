@@ -1,6 +1,6 @@
 # Scripps Sandbox registration web app
 
-This Google Apps Script web app writes new registrations directly to the existing user database. New rows are usable immediately; `Review Status` starts as `Unreviewed` for after-the-fact staff review. It does not use a pending-registration tab or activation gate.
+This Google Apps Script web app writes new registrations to the normalized Scripps Sandbox Database v2. It creates one person record, normalized ID and email identifiers, and an `Unreviewed` registration audit record. New people are usable immediately; there is no separate review-log tab or activation gate.
 
 The kiosk still requires a matching waiver record before check-in succeeds. After registration, the form links directly to the existing DocuSign PowerForm. A redirect proves only that the user was sent to DocuSign, not that the waiver was completed.
 
@@ -20,8 +20,8 @@ The kiosk still requires a matching waiver record before check-in succeeds. Afte
 
 1. Create a standalone Apps Script project in the UCSD-managed account.
 2. Add `RegistrationCore.gs`, `Code.gs`, `Index.html`, and the manifest.
-3. In **Project Settings → Script properties**, add `USER_DATABASE_SPREADSHEET_ID` with the target user-database spreadsheet ID and `WAIVER_POWERFORM_URL` with the approved DocuSign PowerForm URL. Neither value belongs in source control.
-4. Run `setupRegistrationSheet` as the owner. Review the new same-row metadata columns before proceeding.
+3. In **Project Settings → Script properties**, add `USER_DATABASE_SPREADSHEET_ID` with the normalized database spreadsheet ID and `WAIVER_POWERFORM_URL` with the approved DocuSign PowerForm URL. Neither value belongs in source control.
+4. Run `setupRegistrationSheet` as the owner. It validates the existing `People`, `Identifiers`, and `Registrations` tabs without modifying their layouts.
 5. Run `registrationStatus` and confirm the returned spreadsheet and tab names.
 6. Deploy as a web app that executes as the deploying UCSD account. If UCSD policy permits, allow anonymous access; otherwise stop and use the allowed domain setting rather than moving the app to a personal account.
 7. Test one fictional registration first. Remove the fictional row after verification.

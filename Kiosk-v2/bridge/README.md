@@ -12,18 +12,20 @@ This service turns the ESP32 reader's USB serial output into live browser events
 
 When the kiosk UI is served from `localhost`, it automatically connects to `ws://127.0.0.1:8765/ws`. A different endpoint can be supplied at build time with `NEXT_PUBLIC_SCANNER_WS_URL`.
 
-The Sheets backend warms its user, waiver, and activity caches at startup. The user and waiver cache defaults to five minutes; the activity cache defaults to one hour and is updated after every successful append. Override these with `SHEETS_CACHE_SECONDS` and `SHEETS_ACTIVITY_CACHE_SECONDS` when needed.
+The Sheets backend warms the normalized people/card data, the unchanged waiver source, and the new visit log at startup. The people and waiver cache defaults to five minutes; the visit cache defaults to one hour and is updated after every successful append. Override these with `SHEETS_CACHE_SECONDS` and `SHEETS_ACTIVITY_CACHE_SECONDS` when needed.
 
 ## Designated-staff card linking
 
-When an unrecognized member card is scanned, the bridge keeps its UID in memory for five minutes. A staff member verifies the member's physical ID, enters the matching PID or employee ID in the kiosk, and approves the link by tapping their own already-linked card. The member's UID is never sent to the browser. Successful links update `Card UUID` in the user database and append a `Card Linked` audit row to the activity sheet.
+When an unrecognized member card is scanned, the bridge keeps its UID in memory for five minutes. A staff member verifies the member's physical ID, enters the matching PID or employee ID in the kiosk, and approves the link by tapping their own already-linked card. The member's UID is never sent to the browser or stored in Sheets. Successful links append a keyed digest and last-four display suffix to `Cards`, then append a `Card Linked` audit row to `Visits`.
 
 Add the identifiers of the staff allowed to approve links to `/etc/sandbox-kiosk/scanner.env`:
 
 ```sh
 SCANNER_CHECKIN_BACKEND=sheets
 SHEETS_CREDENTIALS_PATH=/etc/sandbox-kiosk/google-service-account.json
-SHEETS_ACTIVITY_URL=https://docs.google.com/spreadsheets/d/REPLACE_ME/edit
+SHEETS_DATABASE_ID=REPLACE_WITH_NORMALIZED_DATABASE_ID
+SHEETS_WAIVER_DB_NAME=Waiver Signatures SIO
+CARD_HMAC_SECRET_FILE=/etc/sandbox-kiosk/card-hmac.secret
 CARD_LINK_STAFF_IDS=A12345678,123456789
 CARD_LINK_SESSION_SECONDS=300
 ```

@@ -17,6 +17,7 @@ import serial
 from serial.tools import list_ports
 
 from scanner_protocol import DuplicateGuard, normalize_uid
+from apps_script_backend import AppsScriptCheckInBackend
 from sheets_backend import CheckInResult, GoogleSheetsProvider, SheetsCheckInBackend
 
 
@@ -33,22 +34,24 @@ DESIGNATED_CARD_LINK_STAFF_IDS = {
     for value in os.getenv("CARD_LINK_STAFF_IDS", "").split(",")
     if value.strip()
 }
-if BACKEND_MODE not in {"demo", "sheets"}:
-    raise RuntimeError("SCANNER_CHECKIN_BACKEND must be 'demo' or 'sheets'")
+if BACKEND_MODE not in {"demo", "sheets", "apps-script"}:
+    raise RuntimeError("SCANNER_CHECKIN_BACKEND must be 'demo', 'sheets', or 'apps-script'")
 
 
-def build_checkin_backend() -> SheetsCheckInBackend | None:
+def build_checkin_backend() -> SheetsCheckInBackend | AppsScriptCheckInBackend | None:
     # Simulation is deliberately write-free, even if a stale environment file
     # also asks for the Sheets backend.
     if SIMULATION_ENABLED or BACKEND_MODE == "demo":
         return None
+    if BACKEND_MODE == "apps-script":
+        return AppsScriptCheckInBackend.from_environment()
     return SheetsCheckInBackend(GoogleSheetsProvider.from_environment())
 
 
 class BridgeState:
     def __init__(
         self,
-        backend: SheetsCheckInBackend | None = None,
+        backend: SheetsCheckInBackend | AppsScriptCheckInBackend | None = None,
         designated_card_link_staff_ids: set[str] | None = None,
     ) -> None:
         self.reader_status = "simulation" if SIMULATION_ENABLED else "searching"
@@ -246,10 +249,10 @@ async def warm_backend() -> None:
         timings = await asyncio.to_thread(STATE.backend.warm_up)
     except Exception:
         STATE.backend_ready = False
-        LOGGER.exception("Sheets cache warm-up failed; the first scan will retry")
+        LOGGER.exception("Check-in backend warm-up failed; the first scan will retry")
         return
     STATE.backend_ready = True
-    LOGGER.info("Sheets cache warm-up complete; stages=%s", timings)
+    LOGGER.info("Check-in backend warm-up complete; stages=%s", timings)
 
 
 @asynccontextmanager
@@ -281,7 +284,7 @@ async def health() -> dict[str, Any]:
         "reader": STATE.reader_status,
         "port": STATE.reader_port,
         "clients": len(STATE.clients),
-        "backend": "demo" if STATE.backend is None else "sheets",
+        "backend": "demo" if STATE.backend is None else BACKEND_MODE,
         "backend_ready": STATE.backend_ready,
     }
 

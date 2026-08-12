@@ -1,18 +1,23 @@
-"""Transitional Google Sheets check-in backend for the local kiosk bridge.
+"""Normalized Google Sheets check-in backend for the local kiosk bridge.
 
-The browser receives display-safe outcomes only. Raw card UIDs stay inside this
-local process and the existing activity Sheet.
+Raw card UIDs stay inside this local process. The production database stores
+only keyed card digests and short display suffixes. Waivers remain read-only in
+the existing Waiver Signatures SIO spreadsheet.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+import hashlib
+import hmac
 import logging
 import os
+from pathlib import Path
 from threading import Lock
 import time
 from typing import Any, Callable, Protocol
+from uuid import uuid4
 
 
 LOGGER = logging.getLogger("sandbox-scanner.sheets")
@@ -29,14 +34,11 @@ class CheckInResult:
 
 class SheetsProvider(Protocol):
     def user_records(self) -> list[dict[str, Any]]: ...
-
     def waiver_records(self) -> list[dict[str, Any]]: ...
-
     def activity_rows(self) -> list[list[Any]]: ...
-
     def append_activity(self, row: list[Any]) -> None: ...
-
     def update_user_card(self, identifier: str, card_uid: str) -> dict[str, Any]: ...
+    def card_digest(self, card_uid: str) -> str: ...
 
 
 def normalize_person_id(value: Any) -> str:
@@ -48,32 +50,48 @@ def normalize_email(value: Any) -> str:
     return str(value or "").strip().lower()
 
 
+def normalize_card_uid(value: Any) -> str:
+    return str(value or "").strip().upper()
+
+
 def elapsed_ms(started_at: float) -> int:
     return round((time.monotonic() - started_at) * 1000)
 
 
+def required_secret() -> str:
+    inline = os.getenv("CARD_HMAC_SECRET", "").strip()
+    secret_file = os.getenv("CARD_HMAC_SECRET_FILE", "").strip()
+    if inline:
+        return inline
+    if secret_file:
+        return Path(secret_file).read_text(encoding="utf-8").strip()
+    raise RuntimeError("CARD_HMAC_SECRET or CARD_HMAC_SECRET_FILE is required")
+
+
 class GoogleSheetsProvider:
-    """Lazy, thread-safe access to the three existing Scripps Sheets."""
+    """Lazy, thread-safe access to the normalized database and waiver source."""
 
     def __init__(
         self,
         credentials_path: str,
-        user_sheet_name: str,
+        database_id: str,
         waiver_sheet_name: str,
-        activity_sheet_url: str,
+        card_hmac_secret: str,
         cache_seconds: int = 300,
         activity_cache_seconds: int = 3600,
     ) -> None:
         self.credentials_path = credentials_path
-        self.user_sheet_name = user_sheet_name
+        self.database_id = database_id
         self.waiver_sheet_name = waiver_sheet_name
-        self.activity_sheet_url = activity_sheet_url
+        self.card_hmac_secret = card_hmac_secret
         self.cache_seconds = cache_seconds
         self.activity_cache_seconds = activity_cache_seconds
         self._lock = Lock()
-        self._user_sheet: Any = None
+        self._people_sheet: Any = None
+        self._identifiers_sheet: Any = None
+        self._cards_sheet: Any = None
+        self._visits_sheet: Any = None
         self._waiver_sheet: Any = None
-        self._activity_sheet: Any = None
         self._users: list[dict[str, Any]] | None = None
         self._waivers: list[dict[str, Any]] | None = None
         self._activity_rows: list[list[Any]] | None = None
@@ -83,65 +101,96 @@ class GoogleSheetsProvider:
     @classmethod
     def from_environment(cls) -> "GoogleSheetsProvider":
         credentials_path = os.getenv("SHEETS_CREDENTIALS_PATH", "").strip()
-        activity_sheet_url = os.getenv("SHEETS_ACTIVITY_URL", "").strip()
-        if not credentials_path or not activity_sheet_url:
-            raise RuntimeError(
-                "SHEETS_CREDENTIALS_PATH and SHEETS_ACTIVITY_URL are required"
-            )
+        database_id = os.getenv("SHEETS_DATABASE_ID", "").strip()
+        if not credentials_path or not database_id:
+            raise RuntimeError("SHEETS_CREDENTIALS_PATH and SHEETS_DATABASE_ID are required")
         return cls(
             credentials_path=credentials_path,
-            user_sheet_name=os.getenv("SHEETS_USER_DB_NAME", "User Database SIO"),
-            waiver_sheet_name=os.getenv(
-                "SHEETS_WAIVER_DB_NAME", "Waiver Signatures SIO"
-            ),
-            activity_sheet_url=activity_sheet_url,
+            database_id=database_id,
+            waiver_sheet_name=os.getenv("SHEETS_WAIVER_DB_NAME", "Waiver Signatures SIO"),
+            card_hmac_secret=required_secret(),
             cache_seconds=int(os.getenv("SHEETS_CACHE_SECONDS", "300")),
-            activity_cache_seconds=int(
-                os.getenv("SHEETS_ACTIVITY_CACHE_SECONDS", "3600")
-            ),
+            activity_cache_seconds=int(os.getenv("SHEETS_ACTIVITY_CACHE_SECONDS", "3600")),
         )
 
+    def card_digest(self, card_uid: str) -> str:
+        return hmac.new(
+            self.card_hmac_secret.encode("utf-8"),
+            normalize_card_uid(card_uid).encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+
     def _connect(self) -> None:
-        if self._activity_sheet is not None:
+        if self._visits_sheet is not None:
             return
         import gspread
 
         client = gspread.service_account(filename=self.credentials_path)
-        self._user_sheet = client.open(self.user_sheet_name).sheet1
+        database = client.open_by_key(self.database_id)
+        self._people_sheet = database.worksheet("People")
+        self._identifiers_sheet = database.worksheet("Identifiers")
+        self._cards_sheet = database.worksheet("Cards")
+        self._visits_sheet = database.worksheet("Visits")
         self._waiver_sheet = client.open(self.waiver_sheet_name).sheet1
-        self._activity_sheet = client.open_by_url(self.activity_sheet_url).sheet1
 
     def _refresh_people_if_needed(self) -> None:
         now = time.monotonic()
         if self._users is not None and now < self._cache_expires_at:
             return
         self._connect()
-        self._users = self._user_sheet.get_all_records(numericise_ignore=["all"])
-        self._waivers = self._waiver_sheet.get_all_records(
-            numericise_ignore=["all"]
-        )
+        people = self._people_sheet.get_all_records(numericise_ignore=["all"])
+        identifiers = self._identifiers_sheet.get_all_records(numericise_ignore=["all"])
+        cards = self._cards_sheet.get_all_records(numericise_ignore=["all"])
+        self._waivers = self._waiver_sheet.get_all_records(numericise_ignore=["all"])
+        identifiers_by_person: dict[str, list[dict[str, Any]]] = {}
+        cards_by_person: dict[str, list[dict[str, Any]]] = {}
+        for record in identifiers:
+            if str(record.get("Active", "")).lower() not in {"true", "1"}:
+                continue
+            identifiers_by_person.setdefault(str(record.get("Person ID", "")), []).append(record)
+        for record in cards:
+            if str(record.get("Status", "")).strip().lower() != "active":
+                continue
+            cards_by_person.setdefault(str(record.get("Person ID", "")), []).append(record)
+        users = []
+        for person in people:
+            if str(person.get("Status", "")).strip().lower() != "active":
+                continue
+            person_id = str(person.get("Person ID", "")).strip()
+            person_identifiers = identifiers_by_person.get(person_id, [])
+            identity = next((r for r in person_identifiers if str(r.get("Type", "")).lower() != "email" and bool(r.get("Primary"))), None)
+            if identity is None:
+                identity = next((r for r in person_identifiers if str(r.get("Type", "")).lower() != "email"), None)
+            email_record = next((r for r in person_identifiers if str(r.get("Type", "")).lower() == "email" and bool(r.get("Primary"))), None)
+            person_cards = cards_by_person.get(person_id, [])
+            card = person_cards[-1] if person_cards else {}
+            users.append({
+                "Person ID": person_id,
+                "Name": str(person.get("Display Name", "")).strip(),
+                "Student ID": str((identity or {}).get("Normalized Value", "")).strip(),
+                "Email Address": str(person.get("Primary Email", "") or (email_record or {}).get("Normalized Value", "")).strip(),
+                "Card Digest": str(card.get("Card Digest", "")).strip().lower(),
+            })
+        self._users = users
         self._cache_expires_at = now + self.cache_seconds
 
     def _refresh_activity_if_needed(self) -> None:
         now = time.monotonic()
-        if (
-            self._activity_rows is not None
-            and now < self._activity_cache_expires_at
-        ):
+        if self._activity_rows is not None and now < self._activity_cache_expires_at:
             return
         self._connect()
-        self._activity_rows = self._activity_sheet.get_all_values()
+        self._activity_rows = self._visits_sheet.get_all_values()
         self._activity_cache_expires_at = now + self.activity_cache_seconds
 
     def user_records(self) -> list[dict[str, Any]]:
         with self._lock:
             self._refresh_people_if_needed()
-            return list(self._users or [])
+            return [dict(record) for record in self._users or []]
 
     def waiver_records(self) -> list[dict[str, Any]]:
         with self._lock:
             self._refresh_people_if_needed()
-            return list(self._waivers or [])
+            return [dict(record) for record in self._waivers or []]
 
     def activity_rows(self) -> list[list[Any]]:
         with self._lock:
@@ -151,322 +200,173 @@ class GoogleSheetsProvider:
     def append_activity(self, row: list[Any]) -> None:
         with self._lock:
             self._connect()
-            self._activity_sheet.append_row(row)
+            self._visits_sheet.append_row(row, value_input_option="USER_ENTERED")
             if self._activity_rows is not None:
                 self._activity_rows.append(list(row))
-                self._activity_cache_expires_at = (
-                    time.monotonic() + self.activity_cache_seconds
-                )
+                self._activity_cache_expires_at = time.monotonic() + self.activity_cache_seconds
 
     def update_user_card(self, identifier: str, card_uid: str) -> dict[str, Any]:
-        """Attach a card to exactly one existing user and refresh the local cache."""
         normalized_identifier = normalize_person_id(identifier)
-        normalized_uid = card_uid.strip().upper()
+        digest = self.card_digest(card_uid)
+        normalized_uid = normalize_card_uid(card_uid)
         with self._lock:
             self._refresh_people_if_needed()
             users = self._users or []
-            matches = [
-                (index, record)
-                for index, record in enumerate(users)
-                if normalize_person_id(record.get("Student ID")) == normalized_identifier
-            ]
+            matches = [record for record in users if normalize_person_id(record.get("Student ID")) == normalized_identifier]
             if len(matches) != 1:
                 raise ValueError("The account could not be identified uniquely.")
-            if any(
-                str(record.get("Card UUID", "")).strip().upper() == normalized_uid
-                for record in users
-            ):
+            if any(str(record.get("Card Digest", "")).lower() == digest for record in users):
                 raise ValueError("That card is already connected to an account.")
-
-            index, record = matches[0]
-            existing_uid = str(record.get("Card UUID", "")).strip()
-            if existing_uid:
+            record = matches[0]
+            if str(record.get("Card Digest", "")).strip():
                 raise ValueError("That account already has a connected card.")
-
             self._connect()
-            headers = self._user_sheet.row_values(1)
-            try:
-                card_column = headers.index("Card UUID") + 1
-            except ValueError as error:
-                raise RuntimeError("The user database has no Card UUID column.") from error
-            self._user_sheet.update_cell(index + 2, card_column, normalized_uid)
-            record["Card UUID"] = normalized_uid
+            self._cards_sheet.append_row([
+                "card_" + uuid4().hex,
+                record["Person ID"],
+                digest,
+                normalized_uid[-4:],
+                "Active",
+                datetime.now().isoformat(timespec="seconds"),
+                "",
+                "Kiosk v2 staff link",
+                "",
+            ], value_input_option="USER_ENTERED")
+            record["Card Digest"] = digest
             self._cache_expires_at = time.monotonic() + self.cache_seconds
             return dict(record)
 
 
 class SheetsCheckInBackend:
-    def __init__(
-        self,
-        provider: SheetsProvider,
-        now: Callable[[], float] = time.time,
-        local_datetime: Callable[[], datetime] = datetime.now,
-    ) -> None:
+    def __init__(self, provider: SheetsProvider, now: Callable[[], float] = time.time, local_datetime: Callable[[], datetime] = datetime.now) -> None:
         self.provider = provider
         self.now = now
         self.local_datetime = local_datetime
 
     def warm_up(self) -> dict[str, int]:
-        """Load the read-heavy Sheets data before the kiosk accepts a card."""
         total_started = time.monotonic()
         timings: dict[str, int] = {}
-
-        stage_started = time.monotonic()
-        self.provider.user_records()
-        timings["users"] = elapsed_ms(stage_started)
-
-        stage_started = time.monotonic()
-        self.provider.waiver_records()
-        timings["waivers"] = elapsed_ms(stage_started)
-
-        stage_started = time.monotonic()
-        self.provider.activity_rows()
-        timings["activity"] = elapsed_ms(stage_started)
+        for label, operation in (("users", self.provider.user_records), ("waivers", self.provider.waiver_records), ("activity", self.provider.activity_rows)):
+            stage_started = time.monotonic()
+            operation()
+            timings[label] = elapsed_ms(stage_started)
         timings["total"] = elapsed_ms(total_started)
         return timings
 
     def check_in(self, uid: str) -> CheckInResult:
         total_started = time.monotonic()
         timings: dict[str, int] = {}
-        normalized_uid = uid.strip().upper()
-
+        digest = self.provider.card_digest(uid)
         stage_started = time.monotonic()
-        users = self.provider.user_records()
-        user = next(
-            (
-                record
-                for record in users
-                if str(record.get("Card UUID", "")).strip().upper()
-                == normalized_uid
-            ),
-            None,
-        )
+        user = next((record for record in self.provider.user_records() if str(record.get("Card Digest", "")).lower() == digest), None)
         timings["user_lookup"] = elapsed_ms(stage_started)
         if user is None:
             timings["total"] = elapsed_ms(total_started)
-            return CheckInResult(
-                outcome="unknown_card",
-                message="This card is not connected to a Sandbox account.",
-                timings_ms=timings,
-            )
-
-        return self._check_in_user(user, normalized_uid, total_started, timings)
+            return CheckInResult(outcome="unknown_card", message="This card is not connected to a Sandbox account.", timings_ms=timings)
+        return self._check_in_user(user, total_started, timings)
 
     def check_in_identifier(self, identifier: str) -> CheckInResult:
         total_started = time.monotonic()
         timings: dict[str, int] = {}
         normalized_identifier = normalize_person_id(identifier)
-
         stage_started = time.monotonic()
-        users = self.provider.user_records()
-        matches = [
-            record
-            for record in users
-            if normalized_identifier
-            and normalize_person_id(record.get("Student ID")) == normalized_identifier
-        ]
+        matches = [record for record in self.provider.user_records() if normalized_identifier and normalize_person_id(record.get("Student ID")) == normalized_identifier]
         timings["user_lookup"] = elapsed_ms(stage_started)
         if not matches:
             timings["total"] = elapsed_ms(total_started)
-            return CheckInResult(
-                outcome="unknown_identifier",
-                message="We could not find that PID or employee ID.",
-                timings_ms=timings,
-            )
+            return CheckInResult(outcome="unknown_identifier", message="We could not find that PID or employee ID.", timings_ms=timings)
         if len(matches) > 1:
             timings["total"] = elapsed_ms(total_started)
-            return CheckInResult(
-                outcome="backend_error",
-                message="More than one account uses that identifier. Please see staff.",
-                timings_ms=timings,
-            )
-
-        user = matches[0]
-        card_uid = str(user.get("Card UUID", "")).strip().upper()
-        activity_identifier = card_uid or normalized_identifier.upper()
-        return self._check_in_user(
-            user,
-            activity_identifier,
-            total_started,
-            timings,
-        )
+            return CheckInResult(outcome="backend_error", message="More than one account uses that identifier. Please see staff.", timings_ms=timings)
+        return self._check_in_user(matches[0], total_started, timings)
 
     def prepare_card_link(self, identifier: str) -> CheckInResult:
-        """Confirm that a staff-assisted card link has one eligible target."""
         normalized_identifier = normalize_person_id(identifier)
-        matches = [
-            record
-            for record in self.provider.user_records()
-            if normalized_identifier
-            and normalize_person_id(record.get("Student ID")) == normalized_identifier
-        ]
+        matches = [record for record in self.provider.user_records() if normalized_identifier and normalize_person_id(record.get("Student ID")) == normalized_identifier]
         if not matches:
-            return CheckInResult(
-                outcome="unknown_identifier",
-                message="We could not find that PID or employee ID.",
-            )
+            return CheckInResult(outcome="unknown_identifier", message="We could not find that PID or employee ID.")
         if len(matches) > 1:
-            return CheckInResult(
-                outcome="card_link_error",
-                message="More than one account uses that identifier. Please see an administrator.",
-            )
+            return CheckInResult(outcome="card_link_error", message="More than one account uses that identifier. Please see an administrator.")
         target = matches[0]
-        if str(target.get("Card UUID", "")).strip():
-            return CheckInResult(
-                outcome="card_link_error",
-                message="That account already has a connected card.",
-            )
-        return CheckInResult(
-            outcome="link_ready",
-            display_name=str(target.get("Name", "")).strip() or "Sandbox member",
-            message="Ask designated staff to tap their own card.",
-        )
+        if str(target.get("Card Digest", "")).strip():
+            return CheckInResult(outcome="card_link_error", message="That account already has a connected card.")
+        return CheckInResult(outcome="link_ready", display_name=str(target.get("Name", "")).strip() or "Sandbox member", message="Ask designated staff to tap their own card.")
 
-    def link_card(
-        self,
-        identifier: str,
-        card_uid: str,
-        staff_card_uid: str,
-        designated_staff_ids: set[str],
-    ) -> CheckInResult:
-        """Authorize a card link with a designated staff member's own card."""
+    def link_card(self, identifier: str, card_uid: str, staff_card_uid: str, designated_staff_ids: set[str]) -> CheckInResult:
         total_started = time.monotonic()
         timings: dict[str, int] = {}
         normalized_identifier = normalize_person_id(identifier)
-        normalized_card_uid = card_uid.strip().upper()
-        normalized_staff_uid = staff_card_uid.strip().upper()
-
+        member_digest = self.provider.card_digest(card_uid)
+        staff_digest = self.provider.card_digest(staff_card_uid)
         stage_started = time.monotonic()
         users = self.provider.user_records()
-        staff = next(
-            (
-                record
-                for record in users
-                if str(record.get("Card UUID", "")).strip().upper()
-                == normalized_staff_uid
-            ),
-            None,
-        )
+        staff = next((record for record in users if str(record.get("Card Digest", "")).lower() == staff_digest), None)
         staff_id = normalize_person_id(staff.get("Student ID")) if staff else ""
         allowed_staff = {normalize_person_id(value) for value in designated_staff_ids}
         timings["staff_lookup"] = elapsed_ms(stage_started)
-        if not staff or not staff_id or staff_id not in allowed_staff:
+        if not staff or not staff_id or staff_id not in allowed_staff or staff_digest == member_digest:
             timings["total"] = elapsed_ms(total_started)
-            return CheckInResult(
-                outcome="staff_unauthorized",
-                message="That card is not authorized to connect member cards.",
-                timings_ms=timings,
-            )
-        if normalized_staff_uid == normalized_card_uid:
-            timings["total"] = elapsed_ms(total_started)
-            return CheckInResult(
-                outcome="staff_unauthorized",
-                message="Use the designated staff member's own card to approve this link.",
-                timings_ms=timings,
-            )
-
+            return CheckInResult(outcome="staff_unauthorized", message="That card is not authorized to connect member cards.", timings_ms=timings)
         stage_started = time.monotonic()
         try:
-            target = self.provider.update_user_card(
-                normalized_identifier,
-                normalized_card_uid,
-            )
+            target = self.provider.update_user_card(normalized_identifier, card_uid)
         except ValueError as error:
             timings["card_update"] = elapsed_ms(stage_started)
             timings["total"] = elapsed_ms(total_started)
-            return CheckInResult(
-                outcome="card_link_error",
-                message=str(error),
-                timings_ms=timings,
-            )
+            return CheckInResult(outcome="card_link_error", message=str(error), timings_ms=timings)
         timings["card_update"] = elapsed_ms(stage_started)
-
         display_name = str(target.get("Name", "")).strip() or "Sandbox member"
         staff_name = str(staff.get("Name", "")).strip() or "Designated staff"
-        local_now = self.local_datetime()
         self.provider.append_activity([
-            local_now.strftime("%m/%d/%Y %H:%M:%S"),
-            int(self.now()),
-            display_name,
-            normalized_card_uid,
+            "visit_" + uuid4().hex,
+            target.get("Person ID", ""),
+            self.local_datetime().isoformat(timespec="seconds"),
             "Card Linked",
             staff_name,
             "",
             "",
+            "Kiosk v2",
+            "",
         ])
         timings["total"] = elapsed_ms(total_started)
-        return CheckInResult(
-            outcome="card_linked",
-            display_name=display_name,
-            message="Card connected. The member can now check in.",
-            timings_ms=timings,
-        )
+        return CheckInResult(outcome="card_linked", display_name=display_name, message="Card connected. The member can now check in.", timings_ms=timings)
 
-    def _check_in_user(
-        self,
-        user: dict[str, Any],
-        activity_identifier: str,
-        total_started: float,
-        timings: dict[str, int],
-    ) -> CheckInResult:
-
+    def _check_in_user(self, user: dict[str, Any], total_started: float, timings: dict[str, int]) -> CheckInResult:
         user_id = normalize_person_id(user.get("Student ID"))
         user_email = normalize_email(user.get("Email Address"))
         stage_started = time.monotonic()
         waivers = self.provider.waiver_records()
-        waiver_found = any(
-            (
-                bool(user_id)
-                and normalize_person_id(waiver.get("A_Number")) == user_id
-            )
-            or (
-                bool(user_email)
-                and normalize_email(waiver.get("Email")) == user_email
-            )
-            for waiver in waivers
-        )
+        waiver_found = any((bool(user_id) and normalize_person_id(waiver.get("A_Number")) == user_id) or (bool(user_email) and normalize_email(waiver.get("Email")) == user_email) for waiver in waivers)
         timings["waiver_lookup"] = elapsed_ms(stage_started)
         if not waiver_found:
             timings["total"] = elapsed_ms(total_started)
-            return CheckInResult(
-                outcome="waiver_required",
-                message="A current waiver is required before check-in.",
-                timings_ms=timings,
-            )
-
+            return CheckInResult(outcome="waiver_required", message="A current waiver is required before check-in.", timings_ms=timings)
         display_name = str(user.get("Name", "")).strip() or "Sandbox member"
+        person_id = str(user.get("Person ID", "")).strip()
         local_now = self.local_datetime()
-        today = local_now.strftime("%m/%d/%Y")
+        today = local_now.date().isoformat()
         stage_started = time.monotonic()
         activity_rows = self.provider.activity_rows()
         visit_dates = {
-            str(row[0]).split()[0]
+            str(row[2]).split("T")[0].split()[0]
             for row in activity_rows[1:]
-            if len(row) >= 5
-            and str(row[3]).strip().upper() == activity_identifier
-            and str(row[4]).strip() == "User Checkin"
-            and str(row[0]).strip()
+            if len(row) >= 4 and str(row[1]).strip() == person_id and str(row[3]).strip() == "User Checkin" and str(row[2]).strip()
         }
         timings["activity_lookup"] = elapsed_ms(stage_started)
         visit_count = len(visit_dates | {today})
         row = [
-            local_now.strftime("%m/%d/%Y %H:%M:%S"),
-            int(self.now()),
-            display_name,
-            activity_identifier,
+            "visit_" + uuid4().hex,
+            person_id,
+            local_now.isoformat(timespec="seconds"),
             "User Checkin",
             "",
             "",
+            "",
+            "Kiosk v2",
             "",
         ]
         stage_started = time.monotonic()
         self.provider.append_activity(row)
         timings["activity_append"] = elapsed_ms(stage_started)
         timings["total"] = elapsed_ms(total_started)
-        return CheckInResult(
-            outcome="success",
-            display_name=display_name,
-            message="Check-in recorded.",
-            visit_count=visit_count,
-            timings_ms=timings,
-        )
+        return CheckInResult(outcome="success", display_name=display_name, message="Check-in recorded.", visit_count=visit_count, timings_ms=timings)
