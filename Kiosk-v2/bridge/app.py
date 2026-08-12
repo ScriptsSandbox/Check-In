@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 import logging
 import os
+import time
 from typing import Any, AsyncIterator
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
@@ -26,6 +27,12 @@ SERIAL_PORT = os.getenv("SCANNER_SERIAL_PORT", "").strip()
 SIMULATION_ENABLED = os.getenv("SCANNER_SIMULATE", "false").lower() == "true"
 BACKEND_MODE = os.getenv("SCANNER_CHECKIN_BACKEND", "demo").strip().lower()
 DUPLICATE_WINDOW_SECONDS = float(os.getenv("SCANNER_DUPLICATE_SECONDS", "15"))
+CARD_LINK_SESSION_SECONDS = float(os.getenv("CARD_LINK_SESSION_SECONDS", "300"))
+DESIGNATED_CARD_LINK_STAFF_IDS = {
+    value.strip()
+    for value in os.getenv("CARD_LINK_STAFF_IDS", "").split(",")
+    if value.strip()
+}
 if BACKEND_MODE not in {"demo", "sheets"}:
     raise RuntimeError("SCANNER_CHECKIN_BACKEND must be 'demo' or 'sheets'")
 
@@ -39,7 +46,11 @@ def build_checkin_backend() -> SheetsCheckInBackend | None:
 
 
 class BridgeState:
-    def __init__(self, backend: SheetsCheckInBackend | None = None) -> None:
+    def __init__(
+        self,
+        backend: SheetsCheckInBackend | None = None,
+        designated_card_link_staff_ids: set[str] | None = None,
+    ) -> None:
         self.reader_status = "simulation" if SIMULATION_ENABLED else "searching"
         self.reader_port: str | None = None
         self.sequence = 0
@@ -47,6 +58,27 @@ class BridgeState:
         self.guard = DuplicateGuard(window_seconds=DUPLICATE_WINDOW_SECONDS)
         self.backend = backend
         self.backend_ready = backend is None
+        self.pending_card_uid: str | None = None
+        self.pending_card_expires_at = 0.0
+        self.card_link_identifier: str | None = None
+        self.designated_card_link_staff_ids = (
+            DESIGNATED_CARD_LINK_STAFF_IDS
+            if designated_card_link_staff_ids is None
+            else designated_card_link_staff_ids
+        )
+
+    def clear_card_link(self) -> None:
+        if self.pending_card_uid:
+            self.guard.forget(self.pending_card_uid)
+        self.pending_card_uid = None
+        self.pending_card_expires_at = 0.0
+        self.card_link_identifier = None
+
+    def card_link_is_active(self) -> bool:
+        if not self.pending_card_uid or time.monotonic() >= self.pending_card_expires_at:
+            self.clear_card_link()
+            return False
+        return True
 
     def broadcast(self, event: dict[str, Any]) -> None:
         for client in tuple(self.clients):
@@ -78,7 +110,42 @@ class BridgeState:
             len(self.clients),
         )
 
-        if self.backend is None:
+        expired_card_link = (
+            self.backend is not None
+            and self.card_link_identifier is not None
+            and not self.card_link_is_active()
+        )
+        authorizing_card_link = (
+            self.backend is not None
+            and self.card_link_identifier is not None
+            and self.card_link_is_active()
+        )
+        if expired_card_link:
+            result = CheckInResult(
+                outcome="card_link_error",
+                message="The card-link session expired. Scan the member card again.",
+            )
+            self.guard.forget(uid)
+        elif authorizing_card_link:
+            try:
+                result = await asyncio.to_thread(
+                    self.backend.link_card,
+                    self.card_link_identifier,
+                    self.pending_card_uid,
+                    uid,
+                    self.designated_card_link_staff_ids,
+                )
+            except Exception:
+                LOGGER.exception("Card-link backend failed during staff authorization")
+                result = CheckInResult(
+                    outcome="card_link_error",
+                    message="The card could not be connected. Please try again.",
+                )
+            if result.outcome == "card_linked":
+                self.clear_card_link()
+            else:
+                self.guard.forget(uid)
+        elif self.backend is None:
             result = CheckInResult(
                 outcome="demo",
                 display_name="Sandbox member",
@@ -93,6 +160,13 @@ class BridgeState:
                     outcome="backend_error",
                     message="The check-in could not be recorded. Please see staff.",
                 )
+
+        if result.outcome == "unknown_card":
+            self.pending_card_uid = uid
+            self.pending_card_expires_at = (
+                time.monotonic() + CARD_LINK_SESSION_SECONDS
+            )
+            self.card_link_identifier = None
 
         if result.outcome == "backend_error":
             self.guard.forget(uid)
@@ -247,6 +321,51 @@ class SimulatedRead(BaseModel):
 
 class IdentifierCheckIn(BaseModel):
     identifier: str
+
+
+class CardLinkStart(BaseModel):
+    identifier: str
+
+
+@app.post("/card-link/start")
+async def start_card_link(request: CardLinkStart) -> dict[str, Any]:
+    identifier = request.identifier.strip()
+    if not identifier or len(identifier) > 64:
+        raise HTTPException(status_code=422, detail="Enter a valid PID or employee ID")
+    if STATE.backend is None:
+        raise HTTPException(status_code=409, detail="Card linking is unavailable in demo mode")
+    if not STATE.designated_card_link_staff_ids:
+        raise HTTPException(status_code=503, detail="No designated card-linking staff are configured")
+    if not STATE.card_link_is_active():
+        raise HTTPException(status_code=409, detail="The unknown-card session expired. Scan the member card again.")
+
+    try:
+        result = await asyncio.to_thread(STATE.backend.prepare_card_link, identifier)
+    except Exception:
+        LOGGER.exception("Card-link backend failed while identifying the member")
+        raise HTTPException(status_code=503, detail="The account could not be checked")
+    if result.outcome != "link_ready":
+        return {
+            "ok": False,
+            "outcome": result.outcome,
+            "message": result.message,
+        }
+    STATE.card_link_identifier = identifier
+    return {
+        "ok": True,
+        "outcome": result.outcome,
+        "display_name": result.display_name,
+        "message": result.message,
+        "expires_in_seconds": round(
+            max(0, STATE.pending_card_expires_at - time.monotonic())
+        ),
+    }
+
+
+@app.post("/card-link/cancel")
+async def cancel_card_link() -> dict[str, bool]:
+    STATE.clear_card_link()
+    return {"ok": True}
 
 
 @app.post("/check-in/identifier")

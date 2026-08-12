@@ -26,7 +26,8 @@ The kiosk still requires a matching waiver record before check-in succeeds. Afte
 6. Deploy as a web app that executes as the deploying UCSD account. If UCSD policy permits, allow anonymous access; otherwise stop and use the allowed domain setting rather than moving the app to a personal account.
 7. Test one fictional registration first. Remove the fictional row after verification.
 8. Test one authorized real registration, verify the user database row, complete DocuSign, and verify kiosk check-in.
-9. Only then replace the public website and kiosk QR/link.
+9. Set `NEXT_PUBLIC_REGISTRATION_URL` to the deployed Apps Script web-app URL, rebuild the kiosk, and verify its QR code and link on a phone.
+10. Only then replace the public website's registration link.
 
 For a non-production permission and schema test, set `USER_DATABASE_SPREADSHEET_ID` to an approved test-copy ID, run `setupRegistrationSheet`, and submit only fictional records. Replace the property with the production ID only after the test succeeds.
 

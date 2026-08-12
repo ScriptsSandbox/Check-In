@@ -36,6 +36,8 @@ class SheetsProvider(Protocol):
 
     def append_activity(self, row: list[Any]) -> None: ...
 
+    def update_user_card(self, identifier: str, card_uid: str) -> dict[str, Any]: ...
+
 
 def normalize_person_id(value: Any) -> str:
     normalized = str(value or "").strip().lower().replace("+e?", "")[:9]
@@ -156,6 +158,42 @@ class GoogleSheetsProvider:
                     time.monotonic() + self.activity_cache_seconds
                 )
 
+    def update_user_card(self, identifier: str, card_uid: str) -> dict[str, Any]:
+        """Attach a card to exactly one existing user and refresh the local cache."""
+        normalized_identifier = normalize_person_id(identifier)
+        normalized_uid = card_uid.strip().upper()
+        with self._lock:
+            self._refresh_people_if_needed()
+            users = self._users or []
+            matches = [
+                (index, record)
+                for index, record in enumerate(users)
+                if normalize_person_id(record.get("Student ID")) == normalized_identifier
+            ]
+            if len(matches) != 1:
+                raise ValueError("The account could not be identified uniquely.")
+            if any(
+                str(record.get("Card UUID", "")).strip().upper() == normalized_uid
+                for record in users
+            ):
+                raise ValueError("That card is already connected to an account.")
+
+            index, record = matches[0]
+            existing_uid = str(record.get("Card UUID", "")).strip()
+            if existing_uid:
+                raise ValueError("That account already has a connected card.")
+
+            self._connect()
+            headers = self._user_sheet.row_values(1)
+            try:
+                card_column = headers.index("Card UUID") + 1
+            except ValueError as error:
+                raise RuntimeError("The user database has no Card UUID column.") from error
+            self._user_sheet.update_cell(index + 2, card_column, normalized_uid)
+            record["Card UUID"] = normalized_uid
+            self._cache_expires_at = time.monotonic() + self.cache_seconds
+            return dict(record)
+
 
 class SheetsCheckInBackend:
     def __init__(
@@ -251,6 +289,117 @@ class SheetsCheckInBackend:
             activity_identifier,
             total_started,
             timings,
+        )
+
+    def prepare_card_link(self, identifier: str) -> CheckInResult:
+        """Confirm that a staff-assisted card link has one eligible target."""
+        normalized_identifier = normalize_person_id(identifier)
+        matches = [
+            record
+            for record in self.provider.user_records()
+            if normalized_identifier
+            and normalize_person_id(record.get("Student ID")) == normalized_identifier
+        ]
+        if not matches:
+            return CheckInResult(
+                outcome="unknown_identifier",
+                message="We could not find that PID or employee ID.",
+            )
+        if len(matches) > 1:
+            return CheckInResult(
+                outcome="card_link_error",
+                message="More than one account uses that identifier. Please see an administrator.",
+            )
+        target = matches[0]
+        if str(target.get("Card UUID", "")).strip():
+            return CheckInResult(
+                outcome="card_link_error",
+                message="That account already has a connected card.",
+            )
+        return CheckInResult(
+            outcome="link_ready",
+            display_name=str(target.get("Name", "")).strip() or "Sandbox member",
+            message="Ask designated staff to tap their own card.",
+        )
+
+    def link_card(
+        self,
+        identifier: str,
+        card_uid: str,
+        staff_card_uid: str,
+        designated_staff_ids: set[str],
+    ) -> CheckInResult:
+        """Authorize a card link with a designated staff member's own card."""
+        total_started = time.monotonic()
+        timings: dict[str, int] = {}
+        normalized_identifier = normalize_person_id(identifier)
+        normalized_card_uid = card_uid.strip().upper()
+        normalized_staff_uid = staff_card_uid.strip().upper()
+
+        stage_started = time.monotonic()
+        users = self.provider.user_records()
+        staff = next(
+            (
+                record
+                for record in users
+                if str(record.get("Card UUID", "")).strip().upper()
+                == normalized_staff_uid
+            ),
+            None,
+        )
+        staff_id = normalize_person_id(staff.get("Student ID")) if staff else ""
+        allowed_staff = {normalize_person_id(value) for value in designated_staff_ids}
+        timings["staff_lookup"] = elapsed_ms(stage_started)
+        if not staff or not staff_id or staff_id not in allowed_staff:
+            timings["total"] = elapsed_ms(total_started)
+            return CheckInResult(
+                outcome="staff_unauthorized",
+                message="That card is not authorized to connect member cards.",
+                timings_ms=timings,
+            )
+        if normalized_staff_uid == normalized_card_uid:
+            timings["total"] = elapsed_ms(total_started)
+            return CheckInResult(
+                outcome="staff_unauthorized",
+                message="Use the designated staff member's own card to approve this link.",
+                timings_ms=timings,
+            )
+
+        stage_started = time.monotonic()
+        try:
+            target = self.provider.update_user_card(
+                normalized_identifier,
+                normalized_card_uid,
+            )
+        except ValueError as error:
+            timings["card_update"] = elapsed_ms(stage_started)
+            timings["total"] = elapsed_ms(total_started)
+            return CheckInResult(
+                outcome="card_link_error",
+                message=str(error),
+                timings_ms=timings,
+            )
+        timings["card_update"] = elapsed_ms(stage_started)
+
+        display_name = str(target.get("Name", "")).strip() or "Sandbox member"
+        staff_name = str(staff.get("Name", "")).strip() or "Designated staff"
+        local_now = self.local_datetime()
+        self.provider.append_activity([
+            local_now.strftime("%m/%d/%Y %H:%M:%S"),
+            int(self.now()),
+            display_name,
+            normalized_card_uid,
+            "Card Linked",
+            staff_name,
+            "",
+            "",
+        ])
+        timings["total"] = elapsed_ms(total_started)
+        return CheckInResult(
+            outcome="card_linked",
+            display_name=display_name,
+            message="Card connected. The member can now check in.",
+            timings_ms=timings,
         )
 
     def _check_in_user(

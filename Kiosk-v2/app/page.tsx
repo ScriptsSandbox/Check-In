@@ -13,6 +13,9 @@ type Screen =
   | "waiver-required"
   | "backend-error"
   | "link-card"
+  | "link-authorize"
+  | "link-error"
+  | "card-linked"
   | "reader-error"
   | "profile"
   | "profile-detail"
@@ -25,11 +28,20 @@ type Announcement = {
   closingTime: string;
 };
 
-const REGISTRATION_URL = "https://ucsd.co1.qualtrics.com/jfe/form/SV_eFdO6o26XrasxoO";
+const REGISTRATION_URL = process.env.NEXT_PUBLIC_REGISTRATION_URL?.trim() || "";
 
 type ScannerStatus = "demo" | "connecting" | "connected" | "disconnected";
 
-type ScannerOutcome = "demo" | "success" | "unknown_card" | "unknown_identifier" | "waiver_required" | "backend_error";
+type ScannerOutcome =
+  | "demo"
+  | "success"
+  | "unknown_card"
+  | "unknown_identifier"
+  | "waiver_required"
+  | "backend_error"
+  | "card_linked"
+  | "staff_unauthorized"
+  | "card_link_error";
 
 type ScannerDetectedEvent = {
   type: "card_detected";
@@ -77,7 +89,10 @@ export default function Home() {
   const [checkInMethod, setCheckInMethod] = useState<"card" | "identifier">("card");
   const [affiliation, setAffiliation] = useState("");
   const [detail, setDetail] = useState("");
-  const [claimCode, setClaimCode] = useState("");
+  const [linkIdentifier, setLinkIdentifier] = useState("");
+  const [linkTargetName, setLinkTargetName] = useState("Sandbox member");
+  const [linkError, setLinkError] = useState("");
+  const [staffCardDetected, setStaffCardDetected] = useState(false);
   const [countdown, setCountdown] = useState(8);
   const [now, setNow] = useState<Date | null>(null);
   const [announcement, setAnnouncement] = useState<Announcement>(emptyAnnouncement);
@@ -139,6 +154,8 @@ export default function Home() {
             setScannerResult(null);
             setCheckInMethod("card");
             setScreen("reading");
+          } else if (event.type === "card_detected" && screenRef.current === "link-authorize") {
+            setStaffCardDetected(true);
           } else if (
             event.type === "card_read" &&
             (screenRef.current === "home" || screenRef.current === "reading")
@@ -149,6 +166,15 @@ export default function Home() {
               setScreen("reading");
             }
             setScannerResult(event);
+          } else if (event.type === "card_read" && screenRef.current === "link-authorize") {
+            setStaffCardDetected(false);
+            if (event.outcome === "card_linked") {
+              setWelcomeName(event.display_name || "Sandbox member");
+              setScreen("card-linked");
+            } else {
+              setLinkError(event.message || "That staff card could not authorize the link.");
+              setScreen("link-error");
+            }
           }
         } catch {
           // Ignore malformed local bridge messages; the bridge will keep listening.
@@ -289,7 +315,10 @@ export default function Home() {
     setPid("");
     setAffiliation("");
     setDetail("");
-    setClaimCode("");
+    setLinkIdentifier("");
+    setLinkTargetName("Sandbox member");
+    setLinkError("");
+    setStaffCardDetected(false);
     setDemoOpen(false);
   }
 
@@ -323,6 +352,44 @@ export default function Home() {
         sequence: 0,
       });
     }
+  }
+
+  async function startCardLink(event: FormEvent) {
+    event.preventDefault();
+    const identifier = linkIdentifier.trim().toUpperCase();
+    if (!identifier) return;
+    setLinkError("");
+    try {
+      const response = await fetch("http://127.0.0.1:8765/card-link/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier }),
+      });
+      const result = await response.json() as {
+        ok?: boolean;
+        display_name?: string;
+        message?: string;
+        detail?: string;
+      };
+      if (!response.ok || !result.ok) {
+        throw new Error(result.message || result.detail || "The card-link session could not start.");
+      }
+      setLinkTargetName(result.display_name || "Sandbox member");
+      setStaffCardDetected(false);
+      setScreen("link-authorize");
+    } catch (error) {
+      setLinkError(error instanceof Error ? error.message : "The card-link session could not start.");
+      setScreen("link-card");
+    }
+  }
+
+  async function cancelCardLink() {
+    try {
+      await fetch("http://127.0.0.1:8765/card-link/cancel", { method: "POST" });
+    } catch {
+      // The bridge also expires pending card data automatically.
+    }
+    reset();
   }
 
   const showBrand = screen !== "success";
@@ -434,7 +501,6 @@ export default function Home() {
                 autoCapitalize="characters"
                 autoComplete="off"
                 placeholder="A12345678"
-                autoFocus
               />
               <button className="solid-action" type="submit" disabled={!pid.trim()}>
                 Check in <Arrow />
@@ -461,8 +527,9 @@ export default function Home() {
           <div className="status-content screen-content">
             <p className="eyebrow warning">CARD NOT CONNECTED</p>
             <h1>We don’t know<br />this card yet.</h1>
-            <p className="lede">Already registered online? Use your card-connection code. Existing members can use their PID or employee ID.</p>
+            <p className="lede">Already registered? Designated staff can connect this card after checking your physical ID.</p>
           <div className="stacked-actions">
+            <button className="solid-action" onClick={() => setScreen("link-card")}>Ask staff to connect this card <Arrow /></button>
             <button className="solid-action" onClick={() => setScreen("pid")}>Use my PID or employee ID <Arrow /></button>
             <button className="outline-action" onClick={() => setScreen("new-here")}>I’m new here</button>
             <button className="quiet-action" onClick={() => setScreen("home")}>Try the card again</button>
@@ -494,23 +561,54 @@ export default function Home() {
         {screen === "link-card" && (
           <div className="form-content screen-content">
             <button className="back" onClick={() => setScreen("unknown-card")}><Arrow direction="left" /> Back</button>
-            <p className="eyebrow">CONNECT THIS CARD</p>
-            <h1>Enter your<br />connection code.</h1>
-            <p className="lede compact">It’s the eight-character code shown after you created your Sandbox account online.</p>
-            <form onSubmit={(event) => { event.preventDefault(); startDemoCheckIn(); }}>
-              <label htmlFor="claim-code">CARD-CONNECTION CODE</label>
+            <p className="eyebrow">STAFF-ASSISTED CARD LINK</p>
+            <h1>Confirm the<br />member’s account.</h1>
+            <p className="lede compact">Staff: inspect the member’s physical ID, then enter its PID or employee ID.</p>
+            <form onSubmit={startCardLink}>
+              <label htmlFor="link-identifier">PID OR EMPLOYEE ID</label>
               <input
-                id="claim-code"
-                value={claimCode}
-                onChange={(event) => setClaimCode(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8))}
+                id="link-identifier"
+                value={linkIdentifier}
+                onChange={(event) => setLinkIdentifier(event.target.value.toUpperCase().slice(0, 32))}
                 autoCapitalize="characters"
                 autoComplete="off"
-                placeholder="7MK4Q2HP"
-                autoFocus
+                placeholder="A12345678"
               />
-              <button className="solid-action" type="submit" disabled={claimCode.length !== 8}>Connect card and check in <Arrow /></button>
+              <button className="solid-action" type="submit" disabled={!linkIdentifier.trim()}>Continue to staff authorization <Arrow /></button>
             </form>
-            <button className="quiet-action align-left" onClick={() => setScreen("pid")}>I don’t have my code</button>
+            {linkError && <p className="error" role="alert">{linkError}</p>}
+            <button className="quiet-action align-left" onClick={() => setScreen("pid")}>Check in without connecting the card</button>
+          </div>
+        )}
+
+        {screen === "link-authorize" && (
+          <div className="status-content screen-content">
+            <button className="back" onClick={cancelCardLink}><Arrow direction="left" /> Cancel</button>
+            <p className="eyebrow">DESIGNATED STAFF AUTHORIZATION</p>
+            <h1>{staffCardDetected ? <>Checking staff<br />authorization…</> : <>Staff: tap your<br />own ID card.</>}</h1>
+            <p className="lede">Connecting the waiting card to <b>{linkTargetName}</b>. Only a designated staff card can approve this change.</p>
+            <p className="field-note">Do not tap the member’s card again until authorization is complete.</p>
+          </div>
+        )}
+
+        {screen === "link-error" && (
+          <div className="status-content screen-content">
+            <p className="eyebrow warning">CARD NOT CONNECTED</p>
+            <h1>Staff authorization<br />didn’t complete.</h1>
+            <p className="lede">{linkError}</p>
+            <div className="button-row">
+              <button className="solid-action" onClick={() => { setLinkError(""); setStaffCardDetected(false); setScreen("link-authorize"); }}>Try another staff card</button>
+              <button className="outline-action" onClick={cancelCardLink}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {screen === "card-linked" && (
+          <div className="status-content screen-content">
+            <p className="eyebrow">CARD CONNECTED</p>
+            <h1>{welcomeName},<br />you’re ready.</h1>
+            <p className="lede">Tap the newly connected card again to check in. A waiver is still required before entry.</p>
+            <button className="solid-action" onClick={reset}>Return to check-in <Arrow /></button>
           </div>
         )}
 
@@ -581,12 +679,14 @@ export default function Home() {
                   <li><b>03</b><span>Ask staff to activate your account</span></li>
                 </ol>
               </div>
-              <div className="qr-code" aria-label="QR code for the Scripps Sandbox registration form">
+              {REGISTRATION_URL && <div className="qr-code" aria-label="QR code for the Scripps Sandbox registration form">
                 <QRCodeSVG value={REGISTRATION_URL} size={178} level="M" bgColor="#f2eee3" fgColor="#092235" />
                 <span>SCAN TO JOIN</span>
-              </div>
+              </div>}
             </div>
-            <a className="outline-action onboarding-link" href={REGISTRATION_URL} target="_blank" rel="noreferrer">Open the registration form</a>
+            {REGISTRATION_URL
+              ? <a className="outline-action onboarding-link" href={REGISTRATION_URL} target="_blank" rel="noreferrer">Open the registration form</a>
+              : <p className="lede compact">The registration link is not configured yet. Please ask Sandbox staff for help.</p>}
             <button className="outline-action" onClick={() => setScreen("pid")}>I already registered</button>
           </div>
         )}

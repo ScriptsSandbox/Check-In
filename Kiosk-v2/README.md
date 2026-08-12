@@ -22,6 +22,10 @@ This starter does not use `wrangler.jsonc`.
 
 When served from `localhost`, the interface automatically looks for the local reader bridge at `ws://127.0.0.1:8765/ws`. The hosted design prototype stays in demo mode. See `bridge/README.md` for Pi setup and hardware-free simulation.
 
+Set `NEXT_PUBLIC_REGISTRATION_URL` to the deployed Apps Script registration web-app URL before building the Pi kiosk. If it is unset, the new-member QR and external link stay hidden instead of sending visitors to the retired Qualtrics form.
+
+Unrecognized cards can be linked only through the designated-staff workflow in the local bridge. Configure authorized staff in `CARD_LINK_STAFF_IDS`; see `bridge/README.md` for the verification and audit behavior.
+
 ## Workspace Auth Headers
 
 Signed-in visitors receive both `oai-authenticated-user-id` and `oai-authenticated-user-email`. Private Sites require every visitor to sign in; public Sites may also have anonymous visitors, for whom neither header is present.
