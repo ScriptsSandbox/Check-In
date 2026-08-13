@@ -62,3 +62,20 @@ def test_warm_up_requires_ready_response(monkeypatch):
         assert "not ready" in str(error)
     else:
         raise AssertionError("warm_up should reject a non-ready API")
+
+
+def test_replacement_sends_raw_token_only_for_authorized_fabman_handoff(monkeypatch):
+    observed = {}
+
+    def fake_urlopen(request, timeout):
+        observed.update(json.loads(request.data.decode("utf-8")))
+        return FakeResponse({"ok": True, "outcome": "card_updated", "displayName": "Member"})
+
+    monkeypatch.setattr(module, "urlopen", fake_urlopen)
+    result = backend().complete_card_update("ABCD234567", "04A1B2C3D4E5F6")
+    assert result.outcome == "card_updated"
+    assert observed["action"] == "complete_card_update"
+    assert observed["code"] == "ABCD234567"
+    assert observed["cardToken"] == "04A1B2C3D4E5F6"
+    assert observed["cardDigest"] == backend().card_digest("04A1B2C3D4E5F6")
+    assert observed["cardLastFour"] == "E5F6"

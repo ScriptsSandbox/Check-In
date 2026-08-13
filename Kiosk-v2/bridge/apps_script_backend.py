@@ -1,7 +1,9 @@
 """Private Apps Script API backend for the kiosk bridge.
 
-Raw card UIDs never leave the Raspberry Pi. They are converted to keyed HMAC
-digests before this client contacts the UCSD-owned Apps Script deployment.
+Normal check-ins send only keyed HMAC digests. During an administrator-created,
+short-lived replacement session, the new UID is sent once over HTTPS to the
+UCSD-owned Apps Script service so it can replace the key on the already-linked
+FabMan member. It is never logged or stored in Sheets.
 """
 
 from __future__ import annotations
@@ -119,5 +121,20 @@ class AppsScriptCheckInBackend:
             memberDigest=self.card_digest(member_uid),
             memberLastFour=normalize_card_uid(member_uid)[-4:],
             staffDigest=self.card_digest(staff_uid),
+        )
+        return self._result(payload, request_ms)
+
+    def prepare_card_update(self, code: str) -> CheckInResult:
+        payload, request_ms = self._request("prepare_card_update", code=code)
+        return self._result(payload, request_ms)
+
+    def complete_card_update(self, code: str, card_uid: str) -> CheckInResult:
+        normalized = normalize_card_uid(card_uid)
+        payload, request_ms = self._request(
+            "complete_card_update",
+            code=code,
+            cardDigest=self.card_digest(normalized),
+            cardLastFour=normalized[-4:],
+            cardToken=normalized,
         )
         return self._result(payload, request_ms)

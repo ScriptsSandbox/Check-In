@@ -29,6 +29,7 @@ SIMULATION_ENABLED = os.getenv("SCANNER_SIMULATE", "false").lower() == "true"
 BACKEND_MODE = os.getenv("SCANNER_CHECKIN_BACKEND", "demo").strip().lower()
 DUPLICATE_WINDOW_SECONDS = float(os.getenv("SCANNER_DUPLICATE_SECONDS", "15"))
 CARD_LINK_SESSION_SECONDS = float(os.getenv("CARD_LINK_SESSION_SECONDS", "300"))
+CARD_UPDATE_SESSION_SECONDS = float(os.getenv("CARD_UPDATE_SESSION_SECONDS", "900"))
 DESIGNATED_CARD_LINK_STAFF_IDS = {
     value.strip()
     for value in os.getenv("CARD_LINK_STAFF_IDS", "").split(",")
@@ -64,6 +65,8 @@ class BridgeState:
         self.pending_card_uid: str | None = None
         self.pending_card_expires_at = 0.0
         self.card_link_identifier: str | None = None
+        self.card_update_code: str | None = None
+        self.card_update_expires_at = 0.0
         self.designated_card_link_staff_ids = (
             DESIGNATED_CARD_LINK_STAFF_IDS
             if designated_card_link_staff_ids is None
@@ -80,6 +83,16 @@ class BridgeState:
     def card_link_is_active(self) -> bool:
         if not self.pending_card_uid or time.monotonic() >= self.pending_card_expires_at:
             self.clear_card_link()
+            return False
+        return True
+
+    def clear_card_update(self) -> None:
+        self.card_update_code = None
+        self.card_update_expires_at = 0.0
+
+    def card_update_is_active(self) -> bool:
+        if not self.card_update_code or time.monotonic() >= self.card_update_expires_at:
+            self.clear_card_update()
             return False
         return True
 
@@ -113,6 +126,7 @@ class BridgeState:
             len(self.clients),
         )
 
+        replacing_card = self.backend is not None and self.card_update_is_active()
         expired_card_link = (
             self.backend is not None
             and self.card_link_identifier is not None
@@ -123,7 +137,24 @@ class BridgeState:
             and self.card_link_identifier is not None
             and self.card_link_is_active()
         )
-        if expired_card_link:
+        if replacing_card:
+            try:
+                result = await asyncio.to_thread(
+                    self.backend.complete_card_update,
+                    self.card_update_code,
+                    uid,
+                )
+            except Exception:
+                LOGGER.exception("Replacement-card backend failed")
+                result = CheckInResult(
+                    outcome="card_update_error",
+                    message="The replacement could not be completed. Please try again.",
+                )
+            if result.outcome == "card_updated":
+                self.clear_card_update()
+            else:
+                self.guard.forget(uid)
+        elif expired_card_link:
             result = CheckInResult(
                 outcome="card_link_error",
                 message="The card-link session expired. Scan the member card again.",
@@ -330,6 +361,10 @@ class CardLinkStart(BaseModel):
     identifier: str
 
 
+class CardUpdateStart(BaseModel):
+    code: str
+
+
 @app.post("/card-link/start")
 async def start_card_link(request: CardLinkStart) -> dict[str, Any]:
     identifier = request.identifier.strip()
@@ -368,6 +403,39 @@ async def start_card_link(request: CardLinkStart) -> dict[str, Any]:
 @app.post("/card-link/cancel")
 async def cancel_card_link() -> dict[str, bool]:
     STATE.clear_card_link()
+    return {"ok": True}
+
+
+@app.post("/card-update/start")
+async def start_card_update(request: CardUpdateStart) -> dict[str, Any]:
+    code = request.code.strip().upper().replace("-", "").replace(" ", "")
+    if len(code) != 10 or not code.isalnum():
+        raise HTTPException(status_code=422, detail="Enter the 10-character handoff code")
+    if STATE.backend is None or not hasattr(STATE.backend, "prepare_card_update"):
+        raise HTTPException(status_code=409, detail="Card replacement is unavailable on this kiosk")
+    STATE.clear_card_link()
+    STATE.clear_card_update()
+    try:
+        result = await asyncio.to_thread(STATE.backend.prepare_card_update, code)
+    except Exception:
+        LOGGER.exception("Replacement-card backend failed while validating the handoff")
+        raise HTTPException(status_code=503, detail="The handoff could not be checked")
+    if result.outcome != "card_update_ready":
+        return {"ok": False, "outcome": result.outcome, "message": result.message}
+    STATE.card_update_code = code
+    STATE.card_update_expires_at = time.monotonic() + CARD_UPDATE_SESSION_SECONDS
+    return {
+        "ok": True,
+        "outcome": result.outcome,
+        "display_name": result.display_name,
+        "message": result.message,
+        "expires_in_seconds": round(CARD_UPDATE_SESSION_SECONDS),
+    }
+
+
+@app.post("/card-update/cancel")
+async def cancel_card_update() -> dict[str, bool]:
+    STATE.clear_card_update()
     return {"ok": True}
 
 

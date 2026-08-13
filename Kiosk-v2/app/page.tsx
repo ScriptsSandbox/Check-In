@@ -16,6 +16,11 @@ type Screen =
   | "link-authorize"
   | "link-error"
   | "card-linked"
+  | "update-card"
+  | "update-card-wait"
+  | "update-card-processing"
+  | "card-updated"
+  | "card-update-error"
   | "reader-error"
   | "profile"
   | "profile-detail"
@@ -41,7 +46,10 @@ type ScannerOutcome =
   | "backend_error"
   | "card_linked"
   | "staff_unauthorized"
-  | "card_link_error";
+  | "card_link_error"
+  | "card_update_ready"
+  | "card_updated"
+  | "card_update_error";
 
 type ScannerDetectedEvent = {
   type: "card_detected";
@@ -93,6 +101,9 @@ export default function Home() {
   const [linkTargetName, setLinkTargetName] = useState("Sandbox member");
   const [linkError, setLinkError] = useState("");
   const [staffCardDetected, setStaffCardDetected] = useState(false);
+  const [cardUpdateCode, setCardUpdateCode] = useState("");
+  const [cardUpdateName, setCardUpdateName] = useState("Sandbox member");
+  const [cardUpdateError, setCardUpdateError] = useState("");
   const [countdown, setCountdown] = useState(8);
   const [now, setNow] = useState<Date | null>(null);
   const [announcement, setAnnouncement] = useState<Announcement>(emptyAnnouncement);
@@ -156,6 +167,8 @@ export default function Home() {
             setScreen("reading");
           } else if (event.type === "card_detected" && screenRef.current === "link-authorize") {
             setStaffCardDetected(true);
+          } else if (event.type === "card_detected" && screenRef.current === "update-card-wait") {
+            setScreen("update-card-processing");
           } else if (
             event.type === "card_read" &&
             (screenRef.current === "home" || screenRef.current === "reading")
@@ -174,6 +187,14 @@ export default function Home() {
             } else {
               setLinkError(event.message || "That staff card could not authorize the link.");
               setScreen("link-error");
+            }
+          } else if (event.type === "card_read" && (screenRef.current === "update-card-wait" || screenRef.current === "update-card-processing")) {
+            if (event.outcome === "card_updated") {
+              setWelcomeName(event.display_name || cardUpdateName);
+              setScreen("card-updated");
+            } else {
+              setCardUpdateError(event.message || "The replacement could not be completed.");
+              setScreen("card-update-error");
             }
           }
         } catch {
@@ -392,6 +413,34 @@ export default function Home() {
     reset();
   }
 
+  async function startCardUpdate(event: FormEvent) {
+    event.preventDefault();
+    const code = cardUpdateCode.trim().toUpperCase().replace(/[\s-]+/g, "");
+    if (!code) return;
+    setCardUpdateError("");
+    try {
+      const response = await fetch("http://127.0.0.1:8765/card-update/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      const result = await response.json() as { ok?: boolean; display_name?: string; message?: string; detail?: string };
+      if (!response.ok || !result.ok) throw new Error(result.message || result.detail || "The handoff could not start.");
+      setCardUpdateName(result.display_name || "Sandbox member");
+      setScreen("update-card-wait");
+    } catch (error) {
+      setCardUpdateError(error instanceof Error ? error.message : "The handoff could not start.");
+      setScreen("update-card");
+    }
+  }
+
+  async function cancelCardUpdate() {
+    try { await fetch("http://127.0.0.1:8765/card-update/cancel", { method: "POST" }); } catch {}
+    setCardUpdateCode("");
+    setCardUpdateError("");
+    setScreen("home");
+  }
+
   const showBrand = screen !== "success";
 
   return (
@@ -464,6 +513,10 @@ export default function Home() {
               </button>
               <button className="text-action" onClick={() => setScreen("new-here")}>
                 <span><small>NEW HERE?</small>Get started</span>
+                <Arrow />
+              </button>
+              <button className="text-action" onClick={() => { setCardUpdateCode(""); setCardUpdateError(""); setScreen("update-card"); }}>
+                <span><small>STAFF HANDOFF</small>Replace an existing ID card</span>
                 <Arrow />
               </button>
             </div>
@@ -609,6 +662,48 @@ export default function Home() {
             <h1>{welcomeName},<br />you’re ready.</h1>
             <p className="lede">Tap the newly connected card again to check in. A waiver is still required before entry.</p>
             <button className="solid-action" onClick={reset}>Return to check-in <Arrow /></button>
+          </div>
+        )}
+
+        {screen === "update-card" && (
+          <div className="form-content screen-content">
+            <button className="back" onClick={() => setScreen("home")}><Arrow direction="left" /> Back</button>
+            <p className="eyebrow">STAFF ID / CARD UPDATE</p>
+            <h1>Enter the<br />handoff code.</h1>
+            <p className="lede compact">An administrator creates this code from the member’s user card in the staff app.</p>
+            <form onSubmit={startCardUpdate}>
+              <label htmlFor="card-update-code">10-CHARACTER CODE</label>
+              <input id="card-update-code" value={cardUpdateCode} onChange={(event) => setCardUpdateCode(event.target.value.toUpperCase().slice(0, 14))} autoCapitalize="characters" autoComplete="off" placeholder="ABCD234567" />
+              <button className="solid-action" type="submit" disabled={cardUpdateCode.replace(/[\s-]+/g, "").length !== 10}>Continue <Arrow /></button>
+            </form>
+            {cardUpdateError && <p className="error" role="alert">{cardUpdateError}</p>}
+          </div>
+        )}
+
+        {(screen === "update-card-wait" || screen === "update-card-processing") && (
+          <div className="status-content screen-content">
+            <button className="back" onClick={cancelCardUpdate}><Arrow direction="left" /> Cancel</button>
+            <p className="eyebrow">REPLACEMENT FOR {cardUpdateName.toUpperCase()}</p>
+            <h1>{screen === "update-card-processing" ? <>Updating both<br />systems…</> : <>Tap the new<br />ID card.</>}</h1>
+            <p className="lede">{screen === "update-card-processing" ? "Keep the card nearby. We’re updating the Sandbox card record and the already-linked FabMan member." : "Hold the replacement card on the blue hand below. The old card will no longer work after this succeeds."}</p>
+          </div>
+        )}
+
+        {screen === "card-updated" && (
+          <div className="status-content screen-content">
+            <p className="eyebrow">REPLACEMENT COMPLETE</p>
+            <h1>{welcomeName},<br />the new card is ready.</h1>
+            <p className="lede">The old card is disabled. Existing memberships, packages, and training remain on the same account.</p>
+            <button className="solid-action" onClick={reset}>Return to check-in <Arrow /></button>
+          </div>
+        )}
+
+        {screen === "card-update-error" && (
+          <div className="status-content screen-content">
+            <p className="eyebrow warning">REPLACEMENT NOT COMPLETE</p>
+            <h1>Please try<br />that card again.</h1>
+            <p className="lede">{cardUpdateError}</p>
+            <div className="button-row"><button className="solid-action" onClick={() => setScreen("update-card-wait")}>Try again</button><button className="outline-action" onClick={cancelCardUpdate}>Cancel</button></div>
           </div>
         )}
 

@@ -10,6 +10,9 @@ const STAFF_CONFIG_ = {
     training: { name: "Tool Training", headers: ["Training ID", "Person ID", "Tool", "Status", "Approved By", "Approved At", "FabMan Status", "Notes"] },
     fabmanLinks: { name: "FabMan Links", headers: ["Link ID", "Person ID", "FabMan Member ID", "Status", "Match Method", "Confirmed By", "Confirmed At", "Notes"] },
     notes: { name: "Staff Notes", headers: ["Note ID", "Note", "Created By", "Created At", "Status", "Resolved By", "Resolved At"] },
+    tools: { name: "Tools", headers: ["Tool Key", "Display Name", "Active", "Staff Can Approve", "Sort Order", "Category", "Legacy Header"], allowAdditionalHeaders: true },
+    cards: { name: "Cards", headers: ["Card ID", "Person ID", "Card Digest", "Last Four", "Status", "Linked At", "Retired At", "Source System", "Source Row"] },
+    cardUpdates: { name: "Card Update Sessions", headers: ["Session ID", "Code Digest", "Person ID", "Status", "New Identifier Type", "New Identifier Value", "New Identifier Normalized", "Disable Old Card", "Old Card Disabled At", "Requested By", "Requested At", "Expires At", "Completed At", "FabMan Status", "Notes"] },
   },
 };
 
@@ -36,7 +39,7 @@ function setupStaffApp() {
   const actorEmail = String(Session.getActiveUser().getEmail() || "").trim().toLowerCase();
   if (!actorEmail) throw new Error("Sign in before initializing the staff app.");
   const spreadsheet = staffSpreadsheet_();
-  ["training", "notes", "fabmanLinks"].forEach(function (key) {
+  ["training", "notes", "fabmanLinks", "cardUpdates"].forEach(function (key) {
     const definition = STAFF_CONFIG_.sheets[key];
     let sheet = spreadsheet.getSheetByName(definition.name);
     if (!sheet) sheet = spreadsheet.insertSheet(definition.name);
@@ -44,6 +47,7 @@ function setupStaffApp() {
     staffAssertHeaders_(sheet, definition.headers, definition.allowAdditionalHeaders);
     sheet.setFrozenRows(1);
   });
+  staffEnsureToolColumns_(spreadsheet.getSheetByName("Tools"));
   return { ok: true, actor: actorEmail };
 }
 
@@ -57,11 +61,14 @@ function staffDashboard() {
     return cached;
   }
   const db = staffDatabase_();
+  const toolCatalog = staffToolCatalog_(db.tools);
+  const toolByKey = {}; toolCatalog.forEach(function (tool) { toolByKey[tool.key] = tool; });
   const people = staffRecords_(db.people).filter(function (person) { return String(person.Status).toLowerCase() === "active"; });
   const establishedTraining = staffRecords_(db.certifications).filter(function (record) {
     return String(record.Status).toLowerCase() === "active";
   }).map(function (record) {
-    return { "Person ID": record["Person ID"], Tool: staffToolLabel_(record["Tool Key"]), Status: "Approved" };
+    const key = staffClean_(record["Tool Key"], 80).toLowerCase();
+    return { "Person ID": record["Person ID"], ToolKey: key, Tool: toolByKey[key] ? toolByKey[key].name : staffToolLabel_(key), Status: "Approved" };
   });
   const presence = staffDerivePresence_(people, staffRecords_(db.visits), staffRecords_(db.training).concat(establishedTraining), Session.getScriptTimeZone());
   const registrationByPerson = {};
@@ -71,9 +78,12 @@ function staffDashboard() {
     if (!identifierByPerson[record["Person ID"]] && staffTrue_(record.Active) && String(record.Type).toLowerCase() !== "email") identifierByPerson[record["Person ID"]] = record;
   });
   const toolsByPerson = {};
+  const toolApprovalsByPerson = {};
   establishedTraining.forEach(function (record) {
     if (!toolsByPerson[record["Person ID"]]) toolsByPerson[record["Person ID"]] = [];
     if (toolsByPerson[record["Person ID"]].indexOf(record.Tool) === -1) toolsByPerson[record["Person ID"]].push(record.Tool);
+    if (!toolApprovalsByPerson[record["Person ID"]]) toolApprovalsByPerson[record["Person ID"]] = [];
+    if (!toolApprovalsByPerson[record["Person ID"]].some(function (tool) { return tool.key === record.ToolKey; })) toolApprovalsByPerson[record["Person ID"]].push({ key: record.ToolKey, label: record.Tool });
   });
   const linkedPeople = {};
   staffRecords_(db.fabmanLinks).forEach(function (record) {
@@ -99,11 +109,12 @@ function staffDashboard() {
       identifierHint: identifier ? staffIdentifierHint_(identifier.Value) : "",
       attention: staffAttentionFlags_(registration),
       toolLabels: toolsByPerson[personId] || [],
+      toolApprovals: toolApprovalsByPerson[personId] || [],
       fabmanMemberId: linkedPeople[personId] || 0,
       searchText: [person["Display Name"], person.Role, registration && registration["Program / Department"]].join(" ").toLowerCase(),
     };
   });
-  const result = { ok: true, actor: access, present: presence.present, left: presence.left, notes: notes, peopleIndex: peopleIndex, refreshedAt: new Date().toISOString() };
+  const result = { ok: true, actor: access, present: presence.present, left: presence.left, notes: notes, peopleIndex: peopleIndex, tools: toolCatalog, refreshedAt: new Date().toISOString() };
   staffCachePutJson_("dashboard", result, STAFF_CACHE_SECONDS_.dashboard);
   result.performance = { totalMs: Date.now() - started, cache: "miss" };
   return result;
@@ -111,7 +122,7 @@ function staffDashboard() {
 
 function staffMarkLeft(personId) {
   const access = staffRequireAccess_();
-  const db = staffDatabase_();
+  const db = staffDatabaseKeys_(["people", "visits"]);
   const person = staffFindPerson_(db.people, personId);
   db.visits.appendRow([staffId_("visit"), personId, new Date(), "Staff Checkout", access.email, "", "Marked left from staff app", "Staff app", ""]);
   staffAfterWrite_(personId);
@@ -120,7 +131,7 @@ function staffMarkLeft(personId) {
 
 function staffReopen(personId) {
   const access = staffRequireAccess_();
-  const db = staffDatabase_();
+  const db = staffDatabaseKeys_(["people", "visits"]);
   const person = staffFindPerson_(db.people, personId);
   db.visits.appendRow([staffId_("visit"), personId, new Date(), "Staff Reopen", access.email, "", "Reopened mistaken checkout", "Staff app", ""]);
   staffAfterWrite_(personId);
@@ -156,7 +167,7 @@ function staffSearchPeople(query) {
 
 function staffManualCheckIn(personId) {
   const access = staffRequireAccess_();
-  const db = staffDatabase_();
+  const db = staffDatabaseKeys_(["people", "visits"]);
   const person = staffFindPerson_(db.people, personId);
   db.visits.appendRow([staffId_("visit"), personId, new Date(), "User Checkin", access.email, "Manual check-in", "Created by staff", "Staff app", ""]);
   staffAfterWrite_(personId);
@@ -165,7 +176,7 @@ function staffManualCheckIn(personId) {
 
 function staffApproveLaser(personId) {
   const access = staffRequireAccess_(["trainer", "administrator"]);
-  const db = staffDatabase_();
+  const db = staffDatabaseKeys_(["people", "certifications", "fabmanLinks"]);
   const person = staffFindPerson_(db.people, personId);
   const existing = staffRecords_(db.certifications).some(function (row) {
     return row["Person ID"] === personId && String(row["Tool Key"]).toLowerCase() === "epilog_laser_cutter" && String(row.Status).toLowerCase() === "active";
@@ -175,9 +186,93 @@ function staffApproveLaser(personId) {
     staffSheetSafe_("Approved by " + access.email + ".")
   ]);
   const link = staffActiveFabmanLink_(db, personId);
-  const sync = link ? fabmanEnsureLaserTraining_(link["FabMan Member ID"], new Date(), access.email) : { ok: false, label: "Member link required" };
   staffAfterWrite_(personId);
-  return { ok: true, name: staffPreferredName_(person["Display Name"]), fabmanStatus: sync.label, fabmanSynced: sync.ok };
+  return { ok: true, name: staffPreferredName_(person["Display Name"]), fabmanMemberId: link ? Number(link["FabMan Member ID"]) : 0, fabmanStatus: link ? "Sync queued" : "Member link required" };
+}
+
+function staffSyncLaserFabman(personId) {
+  const access = staffRequireAccess_(["trainer", "administrator"]);
+  const db = staffDatabaseKeys_(["fabmanLinks"]);
+  const link = staffActiveFabmanLink_(db, personId);
+  if (!link) return { ok: false, label: "Member link required" };
+  const sync = fabmanEnsureLaserTraining_(link["FabMan Member ID"], new Date(), access.email);
+  staffClearFabmanCache_(link["FabMan Member ID"]);
+  staffAfterWrite_(personId);
+  return sync;
+}
+
+function staffApproveTool(personId, toolKey) {
+  const access = staffRequireAccess_(["trainer", "administrator"]);
+  const db = staffDatabaseKeys_(["people", "certifications", "tools", "fabmanLinks"]);
+  const person = staffFindPerson_(db.people, personId);
+  const tool = staffFindTool_(db.tools, toolKey, true);
+  if (!tool.staffCanApprove) throw new Error(tool.name + " is not enabled for staff approval.");
+  const existing = staffRecords_(db.certifications).some(function (row) {
+    return row["Person ID"] === personId && String(row["Tool Key"]).toLowerCase() === tool.key && String(row.Status).toLowerCase() === "active";
+  });
+  if (!existing) db.certifications.appendRow([staffId_("cert"), personId, tool.key, "Active", new Date(), "", "Staff app", "", staffSheetSafe_("Approved by " + access.email + ".")]);
+  const link = staffActiveFabmanLink_(db, personId);
+  staffAfterWrite_(personId);
+  return { ok: true, personId: personId, name: staffPreferredName_(person["Display Name"]), tool: tool, fabmanMemberId: link ? Number(link["FabMan Member ID"]) : 0 };
+}
+
+function staffRevokeTool(personId, toolKey, reason) {
+  const access = staffRequireAccess_(["trainer", "administrator"]);
+  const cleanedReason = staffClean_(reason, 240);
+  if (!cleanedReason) throw new Error("Choose or enter a reason for removing training.");
+  const db = staffDatabaseKeys_(["people", "certifications", "tools", "fabmanLinks"]);
+  const person = staffFindPerson_(db.people, personId);
+  const tool = staffFindTool_(db.tools, toolKey, false);
+  const sheet = db.certifications;
+  const values = sheet.getDataRange().getDisplayValues();
+  const headers = values[0];
+  const personCol = headers.indexOf("Person ID"), toolCol = headers.indexOf("Tool Key"), statusCol = headers.indexOf("Status"), removedCol = headers.indexOf("Removed At"), notesCol = headers.indexOf("Notes");
+  const index = values.findIndex(function (row, rowIndex) { return rowIndex > 0 && row[personCol] === personId && String(row[toolCol]).toLowerCase() === tool.key && String(row[statusCol]).toLowerCase() === "active"; });
+  if (index < 1) throw new Error("No active " + tool.name + " approval was found.");
+  const rowNumber = index + 1;
+  sheet.getRange(rowNumber, statusCol + 1).setValue("Revoked");
+  sheet.getRange(rowNumber, removedCol + 1).setValue(new Date());
+  const previousNotes = staffClean_(values[index][notesCol], 500);
+  sheet.getRange(rowNumber, notesCol + 1).setValue(staffSheetSafe_([previousNotes, "Revoked by " + access.email + ": " + cleanedReason].filter(Boolean).join(" | ")));
+  const link = staffActiveFabmanLink_(db, personId);
+  staffAfterWrite_(personId);
+  return { ok: true, personId: personId, name: staffPreferredName_(person["Display Name"]), tool: tool, fabmanMemberId: link ? Number(link["FabMan Member ID"]) : 0 };
+}
+
+function staffBatchApproveTool(toolKey, personIds) {
+  const access = staffRequireAccess_(["trainer", "administrator"]);
+  const ids = Array.from(new Set((personIds || []).map(function (id) { return staffClean_(id, 120); }).filter(Boolean)));
+  if (!ids.length || ids.length > 24) throw new Error("Choose between 1 and 24 workshop participants.");
+  const db = staffDatabaseKeys_(["people", "certifications", "tools", "fabmanLinks"]);
+  const tool = staffFindTool_(db.tools, toolKey, true);
+  if (!tool.staffCanApprove) throw new Error(tool.name + " is not enabled for staff approval.");
+  const people = {}; staffRecords_(db.people).forEach(function (row) { if (String(row.Status).toLowerCase() === "active") people[row["Person ID"]] = row; });
+  const existing = {}; staffRecords_(db.certifications).forEach(function (row) { if (String(row.Status).toLowerCase() === "active" && String(row["Tool Key"]).toLowerCase() === tool.key) existing[row["Person ID"]] = true; });
+  const links = {}; staffRecords_(db.fabmanLinks).forEach(function (row) { if (String(row.Status).toLowerCase() === "active") links[row["Person ID"]] = Number(row["FabMan Member ID"]); });
+  const rows = [], results = [];
+  ids.forEach(function (personId) {
+    const person = people[personId];
+    if (!person) throw new Error("One selected workshop participant is no longer active.");
+    if (!existing[personId]) rows.push([staffId_("cert"), personId, tool.key, "Active", new Date(), "", "Staff workshop", "", staffSheetSafe_("Workshop approval by " + access.email + ".")]);
+    results.push({ personId: personId, name: staffPrivateName_(person["Display Name"]), saved: true, alreadyApproved: Boolean(existing[personId]), fabmanMemberId: links[personId] || 0 });
+  });
+  if (rows.length) db.certifications.getRange(db.certifications.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
+  staffAfterWrite_();
+  const cache = CacheService.getScriptCache();
+  ids.forEach(function (personId) { cache.remove("person:" + staffClean_(personId, 120)); });
+  return { ok: true, tool: tool, results: results };
+}
+
+function staffSyncToolFabman(personId, toolKey, remove) {
+  const access = staffRequireAccess_(["trainer", "administrator"]);
+  const db = staffDatabaseKeys_(["tools", "fabmanLinks"]);
+  const tool = staffFindTool_(db.tools, toolKey, false);
+  if (!tool.fabmanEnabled) return { ok: true, label: "FabMan not used for this training" };
+  const link = staffActiveFabmanLink_(db, personId);
+  if (!link) return { ok: false, label: "FabMan member link required" };
+  const result = remove ? fabmanRemoveTraining_(link["FabMan Member ID"], tool, access.email) : fabmanEnsureTraining_(link["FabMan Member ID"], tool, new Date(), access.email);
+  staffClearFabmanCache_(link["FabMan Member ID"]);
+  return result;
 }
 
 function staffPersonCard(personId) {
@@ -197,13 +292,15 @@ function staffPersonCard(personId) {
   const identifier = staffRecords_(db.identifiers).find(function (row) {
     return row["Person ID"] === personId && staffTrue_(row.Active) && String(row.Type).toLowerCase() !== "email";
   });
+  const toolCatalog = staffToolCatalog_(db.tools);
+  const toolByKey = {}; toolCatalog.forEach(function (tool) { toolByKey[tool.key] = tool; });
   const tools = {};
   staffRecords_(db.certifications).forEach(function (row) {
     if (row["Person ID"] !== personId || String(row.Status).toLowerCase() !== "active") return;
     const key = staffClean_(row["Tool Key"], 80).toLowerCase();
     tools[key] = {
       key: key,
-      label: staffToolLabel_(key),
+      label: toolByKey[key] ? toolByKey[key].name : staffToolLabel_(key),
       status: "Training recorded",
       approvedAt: staffIsoDate_(row["Granted At"]),
       source: staffClean_(row["Source System"], 80) || "Sandbox database",
@@ -216,7 +313,7 @@ function staffPersonCard(personId) {
     if (tools[key]) return;
     tools[key] = {
       key: key,
-      label: staffToolLabel_(key),
+      label: toolByKey[key] ? toolByKey[key].name : staffToolLabel_(key),
       status: "Training recorded",
       approvedAt: staffIsoDate_(row["Approved At"]),
       source: "Legacy staff approval",
@@ -224,9 +321,13 @@ function staffPersonCard(personId) {
     };
   });
   const fabmanLink = staffActiveFabmanLink_(db, personId);
+  const activeCard = staffRecords_(db.cards).filter(function (row) {
+    return row["Person ID"] === personId && String(row.Status).toLowerCase() === "active";
+  }).pop();
   const fabman = fabmanLink ? { connected: true, checking: true, memberId: Number(fabmanLink["FabMan Member ID"]), label: "Checking live status…", trainingActive: false, packageActive: false, keyConnected: false } : { connected: false, checking: false, label: "No verified member link", trainingActive: false, packageActive: false, keyConnected: false };
   Object.keys(tools).forEach(function (key) {
-    tools[key].fabmanStatus = key === "epilog_laser_cutter" ? fabman.label : "Connected; tool mapping pending";
+    const configured = toolByKey[key];
+    tools[key].fabmanStatus = configured && configured.fabmanEnabled ? fabman.label : "FabMan not used";
   });
   const result = {
     ok: true,
@@ -235,15 +336,124 @@ function staffPersonCard(personId) {
     role: staffRoleLabel_(person.Role),
     affiliation: registration ? staffClean_(registration["Program / Department"], 80) : "",
     identifierHint: identifier ? staffIdentifierHint_(identifier.Value) : "",
+    identifierType: identifier ? staffClean_(identifier.Type, 80) : "",
+    hasActiveCard: Boolean(activeCard),
     attention: staffAttentionFlags_(registration),
     tools: Object.keys(tools).map(function (key) { return tools[key]; }),
     canApproveTraining: ["trainer", "administrator"].indexOf(access.role) !== -1,
+    canManageIdentity: access.role === "administrator",
     fabmanConnected: fabman.connected,
     fabman: fabman,
   };
   staffCachePutJson_(cacheKey, result, STAFF_CACHE_SECONDS_.person);
   result.performance = { totalMs: Date.now() - started, cache: "miss" };
   return result;
+}
+
+function staffStartIdentityUpdate(input) {
+  const access = staffRequireAccess_(["administrator"]);
+  const data = input || {};
+  const personId = staffClean_(data.personId, 120);
+  const replaceCard = Boolean(data.replaceCard);
+  const updateIdentifier = Boolean(data.updateIdentifier);
+  const disableOldCard = Boolean(data.disableOldCard);
+  if (!replaceCard && !updateIdentifier) throw new Error("Choose an ID update, a replacement card, or both.");
+
+  const db = staffDatabaseKeys_(["people", "identifiers", "cards", "visits", "fabmanLinks", "cardUpdates"]);
+  const person = staffFindPerson_(db.people, personId);
+  let identifierType = "";
+  let identifierValue = "";
+  let identifierNormalized = "";
+  if (updateIdentifier) {
+    identifierType = staffClean_(data.identifierType, 40);
+    if (["UCSD ID", "Employee ID"].indexOf(identifierType) === -1) throw new Error("Choose UCSD ID or Employee ID.");
+    identifierValue = staffClean_(data.identifierValue, 32).toUpperCase().replace(/[\s-]+/g, "");
+    identifierNormalized = staffNormalizeIdentifier_(identifierValue);
+    if (!/^[A-Z0-9]{5,20}$/.test(identifierValue) || !identifierNormalized) throw new Error("Enter a valid PID or employee ID.");
+    const duplicate = staffRecords_(db.identifiers).some(function (row) {
+      return row["Person ID"] !== personId && staffTrue_(row.Active) && String(row.Type).toLowerCase() !== "email" && staffNormalizeIdentifier_(row["Normalized Value"] || row.Value) === identifierNormalized;
+    });
+    if (duplicate) throw new Error("That PID or employee ID is already active on another account.");
+  }
+
+  if (!replaceCard) {
+    staffApplyIdentifierUpdate_(db.identifiers, personId, identifierType, identifierValue, identifierNormalized, access.email);
+    db.visits.appendRow([staffId_("visit"), personId, new Date(), "Identifier Updated", access.email, "", "Primary identifier changed; previous identifier retained as inactive history.", "Staff app", ""]);
+    staffAfterWrite_(personId);
+    return { ok: true, completed: true, name: staffPreferredName_(person["Display Name"]), message: "ID updated. The existing card and FabMan link were unchanged." };
+  }
+
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + 15 * 60 * 1000);
+  const code = staffRandomCode_();
+  let oldCardDisabledAt = "";
+  let fabmanStatus = "Unchanged until replacement tap";
+  if (disableOldCard) {
+    const link = staffActiveFabmanLink_(db, personId);
+    if (link) {
+      const deleted = fabmanFetch_("members/" + encodeURIComponent(Number(link["FabMan Member ID"])) + "/key", "delete");
+      if (!deleted.ok && deleted.status !== 404) throw new Error("FabMan could not disable the old key. Nothing was changed; try again.");
+      staffClearFabmanCache_(link["FabMan Member ID"]);
+      fabmanStatus = "Old key disabled; replacement pending";
+    } else {
+      fabmanStatus = "No verified FabMan member link";
+    }
+    staffRetireActiveCards_(db.cards, personId, now);
+    oldCardDisabledAt = now;
+    db.visits.appendRow([staffId_("visit"), personId, now, "Card Disabled", access.email, "", "Old card disabled before replacement tap.", "Staff app", ""]);
+  }
+  db.cardUpdates.appendRow([
+    staffId_("cardupdate"), staffCodeDigest_(code), personId, "Pending", identifierType, staffSheetSafe_(identifierValue), identifierNormalized,
+    disableOldCard, oldCardDisabledAt, access.email, now, expiresAt, "", fabmanStatus,
+    "Existing FabMan member link, packages, memberships, equipment training, and history must remain unchanged."
+  ]);
+  staffAfterWrite_(personId);
+  return {
+    ok: true, completed: false, code: code, expiresAt: expiresAt.toISOString(), name: staffPreferredName_(person["Display Name"]),
+    oldCardDisabled: disableOldCard,
+    message: disableOldCard ? "Old card disabled. Enter this code at the kiosk and tap the replacement card." : "Enter this code at the kiosk and tap the replacement card. The old card stays active until that succeeds."
+  };
+}
+
+function staffApplyIdentifierUpdate_(sheet, personId, type, value, normalized, actor) {
+  if (!value) return;
+  const values = sheet.getDataRange().getDisplayValues();
+  const headers = values[0];
+  const personCol = headers.indexOf("Person ID"), typeCol = headers.indexOf("Type"), primaryCol = headers.indexOf("Primary"), activeCol = headers.indexOf("Active");
+  values.forEach(function (row, index) {
+    if (index > 0 && row[personCol] === personId && String(row[typeCol]).toLowerCase() !== "email" && staffTrue_(row[activeCol])) {
+      sheet.getRange(index + 1, primaryCol + 1).setValue(false);
+      sheet.getRange(index + 1, activeCol + 1).setValue(false);
+    }
+  });
+  sheet.appendRow([staffId_("identifier"), personId, type, staffSheetSafe_(value), normalized, true, true, true, new Date(), "Staff app ID update", staffSheetSafe_("Updated by " + actor)]);
+}
+
+function staffRetireActiveCards_(sheet, personId, retiredAt) {
+  const values = sheet.getDataRange().getDisplayValues();
+  const headers = values[0];
+  const personCol = headers.indexOf("Person ID"), statusCol = headers.indexOf("Status"), retiredCol = headers.indexOf("Retired At");
+  values.forEach(function (row, index) {
+    if (index > 0 && row[personCol] === personId && String(row[statusCol]).toLowerCase() === "active") {
+      sheet.getRange(index + 1, statusCol + 1).setValue("Retired");
+      sheet.getRange(index + 1, retiredCol + 1).setValue(retiredAt);
+    }
+  });
+}
+
+function staffNormalizeIdentifier_(value) {
+  const normalized = String(value || "").trim().toUpperCase().replace(/[\s-]+/g, "");
+  return normalized.charAt(0) === "A" ? normalized.slice(1) : normalized;
+}
+
+function staffRandomCode_() {
+  const alphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, Utilities.getUuid() + new Date().getTime());
+  return bytes.slice(0, 10).map(function (value) { return alphabet.charAt((value + 256) % alphabet.length); }).join("");
+}
+
+function staffCodeDigest_(code) {
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(code || "").trim().toUpperCase()).map(function (value) { return (value + 256).toString(16).slice(-2); }).join("");
 }
 
 function staffFabmanStatus(personId) {
@@ -395,19 +605,38 @@ function staffActiveFabmanLink_(db, personId) {
 }
 
 function fabmanEnsureLaserTraining_(memberId, approvedAt, approvedBy) {
-  const before = fabmanMemberStatus_(memberId);
-  if (!before.connected) return { ok: false, label: before.label };
-  if (before.trainingActive) return { ok: true, label: "Training already active" };
+  return fabmanEnsureTraining_(memberId, { key: "epilog_laser_cutter", name: "Laser Cutter", fabmanEnabled: true, fabmanTrainingCourseId: 2255 }, approvedAt, approvedBy);
+}
+
+function fabmanEnsureTraining_(memberId, tool, approvedAt, approvedBy) {
+  const current = fabmanFetch_("members/" + encodeURIComponent(memberId) + "?embed=trainings");
+  if (!current.ok) return { ok: false, label: "FabMan connection failed" };
+  const trainings = (current.data._embedded && current.data._embedded.trainings) || current.data.trainings || [];
+  const existing = trainings.some(function (item) { const id = item.trainingCourse && item.trainingCourse.id ? item.trainingCourse.id : (item.trainingCourse || item.course); return Number(id) === Number(tool.fabmanTrainingCourseId); });
+  if (existing) return { ok: true, label: tool.name + " training already active" };
   const date = new Date(approvedAt);
   const trainingDate = Utilities.formatDate(isNaN(date.getTime()) ? new Date() : date, "UTC", "yyyy-MM-dd");
   const response = fabmanFetch_("members/" + encodeURIComponent(memberId) + "/trainings", "post", {
     date: trainingDate,
-    trainingCourse: 2255,
-    notes: "Approved in the Scripps Sandbox staff app by " + approvedBy + ".",
+    trainingCourse: Number(tool.fabmanTrainingCourseId),
+    notes: "Approved for " + tool.name + " in the Scripps Sandbox staff app by " + approvedBy + ".",
   });
   if (!response.ok) return { ok: false, label: "FabMan sync failed: " + response.error };
   staffClearFabmanCache_(memberId);
-  return { ok: true, label: "Training added to FabMan" };
+  return { ok: true, label: tool.name + " training added to FabMan" };
+}
+
+function fabmanRemoveTraining_(memberId, tool) {
+  const current = fabmanFetch_("members/" + encodeURIComponent(memberId) + "?embed=trainings");
+  if (!current.ok) throw new Error("FabMan connection failed; local revocation was saved.");
+  const trainings = (current.data._embedded && current.data._embedded.trainings) || current.data.trainings || [];
+  const match = trainings.find(function (item) { const id = item.trainingCourse && item.trainingCourse.id ? item.trainingCourse.id : (item.trainingCourse || item.course); return Number(id) === Number(tool.fabmanTrainingCourseId); });
+  if (!match) return { ok: true, label: tool.name + " training was already absent in FabMan" };
+  if (!match.id) throw new Error("FabMan did not return a removable training record; local revocation was saved.");
+  const removed = fabmanFetch_("members/" + encodeURIComponent(memberId) + "/trainings/" + encodeURIComponent(match.id), "delete");
+  if (!removed.ok) throw new Error("Local revocation saved, but FabMan removal failed: " + removed.error);
+  staffClearFabmanCache_(memberId);
+  return { ok: true, label: tool.name + " training removed from FabMan" };
 }
 
 function staffLinkRileyFabmanTest() {
@@ -444,7 +673,7 @@ function fabmanMemberStatus_(memberId) {
   const packageActive = packageIds.indexOf(9464) !== -1;
   const keyConnected = Boolean(member.key || embedded.key);
   const parts = [trainingActive ? "Training active" : "Training missing", packageActive ? "Package active" : "Package missing", keyConnected ? "Key connected" : "Key missing"];
-  const result = { connected: true, checking: false, memberId: Number(member.id), label: parts.join(" · "), trainingActive: trainingActive, packageActive: packageActive, keyConnected: keyConnected };
+  const result = { connected: true, checking: false, memberId: Number(member.id), label: parts.join(" · "), trainingActive: trainingActive, trainingCourseIds: trainingIds, packageActive: packageActive, keyConnected: keyConnected };
   staffCachePutJson_(cacheKey, result, STAFF_CACHE_SECONDS_.fabman);
   return result;
 }
@@ -625,14 +854,16 @@ function staffAddNote(note) {
   const access = staffRequireAccess_();
   const cleaned = staffClean_(note, 500);
   if (!cleaned) throw new Error("Enter a note first.");
-  staffDatabase_().notes.appendRow([staffId_("note"), staffSheetSafe_(cleaned), access.email, new Date(), "Open", "", ""]);
+  const noteId = staffId_("note");
+  const createdAt = new Date();
+  staffDatabaseKeys_(["notes"]).notes.appendRow([noteId, staffSheetSafe_(cleaned), access.email, createdAt, "Open", "", ""]);
   staffAfterWrite_();
-  return { ok: true };
+  return { ok: true, note: { id: noteId, note: cleaned, createdBy: access.email, createdAt: createdAt.toISOString(), status: "Open" } };
 }
 
 function staffResolveNote(noteId, reopen) {
   const access = staffRequireAccess_();
-  const sheet = staffDatabase_().notes;
+  const sheet = staffDatabaseKeys_(["notes"]).notes;
   const values = sheet.getDataRange().getDisplayValues();
   const idColumn = values[0].indexOf("Note ID");
   const statusColumn = values[0].indexOf("Status");
@@ -646,6 +877,52 @@ function staffResolveNote(noteId, reopen) {
   sheet.getRange(row, resolvedAtColumn + 1).setValue(reopen ? "" : new Date());
   staffAfterWrite_();
   return { ok: true };
+}
+
+function staffAdminSaveTool(input) {
+  staffRequireAccess_(["administrator"]);
+  const data = input || {};
+  const key = staffClean_(data.key, 80).toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "");
+  const name = staffClean_(data.name, 120);
+  if (!key || !name) throw new Error("Tool key and display name are required.");
+  const fabmanEnabled = Boolean(data.fabmanEnabled);
+  const resourceId = Number(data.fabmanResourceId || 0), trainingId = Number(data.fabmanTrainingCourseId || 0);
+  if (fabmanEnabled && (!resourceId || !trainingId)) throw new Error("Choose both a FabMan resource and training course before enabling the FabMan connection.");
+  if (fabmanEnabled) staffValidateFabmanMapping_(resourceId, trainingId);
+  const sheet = staffDatabaseKeys_(["tools"]).tools;
+  staffEnsureToolColumns_(sheet);
+  const values = sheet.getDataRange().getDisplayValues(), headers = values[0];
+  const keyCol = headers.indexOf("Tool Key");
+  let row = values.findIndex(function (record, index) { return index > 0 && String(record[keyCol]).toLowerCase() === key; });
+  const record = {
+    "Tool Key": key, "Display Name": name, "Active": data.active ? "TRUE" : "FALSE", "Staff Can Approve": data.staffCanApprove ? "TRUE" : "FALSE",
+    "Sort Order": Number(data.sortOrder || 100), "Category": staffClean_(data.category, 80) || "Other", "Legacy Header": staffClean_(data.legacyHeader, 120),
+    "FabMan Enabled": fabmanEnabled ? "TRUE" : "FALSE", "FabMan Resource ID": resourceId || "", "FabMan Training Course ID": trainingId || "", "Updated At": new Date(), "Updated By": Session.getActiveUser().getEmail()
+  };
+  const output = headers.map(function (header) { return Object.prototype.hasOwnProperty.call(record, header) ? record[header] : (row > 0 ? values[row][headers.indexOf(header)] : ""); });
+  if (row > 0) sheet.getRange(row + 1, 1, 1, headers.length).setValues([output]); else sheet.appendRow(output);
+  staffAfterWrite_();
+  return { ok: true, tool: staffToolFromRecord_(record) };
+}
+
+function staffFabmanMappingOptions() {
+  staffRequireAccess_(["administrator"]);
+  const resources = fabmanFetch_("resources?account=1046&limit=500&embed=trainingCourses&embed=bridge");
+  const courses = fabmanFetch_("training-courses?account=1046&limit=500");
+  if (!resources.ok || !courses.ok) throw new Error("FabMan mapping options could not be loaded.");
+  return {
+    resources: staffFabmanList_(resources.data).map(function (item) { return { id: Number(item.id), name: staffClean_(item.name || item.title, 120), space: item.space && (item.space.name || item.space), hasBridge: Boolean(item.bridge || (item._embedded && item._embedded.bridge)) }; }).filter(function (item) { return item.id && item.name; }),
+    courses: staffFabmanList_(courses.data).map(function (item) { return { id: Number(item.id), name: staffClean_(item.name || item.title, 120), archived: Boolean(item.archived) }; }).filter(function (item) { return item.id && item.name && !item.archived; })
+  };
+}
+
+function staffValidateFabmanMapping_(resourceId, trainingId) {
+  const resource = fabmanFetch_("resources/" + encodeURIComponent(resourceId) + "?embed=trainingCourses");
+  if (!resource.ok) throw new Error("That FabMan resource could not be verified.");
+  const embedded = resource.data._embedded || {};
+  const ids = (embedded.trainingCourses || resource.data.trainingCourses || []).map(function (course) { return Number(course.id || course); });
+  if (ids.length && ids.indexOf(Number(trainingId)) === -1) throw new Error("The selected FabMan training course is not assigned to that resource.");
+  return true;
 }
 
 function staffRequireAccess_(roles) {
@@ -688,8 +965,12 @@ function staffSpreadsheet_() {
 }
 
 function staffDatabase_(accessOnly) {
-  const spreadsheet = staffSpreadsheet_();
   const keys = accessOnly ? ["staffAccess"] : Object.keys(STAFF_CONFIG_.sheets);
+  return staffDatabaseKeys_(keys);
+}
+
+function staffDatabaseKeys_(keys) {
+  const spreadsheet = staffSpreadsheet_();
   const db = { spreadsheet: spreadsheet };
   keys.forEach(function (key) {
     const definition = STAFF_CONFIG_.sheets[key];
@@ -700,6 +981,37 @@ function staffDatabase_(accessOnly) {
   });
   return db;
 }
+
+function staffEnsureToolColumns_(sheet) {
+  if (!sheet) throw new Error("Tools sheet is missing.");
+  const required = ["FabMan Enabled", "FabMan Resource ID", "FabMan Training Course ID", "Updated At", "Updated By"];
+  const width = Math.max(sheet.getLastColumn(), 1);
+  const headers = sheet.getRange(1, 1, 1, width).getDisplayValues()[0];
+  const missing = required.filter(function (header) { return headers.indexOf(header) === -1; });
+  if (missing.length) sheet.getRange(1, headers.length + 1, 1, missing.length).setValues([missing]);
+}
+
+function staffToolCatalog_(sheet) {
+  return staffRecords_(sheet).map(staffToolFromRecord_).filter(function (tool) { return tool.key; }).sort(function (a, b) { return a.sortOrder - b.sortOrder || a.name.localeCompare(b.name); });
+}
+
+function staffToolFromRecord_(row) {
+  return {
+    key: staffClean_(row["Tool Key"], 80).toLowerCase(), name: staffClean_(row["Display Name"], 120), active: staffTrue_(row.Active), staffCanApprove: staffTrue_(row["Staff Can Approve"]),
+    sortOrder: Number(row["Sort Order"] || 100), category: staffClean_(row.Category, 80), legacyHeader: staffClean_(row["Legacy Header"], 120), fabmanEnabled: staffTrue_(row["FabMan Enabled"]),
+    fabmanResourceId: Number(row["FabMan Resource ID"] || 0), fabmanTrainingCourseId: Number(row["FabMan Training Course ID"] || 0)
+  };
+}
+
+function staffFindTool_(sheet, toolKey, requireActive) {
+  const key = staffClean_(toolKey, 80).toLowerCase();
+  const tool = staffToolCatalog_(sheet).find(function (item) { return item.key === key; });
+  if (!tool || (requireActive && !tool.active)) throw new Error("Tool is not active in the catalog.");
+  if (tool.fabmanEnabled && (!tool.fabmanResourceId || !tool.fabmanTrainingCourseId)) throw new Error(tool.name + " has an incomplete FabMan mapping.");
+  return tool;
+}
+
+function staffFabmanList_(data) { return Array.isArray(data) ? data : ((data && data._embedded && Object.keys(data._embedded).map(function (key) { return data._embedded[key]; }).find(Array.isArray)) || (data && data.items) || []); }
 
 function staffAssertHeaders_(sheet, headers, allowAdditionalHeaders) {
   const width = Math.max(sheet.getLastColumn(), headers.length);

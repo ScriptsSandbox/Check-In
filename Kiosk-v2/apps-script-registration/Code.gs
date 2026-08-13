@@ -3,6 +3,7 @@ const REGISTRATION_CONFIG_ = {
   waiverUrlProperty: "WAIVER_POWERFORM_URL",
   waiverSpreadsheetProperty: "WAIVER_DATABASE_SPREADSHEET_ID",
   kioskApiKeyProperty: "KIOSK_API_KEY",
+  fabmanApiKeyProperty: "FABMAN_API_KEY",
   consentVersion: "2026-08-11",
   sheets: {
     people: {
@@ -28,6 +29,15 @@ const REGISTRATION_CONFIG_ = {
     staffAccess: {
       name: "Staff Access",
       headers: ["Staff ID", "Name", "Email", "Role", "Active", "Card Linking Allowed", "Notes"],
+    },
+    fabmanLinks: {
+      name: "FabMan Links",
+      headers: ["Link ID", "Person ID", "FabMan Member ID", "Status", "Match Method", "Confirmed By", "Confirmed At", "Notes"],
+    },
+    cardUpdates: {
+      name: "Card Update Sessions",
+      headers: ["Session ID", "Code Digest", "Person ID", "Status", "New Identifier Type", "New Identifier Value", "New Identifier Normalized", "Disable Old Card", "Old Card Disabled At", "Requested By", "Requested At", "Expires At", "Completed At", "FabMan Status", "Notes"],
+      createIfMissing: true,
     },
   },
 };
@@ -171,7 +181,12 @@ function openRegistrationDatabase_() {
   const database = { spreadsheet: spreadsheet };
   Object.keys(REGISTRATION_CONFIG_.sheets).forEach(function (key) {
     const definition = REGISTRATION_CONFIG_.sheets[key];
-    const sheet = spreadsheet.getSheetByName(definition.name);
+    let sheet = spreadsheet.getSheetByName(definition.name);
+    if (!sheet && definition.createIfMissing) {
+      sheet = spreadsheet.insertSheet(definition.name);
+      sheet.appendRow(definition.headers);
+      sheet.setFrozenRows(1);
+    }
     if (!sheet) throw new Error("Registration database setup is incomplete.");
     const actual = sheet.getRange(1, 1, 1, definition.headers.length).getDisplayValues()[0];
     definition.headers.forEach(function (header, index) {
@@ -221,6 +236,8 @@ function doPost(event) {
     }
     if (action === "prepare_card_link") return kioskJson_(prepareKioskCardLink_(request.identifier));
     if (action === "link_card") return kioskJson_(linkKioskCard_(request));
+    if (action === "prepare_card_update") return kioskJson_(prepareKioskCardUpdate_(request.code));
+    if (action === "complete_card_update") return kioskJson_(completeKioskCardUpdate_(request));
     return kioskJson_({ ok: false, outcome: "backend_error", message: "Unknown kiosk operation." });
   } catch (error) {
     console.error(error && error.stack ? error.stack : error);
@@ -348,4 +365,124 @@ function linkKioskCard_(request) {
   database.cards.appendRow(["card_" + Utilities.getUuid().replace(/-/g, ""), target.personId, request.memberDigest, String(request.memberLastFour || "").slice(-4), "Active", now, "", "Kiosk v2 staff link", ""]);
   database.visits.appendRow(["visit_" + Utilities.getUuid().replace(/-/g, ""), target.personId, now, "Card Linked", staff.name, "", "", "Kiosk v2", ""]);
   return { ok: true, outcome: "card_linked", displayName: target.name, message: "Card connected. The member can now check in." };
+}
+
+function prepareKioskCardUpdate_(code) {
+  const database = openRegistrationDatabase_();
+  const session = findPendingCardUpdate_(database.cardUpdates, code);
+  if (!session) return { ok: false, outcome: "card_update_error", message: "That handoff code is invalid, expired, or already used." };
+  const person = kioskRecords_(database.people).find(function (row) { return row["Person ID"] === session.record["Person ID"] && String(row.Status).toLowerCase() === "active"; });
+  if (!person) return { ok: false, outcome: "card_update_error", message: "The member account is no longer active." };
+  return {
+    ok: true,
+    outcome: "card_update_ready",
+    displayName: person["Display Name"] || "Sandbox member",
+    message: "Tap the replacement UC San Diego ID on the reader.",
+    oldCardDisabled: kioskTrue_(session.record["Disable Old Card"]),
+    updatesIdentifier: Boolean(String(session.record["New Identifier Value"] || "").trim()),
+  };
+}
+
+function completeKioskCardUpdate_(request) {
+  const rawToken = String(request.cardToken || "").trim().toUpperCase();
+  const digest = String(request.cardDigest || "").trim().toLowerCase();
+  if (!/^[0-9A-F]{8,28}$/.test(rawToken) || !/^[0-9a-f]{64}$/.test(digest)) return { ok: false, outcome: "card_update_error", message: "The replacement card could not be read safely." };
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return { ok: false, outcome: "card_update_error", message: "The update system is busy. Please try the card again." };
+  try {
+    const database = openRegistrationDatabase_();
+    const session = findPendingCardUpdate_(database.cardUpdates, request.code);
+    if (!session) return { ok: false, outcome: "card_update_error", message: "That handoff code is invalid, expired, or already used." };
+    const personId = session.record["Person ID"];
+    const person = kioskRecords_(database.people).find(function (row) { return row["Person ID"] === personId && String(row.Status).toLowerCase() === "active"; });
+    if (!person) return { ok: false, outcome: "card_update_error", message: "The member account is no longer active." };
+    const cards = kioskRecords_(database.cards);
+    const duplicate = cards.find(function (row) { return String(row["Card Digest"] || "").toLowerCase() === digest && String(row.Status).toLowerCase() === "active"; });
+    if (duplicate) return { ok: false, outcome: "card_update_error", message: duplicate["Person ID"] === personId ? "That is still the current card. Tap the replacement card." : "That card is already connected to another account." };
+
+    const newIdentifier = String(session.record["New Identifier Value"] || "").trim();
+    const newNormalized = kioskIdentifier_(session.record["New Identifier Normalized"] || newIdentifier);
+    if (newIdentifier) {
+      const identifierDuplicate = kioskRecords_(database.identifiers).some(function (row) {
+        return row["Person ID"] !== personId && kioskTrue_(row.Active) && String(row.Type).toLowerCase() !== "email" && kioskIdentifier_(row["Normalized Value"] || row.Value) === newNormalized;
+      });
+      if (identifierDuplicate) return { ok: false, outcome: "card_update_error", message: "The new PID or employee ID is now active on another account. Return to the staff app." };
+    }
+
+    const link = kioskRecords_(database.fabmanLinks).find(function (row) { return row["Person ID"] === personId && String(row.Status).toLowerCase() === "active"; });
+    let fabmanStatus = "No verified FabMan member link";
+    if (link) {
+      const memberId = Number(link["FabMan Member ID"]);
+      if (!memberId) return { ok: false, outcome: "card_update_error", message: "The existing FabMan member link needs administrator review." };
+      if (!PropertiesService.getScriptProperties().getProperty(REGISTRATION_CONFIG_.fabmanApiKeyProperty)) return { ok: false, outcome: "card_update_error", message: "FabMan card replacement is not configured on the kiosk service yet." };
+      const removed = registrationFabmanFetch_("members/" + encodeURIComponent(memberId) + "/key", "delete");
+      if (!removed.ok && removed.status !== 404) return { ok: false, outcome: "card_update_error", message: "FabMan could not retire the old key. No Sandbox card change was saved." };
+      const added = registrationFabmanFetch_("members/" + encodeURIComponent(memberId) + "/key", "post", { type: "nfca", token: rawToken, state: "active" });
+      if (!added.ok) {
+        updateCardSessionStatus_(database.cardUpdates, session.rowNumber, "Pending", "FabMan replacement failed; retry required", "The old FabMan key may now be disabled. Retry the replacement tap.");
+        return { ok: false, outcome: "card_update_error", message: "FabMan did not accept the replacement card. The old FabMan key is disabled; please retry or see an administrator." };
+      }
+      fabmanStatus = "Replacement key active on existing member " + memberId;
+    }
+
+    retireKioskCards_(database.cards, personId, new Date());
+    database.cards.appendRow(["card_" + Utilities.getUuid().replace(/-/g, ""), personId, digest, String(request.cardLastFour || "").slice(-4), "Active", new Date(), "", "Kiosk replacement handoff", session.record["Session ID"]]);
+    if (newIdentifier) applyKioskIdentifierUpdate_(database.identifiers, personId, session.record["New Identifier Type"] || "UCSD ID", newIdentifier, newNormalized, session.record["Requested By"]);
+    updateCardSessionStatus_(database.cardUpdates, session.rowNumber, "Completed", fabmanStatus, "Replacement completed at kiosk. Existing FabMan member link and all non-key FabMan records were left unchanged.");
+    database.visits.appendRow(["visit_" + Utilities.getUuid().replace(/-/g, ""), personId, new Date(), "Card Replaced", session.record["Requested By"], "", newIdentifier ? "Card and primary identifier updated." : "Card updated.", "Kiosk replacement handoff", session.record["Session ID"]]);
+    return { ok: true, outcome: "card_updated", displayName: person["Display Name"] || "Sandbox member", message: "Replacement complete. The old card is disabled." };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function findPendingCardUpdate_(sheet, code) {
+  const digest = kioskCodeDigest_(code);
+  if (!digest) return null;
+  const values = sheet.getDataRange().getDisplayValues();
+  if (values.length < 2) return null;
+  const headers = values[0];
+  for (let index = 1; index < values.length; index += 1) {
+    const record = {}; headers.forEach(function (header, column) { record[header] = values[index][column]; });
+    if (record["Code Digest"] !== digest || String(record.Status).toLowerCase() !== "pending") continue;
+    const expires = new Date(record["Expires At"]);
+    if (isNaN(expires.getTime()) || expires.getTime() <= Date.now()) return null;
+    return { record: record, rowNumber: index + 1 };
+  }
+  return null;
+}
+
+function kioskCodeDigest_(code) {
+  const cleaned = String(code || "").trim().toUpperCase().replace(/[\s-]+/g, "");
+  if (!/^[2-9A-HJ-NP-Z]{10}$/.test(cleaned)) return "";
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, cleaned).map(function (value) { return (value + 256).toString(16).slice(-2); }).join("");
+}
+
+function retireKioskCards_(sheet, personId, retiredAt) {
+  const values = sheet.getDataRange().getDisplayValues(), headers = values[0];
+  const personCol = headers.indexOf("Person ID"), statusCol = headers.indexOf("Status"), retiredCol = headers.indexOf("Retired At");
+  values.forEach(function (row, index) { if (index > 0 && row[personCol] === personId && String(row[statusCol]).toLowerCase() === "active") { sheet.getRange(index + 1, statusCol + 1).setValue("Retired"); sheet.getRange(index + 1, retiredCol + 1).setValue(retiredAt); } });
+}
+
+function applyKioskIdentifierUpdate_(sheet, personId, type, value, normalized, actor) {
+  const values = sheet.getDataRange().getDisplayValues(), headers = values[0];
+  const personCol = headers.indexOf("Person ID"), typeCol = headers.indexOf("Type"), primaryCol = headers.indexOf("Primary"), activeCol = headers.indexOf("Active");
+  values.forEach(function (row, index) { if (index > 0 && row[personCol] === personId && String(row[typeCol]).toLowerCase() !== "email" && kioskTrue_(row[activeCol])) { sheet.getRange(index + 1, primaryCol + 1).setValue(false); sheet.getRange(index + 1, activeCol + 1).setValue(false); } });
+  sheet.appendRow(["identifier_" + Utilities.getUuid().replace(/-/g, ""), personId, type, sheetSafe_(value), normalized, true, true, true, new Date(), "Kiosk replacement handoff", sheetSafe_("Requested by " + actor)]);
+}
+
+function updateCardSessionStatus_(sheet, rowNumber, status, fabmanStatus, notes) {
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getDisplayValues()[0];
+  sheet.getRange(rowNumber, headers.indexOf("Status") + 1).setValue(status);
+  if (String(status).toLowerCase() === "completed") sheet.getRange(rowNumber, headers.indexOf("Completed At") + 1).setValue(new Date());
+  sheet.getRange(rowNumber, headers.indexOf("FabMan Status") + 1).setValue(fabmanStatus);
+  sheet.getRange(rowNumber, headers.indexOf("Notes") + 1).setValue(notes);
+}
+
+function registrationFabmanFetch_(path, method, payload) {
+  const token = getRequiredScriptProperty_(REGISTRATION_CONFIG_.fabmanApiKeyProperty);
+  const options = { method: method || "get", headers: { Authorization: "Bearer " + token, Accept: "application/json" }, muteHttpExceptions: true };
+  if (payload !== undefined) { options.contentType = "application/json"; options.payload = JSON.stringify(payload); }
+  const response = UrlFetchApp.fetch("https://fabman.io/api/v1/" + path, options);
+  return { ok: response.getResponseCode() >= 200 && response.getResponseCode() < 300, status: response.getResponseCode() };
 }
