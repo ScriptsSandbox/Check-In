@@ -43,6 +43,15 @@ class CardLinkBackend:
         )
 
 
+class CardUpdateBackend:
+    def __init__(self) -> None:
+        self.calls = []
+
+    def complete_card_update(self, code, uid):
+        self.calls.append((code, uid))
+        return CheckInResult(outcome="card_updated", display_name="Updated member", message="Complete")
+
+
 def test_detection_is_broadcast_before_backend_finishes() -> None:
     async def scenario() -> None:
         backend = BlockingBackend()
@@ -123,5 +132,25 @@ def test_unknown_card_is_kept_only_for_a_short_staff_link_session() -> None:
         # The visitor can immediately tap the newly linked card to check in;
         # the original unknown-card read no longer occupies the duplicate guard.
         assert await state.publish("NEWCARD123456") is True
+
+    asyncio.run(scenario())
+
+
+def test_card_update_session_consumes_the_next_tap_without_checking_in() -> None:
+    async def scenario() -> None:
+        backend = CardUpdateBackend()
+        state = BridgeState(backend)
+        queue: asyncio.Queue[dict[str, object]] = asyncio.Queue(maxsize=20)
+        state.clients.add(queue)
+        state.card_update_code = "ABCD234567"
+        state.card_update_expires_at = 10**12
+
+        assert await state.publish("04A1B2C3D4E5F6") is True
+        assert (await queue.get())["type"] == "card_detected"
+        completed = await queue.get()
+        assert completed["outcome"] == "card_updated"
+        assert completed["display_name"] == "Updated member"
+        assert backend.calls == [("ABCD234567", "04A1B2C3D4E5F6")]
+        assert state.card_update_code is None
 
     asyncio.run(scenario())
