@@ -36,6 +36,8 @@
       .complete { grid-column:1 / -1; width:min(720px,100%); margin:auto; }
       .complete p { font-size:19px; }
       .waiver { margin-top:28px; }
+      .kiosk-waiver { text-align:center; padding:22px; border:2px solid var(--navy); margin-top:20px; }
+      .kiosk-waiver img { display:block; width:280px; max-width:100%; margin:16px auto; background:white; padding:12px; }
       [hidden] { display:none !important; }
       @media (max-width:760px) { main { grid-template-columns:1fr; } .grid { grid-template-columns:1fr; gap:0; } h1 { font-size:48px; } }
     </style>
@@ -126,17 +128,28 @@
         <h2>Next: complete the liability waiver.</h2>
         <p>Your Sandbox account is available immediately. Check-in will begin working after your signed waiver appears in the Sandbox waiver records and authorized staff link your card.</p>
         <a id="waiver" class="waiver" rel="noreferrer"><span>Open the DocuSign waiver</span><span>↗</span></a>
+        <div id="kiosk-waiver" class="kiosk-waiver" hidden><b>COMPLETE THE WAIVER ON YOUR PHONE</b><p>Scan this separate QR code with a phone. The waiver cannot be completed on this kiosk.</p><img id="waiver-qr" alt="QR code for the Scripps Sandbox liability waiver"></div>
         <p class="privacy">Sandbox staff may review this registration afterward and contact you if anything needs clarification.</p>
       </section>
     </main>
 
     <script>
+      const kioskMode = <?!= JSON.stringify(isKiosk) ?>;
       const form = document.getElementById("registration");
       const affiliation = document.getElementById("affiliation");
       const otherWrap = document.getElementById("other-wrap");
       const identifierType = document.getElementById("identifier-type");
       const identifier = document.getElementById("identifier");
       const startedAt = Date.now();
+
+      if (kioskMode) {
+        document.addEventListener("keydown", (event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            window.top.location.href = "http://127.0.0.1:3000/";
+          }
+        });
+      }
 
       identifierType.addEventListener("change", () => {
         if (identifierType.value === "Triton Student Number (TSN)") {
@@ -181,7 +194,14 @@
             form.hidden = true;
             const complete = document.getElementById("complete");
             complete.hidden = false;
-            document.getElementById("waiver").href = result.waiverUrl;
+            const waiverLink = document.getElementById("waiver");
+            waiverLink.href = result.waiverUrl;
+            if (kioskMode) {
+              waiverLink.hidden = true;
+              const kioskWaiver = document.getElementById("kiosk-waiver");
+              kioskWaiver.hidden = false;
+              document.getElementById("waiver-qr").src = "https://quickchart.io/qr?size=320&margin=1&text=" + encodeURIComponent(result.waiverUrl);
+            }
             complete.scrollIntoView({ behavior: "smooth", block: "start" });
           })
           .withFailureHandler(() => {
