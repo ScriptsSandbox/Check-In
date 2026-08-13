@@ -1,11 +1,22 @@
 const REGISTRATION_ALLOWED_ROLES_ = [
-  "Undergraduate student",
-  "Graduate student",
-  "Postdoctoral scholar",
-  "Faculty",
+  "Academic",
   "Staff",
+  "Postdoc",
+  "Graduate Student MS, PhD",
+  "MAS Student",
+  "Undergraduate Student (UG)",
+  "UG Student Employee",
+  "Affiliate (Retirees, Volunteers, etc.)",
   "Visiting scholar or visitor",
-  "Community member or other",
+  "Community member",
+  "Other",
+];
+
+const REGISTRATION_STUDENT_ROLES_ = [
+  "Graduate Student MS, PhD",
+  "MAS Student",
+  "Undergraduate Student (UG)",
+  "UG Student Employee",
 ];
 
 const REGISTRATION_ALLOWED_ID_TYPES_ = [
@@ -16,34 +27,21 @@ const REGISTRATION_ALLOWED_ID_TYPES_ = [
 ];
 
 const REGISTRATION_ALLOWED_AFFILIATIONS_ = [
-  "Scripps – Biological Oceanography",
-  "Scripps – Climate Sciences",
-  "Scripps – Geophysics",
-  "Scripps – Marine Biology",
-  "Scripps – Marine Chemistry and Geochemistry",
-  "Scripps – Physical Oceanography",
-  "Scripps staff – Director's Office",
-  "Scripps staff – other program or unit",
-  "UC San Diego – Mechanical and Aerospace Engineering",
-  "UC San Diego – Bioengineering",
-  "UC San Diego – Computer Science and Engineering",
-  "UC San Diego – Electrical and Computer Engineering",
-  "UC San Diego – NanoEngineering",
-  "UC San Diego – Structural Engineering",
-  "UC San Diego – Chemical Engineering",
-  "UC San Diego – other engineering program",
-  "UC San Diego – Biological Sciences",
-  "UC San Diego – Physical Sciences",
-  "UC San Diego – Social Sciences",
-  "UC San Diego – Arts and Humanities",
-  "UC San Diego – Health Sciences",
-  "UC San Diego – Rady School of Management",
-  "UC San Diego – School of Global Policy and Strategy",
-  "UC San Diego undergraduate – undeclared",
-  "UC San Diego – other academic program",
-  "UC San Diego staff – central administration",
-  "UC San Diego staff – academic department or unit",
-  "UC San Diego staff – other unit",
+  "IOD-Biology",
+  "CMBB-Biology",
+  "MBRD-Biology",
+  "GRD-Earth",
+  "IGPP-Earth",
+  "CASPO-O&A",
+  "MPL-O&A",
+  "SIO/DO",
+  "Birch Aquarium",
+  "MarFac",
+  "MSDC",
+  "Sea Grant",
+  "SIO Academic Department",
+  "SOMTS",
+  "UCSD (Non-SIO Dept)",
   "External university or institution",
   "Community member – no institutional affiliation",
   "Other",
@@ -88,6 +86,23 @@ function canonicalAffiliation_(value, otherValue) {
   return other ? "Other – " + other : "";
 }
 
+function canonicalRole_(value, otherValue) {
+  const role = cleanText_(value, 80);
+  if (REGISTRATION_ALLOWED_ROLES_.indexOf(role) === -1) return "";
+  if (role !== "Other") return role;
+  const other = cleanText_(otherValue, 80);
+  return other ? "Other – " + other : "";
+}
+
+function isStudentRole_(role) {
+  return REGISTRATION_STUDENT_ROLES_.indexOf(role) !== -1;
+}
+
+function normalizeAnticipatedGraduation_(value) {
+  const graduation = cleanText_(value, 7);
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(graduation) ? graduation : "";
+}
+
 function sheetSafe_(value) {
   const text = String(value == null ? "" : value);
   return /^[=+\-@]/.test(text) ? "'" + text : text;
@@ -98,12 +113,14 @@ function validateRegistration_(payload, nowMs) {
   const firstName = cleanText_(input.firstName, 80);
   const lastName = cleanText_(input.lastName, 80);
   const preferredName = cleanText_(input.preferredName, 80);
-  const role = cleanText_(input.role, 80);
+  const selectedRole = cleanText_(input.role, 80);
+  const role = canonicalRole_(selectedRole, input.otherRole);
   const identifierType = cleanText_(input.identifierType, 40);
   const identifier = normalizeIdentifier_(input.identifier, identifierType);
   const primaryEmail = normalizeEmail_(input.primaryEmail);
   const secondaryEmail = normalizeEmail_(input.secondaryEmail);
   const affiliation = canonicalAffiliation_(input.affiliation, input.otherAffiliation);
+  const anticipatedGraduation = normalizeAnticipatedGraduation_(input.anticipatedGraduation);
   const startedAt = Number(input.formStartedAt);
 
   if (cleanText_(input.website, 200)) return { ok: false, message: "Registration could not be submitted." };
@@ -111,8 +128,11 @@ function validateRegistration_(payload, nowMs) {
     return { ok: false, message: "Please reload the form and try again." };
   }
   if (!firstName || !lastName) return { ok: false, message: "Enter your first and last name." };
-  if (REGISTRATION_ALLOWED_ROLES_.indexOf(role) === -1) return { ok: false, message: "Choose your role." };
-  if (!affiliation) return { ok: false, message: "Choose your program, department, or organization." };
+  if (!role) return { ok: false, message: "Choose your role and specify it if you selected Other." };
+  if (!affiliation) return { ok: false, message: "Choose your SIO department or division and specify it if you selected Other." };
+  if (isStudentRole_(selectedRole) && !anticipatedGraduation) {
+    return { ok: false, message: "Enter your anticipated graduation month and year." };
+  }
   if (REGISTRATION_ALLOWED_ID_TYPES_.indexOf(identifierType) === -1 || !identifier) {
     return { ok: false, message: "Enter a valid PID, TSN, or employee ID." };
   }
@@ -133,6 +153,7 @@ function validateRegistration_(payload, nowMs) {
       identifier: identifier,
       primaryEmail: primaryEmail,
       secondaryEmail: secondaryEmail,
+      anticipatedGraduation: isStudentRole_(selectedRole) ? anticipatedGraduation : "",
     },
   };
 }

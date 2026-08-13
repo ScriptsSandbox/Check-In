@@ -8,60 +8,58 @@ const root = path.join(__dirname, "..");
 const coreSource = fs.readFileSync(path.join(root, "RegistrationCore.gs"), "utf8");
 const appSource = fs.readFileSync(path.join(root, "Code.gs"), "utf8");
 
-const userHeaders = [
-  "Name", "Timestamp", "Card UUID", "Student ID", "Type", "Email Address",
-  "Secondary Email", "Waiver Signed?", "Planer",
-];
-const reviewHeaders = [
-  "Student ID", "User Database Row", "Review Status", "Registration Source",
-  "Registration Submitted At", "Reviewed By", "Reviewed At",
-  "Program / Department", "Role", "Identifier Type", "DocuSign Status", "Consent Version",
-];
+const peopleHeaders = ["Person ID", "Status", "Display Name", "Role", "Primary Email", "Secondary Emails", "Created At", "Updated At", "Source System", "Source Rows"];
+const identifierHeaders = ["Identifier ID", "Person ID", "Type", "Value", "Normalized Value", "Primary", "Verified", "Active", "Created At", "Source System", "Source Rows"];
+const registrationHeaders = ["Registration ID", "Person ID", "Status", "Submitted At", "Reviewed By", "Reviewed At", "Program / Department", "Identifier Type", "DocuSign Status", "Consent Version", "Anticipated Graduation", "Source"];
 
-function makeHarness(existingRows = []) {
-  const appendedUsers = [];
-  const appendedReviews = [];
-  const sheet = {
-    getLastColumn: () => userHeaders.length,
-    getLastRow: () => existingRows.length + appendedUsers.length + 1,
-    getName: () => "Form Responses 1",
-    getParent: () => ({ getId: () => "test-sheet-id", getName: () => "Testing User Database SIO" }),
-    getRange(row, column, rowCount) {
-      if (row === 1) return { getDisplayValues: () => [userHeaders] };
-      if (row === 2 && column === 4 && rowCount === existingRows.length) {
+function makeSheet(name, headers, existingRows = []) {
+  const appended = [];
+  return {
+    appended,
+    getName: () => name,
+    getLastColumn: () => headers.length,
+    getLastRow: () => 1 + existingRows.length + appended.length,
+    getRange(row, column, rowCount, columnCount) {
+      if (row === 1) return { getDisplayValues: () => [headers] };
+      if (row === 2 && column === 1 && rowCount === existingRows.length) {
         return { getDisplayValues: () => existingRows };
       }
-      throw new Error(`Unexpected range ${row},${column},${rowCount}`);
+      return {
+        setNumberFormat() { return this; },
+        setValues(values) { appended.push(values[0]); return this; },
+      };
     },
-    appendRow: (row) => appendedUsers.push(row),
-    deleteRow: () => appendedUsers.pop(),
   };
-  const reviewSheet = {
-    getLastColumn: () => reviewHeaders.length,
-    getName: () => "Registration Review Log",
-    getRange: () => ({ getDisplayValues: () => [reviewHeaders] }),
-    appendRow: (row) => appendedReviews.push(row),
-  };
+}
+
+function makeHarness(existingIdentifiers = []) {
+  const people = makeSheet("People", peopleHeaders);
+  const identifiers = makeSheet("Identifiers", identifierHeaders, existingIdentifiers);
+  const registrations = makeSheet("Registrations", registrationHeaders);
   let released = false;
+  let uuid = 0;
+  const spreadsheet = {
+    getId: () => "production-sheet-id",
+    getName: () => "Scripps Sandbox Database v2 — Production",
+    getSheetByName: (name) => ({ People: people, Identifiers: identifiers, Registrations: registrations }[name]),
+  };
   const context = vm.createContext({
+    Date,
     HtmlService: {},
+    Utilities: { getUuid: () => `uuid-${++uuid}` },
     PropertiesService: {
       getScriptProperties: () => ({
-        getProperty: (name) => name === "WAIVER_POWERFORM_URL" ? "https://example.test/waiver" : "test-sheet-id",
+        getProperty: (name) => name === "WAIVER_POWERFORM_URL" ? "https://example.test/waiver" : "production-sheet-id",
       }),
     },
-    SpreadsheetApp: {
-      openById: () => ({
-        getSheetByName: (name) => name === "Registration Review Log" ? reviewSheet : sheet,
-      }),
-    },
+    SpreadsheetApp: { openById: () => spreadsheet, flush: () => {} },
     LockService: {
-      getScriptLock: () => ({ tryLock: () => true, releaseLock: () => { released = true; } }),
+      getScriptLock: () => ({ waitLock: () => {}, releaseLock: () => { released = true; } }),
     },
   });
   vm.runInContext(coreSource, context);
   vm.runInContext(appSource, context);
-  return { context, appendedUsers, appendedReviews, wasReleased: () => released };
+  return { context, people, identifiers, registrations, wasReleased: () => released };
 }
 
 function validPayload(overrides = {}) {
@@ -69,8 +67,9 @@ function validPayload(overrides = {}) {
     firstName: "Test",
     lastName: "Member",
     preferredName: "",
-    role: "Graduate student",
-    affiliation: "Scripps – Biological Oceanography",
+    role: "Graduate Student MS, PhD",
+    affiliation: "CASPO-O&A",
+    anticipatedGraduation: "2028-06",
     identifierType: "Student PID",
     identifier: "A12345678",
     primaryEmail: "test.member@example.edu",
@@ -82,51 +81,52 @@ function validPayload(overrides = {}) {
   };
 }
 
-test("appends an immediately active row with after-the-fact review metadata", () => {
+test("creates normalized person, identifier, email, and registration rows", () => {
   const harness = makeHarness();
   harness.context.payload = validPayload();
   const result = vm.runInContext("submitRegistration(payload)", harness.context);
   assert.equal(result.ok, true);
-  assert.equal(harness.appendedUsers.length, 1);
-  assert.equal(harness.appendedReviews.length, 1);
-  const userRow = harness.appendedUsers[0];
-  const reviewRow = harness.appendedReviews[0];
-  assert.equal(userRow[userHeaders.indexOf("Student ID")], "A12345678");
-  assert.equal(userRow[userHeaders.indexOf("Card UUID")], "");
-  assert.equal(reviewRow[reviewHeaders.indexOf("Review Status")], "Unreviewed");
-  assert.equal(reviewRow[reviewHeaders.indexOf("DocuSign Status")], "Awaiting verification");
-  assert.equal(reviewRow[reviewHeaders.indexOf("User Database Row")], 2);
+  assert.equal(harness.people.appended.length, 1);
+  assert.equal(harness.identifiers.appended.length, 2);
+  assert.equal(harness.registrations.appended.length, 1);
+  assert.equal(harness.people.appended[0][peopleHeaders.indexOf("Role")], "Graduate Student MS, PhD");
+  assert.equal(harness.identifiers.appended[0][identifierHeaders.indexOf("Type")], "PID");
+  assert.equal(harness.registrations.appended[0][registrationHeaders.indexOf("Program / Department")], "CASPO-O&A");
+  assert.equal(harness.registrations.appended[0][registrationHeaders.indexOf("Anticipated Graduation")], "2028-06");
   assert.equal(harness.wasReleased(), true);
 });
 
-test("appends a TSN as the student's primary identifier", () => {
+test("stores a TSN with its own identifier type", () => {
   const harness = makeHarness();
-  harness.context.payload = validPayload({
-    identifierType: "Triton Student Number (TSN)",
-    identifier: "200010746",
-  });
+  harness.context.payload = validPayload({ identifierType: "Triton Student Number (TSN)", identifier: "200010746" });
   const result = vm.runInContext("submitRegistration(payload)", harness.context);
   assert.equal(result.ok, true);
-  assert.equal(harness.appendedUsers[0][userHeaders.indexOf("Student ID")], "200010746");
-  assert.equal(harness.appendedReviews[0][reviewHeaders.indexOf("Identifier Type")], "Triton Student Number (TSN)");
+  assert.equal(harness.identifiers.appended[0][identifierHeaders.indexOf("Type")], "TSN");
+  assert.equal(harness.identifiers.appended[0][identifierHeaders.indexOf("Normalized Value")], "200010746");
 });
 
-test("does not overwrite or append when an ID already exists", () => {
-  const harness = makeHarness([["A12345678", "Graduate student", "someone@example.edu"]]);
+test("does not append when an active identifier already exists", () => {
+  const existing = identifierHeaders.map(() => "");
+  existing[identifierHeaders.indexOf("Type")] = "PID";
+  existing[identifierHeaders.indexOf("Normalized Value")] = "A12345678";
+  existing[identifierHeaders.indexOf("Active")] = "TRUE";
+  const harness = makeHarness([existing]);
   harness.context.payload = validPayload();
   const result = vm.runInContext("submitRegistration(payload)", harness.context);
   assert.equal(result.ok, false);
-  assert.equal(result.code, "ALREADY_EXISTS");
-  assert.equal(harness.appendedUsers.length, 0);
-  assert.equal(harness.appendedReviews.length, 0);
+  assert.equal(harness.people.appended.length, 0);
+  assert.equal(harness.identifiers.appended.length, 0);
+  assert.equal(harness.registrations.appended.length, 0);
 });
 
-test("does not append when the primary email already exists", () => {
-  const harness = makeHarness([["A87654321", "Staff", "TEST.MEMBER@example.edu"]]);
+test("does not append when an active email already exists", () => {
+  const existing = identifierHeaders.map(() => "");
+  existing[identifierHeaders.indexOf("Type")] = "Email";
+  existing[identifierHeaders.indexOf("Normalized Value")] = "test.member@example.edu";
+  existing[identifierHeaders.indexOf("Active")] = "TRUE";
+  const harness = makeHarness([existing]);
   harness.context.payload = validPayload();
   const result = vm.runInContext("submitRegistration(payload)", harness.context);
   assert.equal(result.ok, false);
-  assert.equal(result.code, "ALREADY_EXISTS");
-  assert.equal(harness.appendedUsers.length, 0);
-  assert.equal(harness.appendedReviews.length, 0);
+  assert.equal(harness.people.appended.length, 0);
 });

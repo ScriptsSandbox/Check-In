@@ -7,7 +7,8 @@
     <style>
       :root { color-scheme: light; --navy:#071e33; --blue:#00629b; --orange:#f5a623; --paper:#f4f1ea; --ink:#13263a; --line:#c8d2dc; --error:#9d202c; }
       * { box-sizing:border-box; }
-      body { margin:0; background:var(--paper); color:var(--ink); font:17px/1.45 Arial, sans-serif; }
+      html { -webkit-text-size-adjust:100%; }
+      body { margin:0; min-width:320px; background:var(--paper); color:var(--ink); font:17px/1.45 Arial, sans-serif; }
       header { background:var(--navy); color:white; padding:20px clamp(20px,5vw,72px); letter-spacing:.04em; }
       header strong { display:block; font-size:22px; }
       header span { color:var(--orange); font-size:13px; font-weight:700; }
@@ -23,7 +24,7 @@
       legend { width:100%; padding:0 0 8px; margin-bottom:16px; border-bottom:1px solid var(--line); color:var(--navy); font-size:13px; font-weight:800; letter-spacing:.1em; }
       label { display:block; margin:0 0 18px; font-size:14px; font-weight:700; }
       label small { font-weight:400; color:#5c6d7c; }
-      input, select { width:100%; min-height:50px; margin-top:7px; border:1px solid #91a2b1; border-radius:3px; background:white; color:var(--ink); padding:10px 12px; font:inherit; }
+      input, select { width:100%; min-width:0; min-height:50px; margin-top:7px; border:1px solid #91a2b1; border-radius:3px; background:white; color:var(--ink); padding:10px 12px; font:inherit; }
       input:focus, select:focus { outline:3px solid rgba(0,98,155,.22); border-color:var(--blue); }
       .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
       .consent { display:grid; grid-template-columns:24px 1fr; gap:12px; align-items:start; font-weight:400; }
@@ -39,7 +40,35 @@
       .kiosk-waiver { text-align:center; padding:22px; border:2px solid var(--navy); margin-top:20px; }
       .kiosk-waiver img { display:block; width:280px; max-width:100%; margin:16px auto; background:white; padding:12px; }
       [hidden] { display:none !important; }
-      @media (max-width:760px) { main { grid-template-columns:1fr; } .grid { grid-template-columns:1fr; gap:0; } h1 { font-size:48px; } }
+      @media (max-width:900px) {
+        body { font-size:16px; }
+        header { padding:13px max(16px,env(safe-area-inset-left)); }
+        header strong { font-size:18px; }
+        header span { font-size:11px; }
+        main { width:min(100%,620px); grid-template-columns:minmax(0,1fr); gap:18px; padding:20px 12px max(40px,env(safe-area-inset-bottom)); }
+        h1 { margin:7px 0 10px; font-size:clamp(34px,10.5vw,46px); line-height:.98; }
+        h2 { font-size:26px; }
+        .eyebrow { font-size:11px; }
+        .steps { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:16px; }
+        .steps li { display:block; min-width:0; padding:10px 8px 0 0; font-size:12px; line-height:1.35; }
+        .steps b { display:block; margin-bottom:4px; }
+        form, .complete { padding:22px 16px; border-top-width:6px; border-radius:0 0 8px 8px; box-shadow:0 8px 24px rgba(7,30,51,.1); }
+        fieldset { margin-bottom:26px; }
+        legend { margin-bottom:14px; font-size:12px; }
+        label { margin-bottom:18px; font-size:15px; }
+        input, select { min-height:56px; border-radius:7px; padding:12px; font-size:16px; }
+        .grid { grid-template-columns:1fr; gap:0; }
+        .consent { grid-template-columns:28px 1fr; gap:10px; line-height:1.4; }
+        .consent input { width:24px; min-height:24px; }
+        button, .waiver { min-height:62px; border-radius:7px; padding:14px 16px; font-size:16px; touch-action:manipulation; }
+        .privacy { font-size:12px; }
+      }
+      @media (max-width:380px) {
+        main { padding-left:8px; padding-right:8px; }
+        form, .complete { padding-left:14px; padding-right:14px; }
+        .steps { gap:5px; }
+        .steps li { font-size:11px; }
+      }
     </style>
   </head>
   <body>
@@ -69,51 +98,49 @@
         <fieldset>
           <legend>YOUR CONNECTION TO UC SAN DIEGO</legend>
           <label>Role
-            <select name="role" required>
+            <select id="role" name="role" required>
               <option value="">Choose one</option>
-              <option>Undergraduate student</option><option>Graduate student</option><option>Postdoctoral scholar</option>
-              <option>Faculty</option><option>Staff</option><option>Visiting scholar or visitor</option><option>Community member or other</option>
+              <option>Academic</option><option>Staff</option><option>Postdoc</option>
+              <option>Graduate Student MS, PhD</option><option>MAS Student</option><option>Undergraduate Student (UG)</option>
+              <option>UG Student Employee</option><option>Affiliate (Retirees, Volunteers, etc.)</option>
+              <option>Visiting scholar or visitor</option><option>Community member</option><option>Other</option>
             </select>
           </label>
-          <label>Program, department, or organization
+          <label id="other-role-wrap" hidden>Please specify your role<input name="otherRole" maxlength="80"></label>
+          <label id="graduation-wrap" hidden>Anticipated graduation
+            <small>month and year</small>
+            <input id="anticipated-graduation" name="anticipatedGraduation" type="month" autocomplete="off">
+          </label>
+          <label>Department, division, or organization
             <select name="affiliation" id="affiliation" required>
               <option value="">Choose the closest match</option>
               <optgroup label="Scripps Oceanography">
-                <option>Scripps – Biological Oceanography</option><option>Scripps – Climate Sciences</option><option>Scripps – Geophysics</option>
-                <option>Scripps – Marine Biology</option><option>Scripps – Marine Chemistry and Geochemistry</option><option>Scripps – Physical Oceanography</option>
-                <option>Scripps staff – Director's Office</option><option>Scripps staff – other program or unit</option>
+                <option>IOD-Biology</option><option>CMBB-Biology</option><option>MBRD-Biology</option>
+                <option>GRD-Earth</option><option>IGPP-Earth</option><option>CASPO-O&amp;A</option><option>MPL-O&amp;A</option>
+                <option>SIO/DO</option><option>Birch Aquarium</option><option>MarFac</option><option>MSDC</option>
+                <option>Sea Grant</option><option>SIO Academic Department</option><option>SOMTS</option>
               </optgroup>
-              <optgroup label="UC San Diego engineering">
-                <option>UC San Diego – Mechanical and Aerospace Engineering</option><option>UC San Diego – Bioengineering</option>
-                <option>UC San Diego – Computer Science and Engineering</option><option>UC San Diego – Electrical and Computer Engineering</option>
-                <option>UC San Diego – NanoEngineering</option><option>UC San Diego – Structural Engineering</option>
-                <option>UC San Diego – Chemical Engineering</option><option>UC San Diego – other engineering program</option>
+              <optgroup label="Elsewhere at UC San Diego">
+                <option>UCSD (Non-SIO Dept)</option>
               </optgroup>
-              <optgroup label="Other UC San Diego programs">
-                <option>UC San Diego – Biological Sciences</option><option>UC San Diego – Physical Sciences</option><option>UC San Diego – Social Sciences</option>
-                <option>UC San Diego – Arts and Humanities</option><option>UC San Diego – Health Sciences</option>
-                <option>UC San Diego – Rady School of Management</option><option>UC San Diego – School of Global Policy and Strategy</option>
-                <option>UC San Diego undergraduate – undeclared</option><option>UC San Diego – other academic program</option>
-              </optgroup>
-              <optgroup label="UC San Diego staff">
-                <option>UC San Diego staff – central administration</option><option>UC San Diego staff – academic department or unit</option><option>UC San Diego staff – other unit</option>
-              </optgroup>
-              <optgroup label="Other affiliations">
-                <option>External university or institution</option><option>Community member – no institutional affiliation</option><option>Other</option>
+              <optgroup label="Outside UC San Diego">
+                <option>External university or institution</option>
+                <option>Community member – no institutional affiliation</option>
+                <option>Other</option>
               </optgroup>
             </select>
           </label>
-          <label id="other-wrap" hidden>Please specify<input name="otherAffiliation" maxlength="120"></label>
+          <label id="other-wrap" hidden>Please specify your department or organization<input name="otherAffiliation" maxlength="120"></label>
           <div class="grid">
-            <label>ID type<select id="identifier-type" name="identifierType" required><option>Student PID</option><option>Triton Student Number (TSN)</option><option>Employee ID</option><option>Other UC San Diego ID</option></select></label>
-            <label>ID number<input id="identifier" name="identifier" autocomplete="off" autocapitalize="characters" maxlength="32" placeholder="A12345678" required></label>
+            <label>ID type<select id="identifier-type" name="identifierType" required><option>Triton Student Number (TSN)</option><option>Employee ID</option><option>Student PID</option><option>Other UC San Diego ID</option></select></label>
+            <label>ID number<input id="identifier" name="identifier" inputmode="numeric" autocomplete="off" autocapitalize="characters" maxlength="32" placeholder="200010746" required></label>
           </div>
         </fieldset>
 
         <fieldset>
           <legend>CONTACT</legend>
-          <label>Primary email<input name="primaryEmail" type="email" autocomplete="email" maxlength="254" required></label>
-          <label>Secondary email <small>optional</small><input name="secondaryEmail" type="email" maxlength="254"></label>
+          <label>Primary email<input name="primaryEmail" type="email" inputmode="email" autocomplete="email" autocapitalize="none" spellcheck="false" maxlength="254" required></label>
+          <label>Secondary email <small>optional</small><input name="secondaryEmail" type="email" inputmode="email" autocapitalize="none" spellcheck="false" maxlength="254"></label>
         </fieldset>
 
         <label class="honeypot" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
@@ -136,11 +163,20 @@
     <script>
       const kioskMode = <?!= JSON.stringify(isKiosk) ?>;
       const form = document.getElementById("registration");
+      const role = document.getElementById("role");
+      const otherRoleWrap = document.getElementById("other-role-wrap");
+      const graduationWrap = document.getElementById("graduation-wrap");
+      const anticipatedGraduation = document.getElementById("anticipated-graduation");
       const affiliation = document.getElementById("affiliation");
       const otherWrap = document.getElementById("other-wrap");
       const identifierType = document.getElementById("identifier-type");
       const identifier = document.getElementById("identifier");
       const startedAt = Date.now();
+      const studentRoles = new Set(["Graduate Student MS, PhD", "MAS Student", "Undergraduate Student (UG)", "UG Student Employee"]);
+
+      const today = new Date();
+      anticipatedGraduation.min = today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, "0");
+      anticipatedGraduation.max = String(today.getFullYear() + 12) + "-12";
 
       if (kioskMode) {
         document.addEventListener("keydown", (event) => {
@@ -162,6 +198,16 @@
           identifier.placeholder = "A12345678";
           identifier.inputMode = "text";
         }
+      });
+
+      role.addEventListener("change", () => {
+        const isOther = role.value === "Other";
+        const isStudent = studentRoles.has(role.value);
+        otherRoleWrap.hidden = !isOther;
+        otherRoleWrap.querySelector("input").required = isOther;
+        graduationWrap.hidden = !isStudent;
+        anticipatedGraduation.required = isStudent;
+        if (!isStudent) anticipatedGraduation.value = "";
       });
 
       affiliation.addEventListener("change", () => {

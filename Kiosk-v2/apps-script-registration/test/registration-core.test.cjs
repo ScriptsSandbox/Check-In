@@ -27,18 +27,33 @@ test("accepts exactly nine digits for Triton Student Numbers", () => {
 });
 
 test("requires canonical affiliation choices and an explanation for Other", () => {
-  assert.equal(call('canonicalAffiliation_("Scripps – Biological Oceanography", "")'), "Scripps – Biological Oceanography");
+  assert.equal(call('canonicalAffiliation_("CASPO-O&A", "")'), "CASPO-O&A");
+  assert.equal(call('canonicalAffiliation_("External university or institution", "")'), "External university or institution");
+  assert.equal(call('canonicalAffiliation_("Community member – no institutional affiliation", "")'), "Community member – no institutional affiliation");
   assert.equal(call('canonicalAffiliation_("Other", "Coastal nonprofit")'), "Other – Coastal nonprofit");
   assert.equal(call('canonicalAffiliation_("Other", "")'), "");
   assert.equal(call('canonicalAffiliation_("BO", "")'), "");
+});
+
+test("accepts visitor and community roles", () => {
+  assert.equal(call('canonicalRole_("Visiting scholar or visitor", "")'), "Visiting scholar or visitor");
+  assert.equal(call('canonicalRole_("Community member", "")'), "Community member");
+});
+
+test("requires anticipated graduation for student roles only", () => {
+  assert.equal(call('isStudentRole_("MAS Student")'), true);
+  assert.equal(call('isStudentRole_("Academic")'), false);
+  assert.equal(call('normalizeAnticipatedGraduation_("2028-06")'), "2028-06");
+  assert.equal(call('normalizeAnticipatedGraduation_("Spring 2028")'), "");
 });
 
 test("rejects bots, rushed submissions, and missing consent", () => {
   const base = {
     firstName: "Test",
     lastName: "Member",
-    role: "Graduate student",
-    affiliation: "Scripps – Biological Oceanography",
+    role: "Graduate Student MS, PhD",
+    affiliation: "CASPO-O&A",
+    anticipatedGraduation: "2028-06",
     identifierType: "Student PID",
     identifier: "A12345678",
     primaryEmail: "test@example.edu",

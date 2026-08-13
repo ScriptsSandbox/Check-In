@@ -1,198 +1,136 @@
 const REGISTRATION_CONFIG_ = {
   spreadsheetProperty: "USER_DATABASE_SPREADSHEET_ID",
   waiverUrlProperty: "WAIVER_POWERFORM_URL",
-  sheetName: "Form Responses 1",
-  reviewSheetName: "Registration Review Log",
+  peopleSheet: "People",
+  identifiersSheet: "Identifiers",
+  registrationsSheet: "Registrations",
   consentVersion: "2026-08-11",
-  baseHeaders: [
-    "Name",
-    "Timestamp",
-    "Card UUID",
-    "Student ID",
-    "Type",
-    "Email Address",
-    "Secondary Email",
-    "Waiver Signed?",
-  ],
-  reviewHeaders: [
-    "Review Status",
-    "Registration Source",
-    "Registration Submitted At",
-    "Reviewed By",
-    "Reviewed At",
-    "Program / Department",
-    "Role",
-    "Identifier Type",
-    "DocuSign Status",
-    "Consent Version",
-  ],
 };
 
-function doGet() {
-  return HtmlService.createTemplateFromFile("Index")
-    .evaluate()
-    .setTitle("Create a Scripps Sandbox account");
+function doGet(event) {
+  const template = HtmlService.createTemplateFromFile("Index");
+  template.isKiosk = Boolean(event && event.parameter && event.parameter.mode === "kiosk");
+  return template.evaluate().setTitle("Create a Scripps Sandbox account");
 }
 
 function setupRegistrationSheet() {
-  const sheet = openRegistrationSheet_();
-  const width = Math.max(sheet.getLastColumn(), REGISTRATION_CONFIG_.baseHeaders.length);
-  const headers = sheet.getRange(1, 1, 1, width).getDisplayValues()[0];
-
-  REGISTRATION_CONFIG_.baseHeaders.forEach(function (expected, index) {
-    if (headers[index] !== expected) {
-      throw new Error("The user database header layout does not match the expected kiosk schema.");
-    }
-  });
-
-  const reviewSheet = openRegistrationReviewSheet_(true);
-  return {
-    ok: true,
-    spreadsheetId: sheet.getParent().getId(),
-    sheetName: sheet.getName(),
-    reviewSheetName: reviewSheet.getName(),
-  };
+  const spreadsheet = openRegistrationSpreadsheet_();
+  const people = requireSheet_(spreadsheet, REGISTRATION_CONFIG_.peopleSheet);
+  const identifiers = requireSheet_(spreadsheet, REGISTRATION_CONFIG_.identifiersSheet);
+  const registrations = requireSheet_(spreadsheet, REGISTRATION_CONFIG_.registrationsSheet);
+  assertHeaders_(people, ["Person ID", "Status", "Display Name", "Role", "Primary Email", "Secondary Emails", "Created At", "Updated At", "Source System", "Source Rows"]);
+  assertHeaders_(identifiers, ["Identifier ID", "Person ID", "Type", "Value", "Normalized Value", "Primary", "Verified", "Active", "Created At", "Source System", "Source Rows"]);
+  assertHeaders_(registrations, ["Registration ID", "Person ID", "Status", "Submitted At", "Reviewed By", "Reviewed At", "Program / Department", "Identifier Type", "DocuSign Status", "Consent Version", "Anticipated Graduation", "Source"]);
+  return { ok: true, spreadsheetId: spreadsheet.getId(), spreadsheetName: spreadsheet.getName(), peopleSheet: people.getName(), identifiersSheet: identifiers.getName(), registrationsSheet: registrations.getName() };
 }
 
 function registrationStatus() {
-  const sheet = openRegistrationSheet_();
-  return {
-    configured: true,
-    spreadsheetId: sheet.getParent().getId(),
-    spreadsheetName: sheet.getParent().getName(),
-    sheetName: sheet.getName(),
-    reviewSheetName: openRegistrationReviewSheet_(false).getName(),
-    waiverConfigured: Boolean(
-      PropertiesService.getScriptProperties().getProperty(REGISTRATION_CONFIG_.waiverUrlProperty)
-    ),
-  };
+  const result = setupRegistrationSheet();
+  result.configured = true;
+  result.waiverConfigured = Boolean(PropertiesService.getScriptProperties().getProperty(REGISTRATION_CONFIG_.waiverUrlProperty));
+  return result;
 }
 
 function submitRegistration(payload) {
   const validated = validateRegistration_(payload, Date.now());
   if (!validated.ok) return validated;
-
   const lock = LockService.getScriptLock();
-  if (!lock.tryLock(10000)) {
-    return { ok: false, message: "The registration system is busy. Please try again." };
-  }
-
+  lock.waitLock(20000);
   try {
-    const sheet = openRegistrationSheet_();
-    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getDisplayValues()[0];
-    assertRegistrationHeaders_(headers);
-
-    const lastRow = sheet.getLastRow();
-    if (lastRow > 1) {
-      const existing = sheet.getRange(2, 4, lastRow - 1, 3).getDisplayValues();
-      const duplicate = existing.some(function (row) {
-        const existingIdentifier = cleanText_(row[0], 32).toUpperCase().replace(/[\s-]+/g, "");
-        const submittedIdentifier = validated.value.identifier.replace(/[\s-]+/g, "");
-        const existingEmail = normalizeEmail_(row[2]);
-        return existingIdentifier === submittedIdentifier || existingEmail === validated.value.primaryEmail;
-      });
-      if (duplicate) {
-        return {
-          ok: false,
-          code: "ALREADY_EXISTS",
-          message: "An account already exists for that ID or email. Please use your existing account or ask Sandbox staff for help.",
-        };
-      }
-    }
-
-    const submittedAt = new Date();
-    const valuesByHeader = {
-      "Name": sheetSafe_(validated.value.name),
-      "Timestamp": submittedAt,
-      "Card UUID": "",
-      "Student ID": sheetSafe_(validated.value.identifier),
-      "Type": sheetSafe_(validated.value.role),
-      "Email Address": sheetSafe_(validated.value.primaryEmail),
-      "Secondary Email": sheetSafe_(validated.value.secondaryEmail),
-      "Waiver Signed?": "",
-      "Review Status": "Unreviewed",
-      "Registration Source": "Online registration",
-      "Registration Submitted At": submittedAt,
-      "Reviewed By": "",
-      "Reviewed At": "",
-      "Program / Department": sheetSafe_(validated.value.affiliation),
-      "Role": sheetSafe_(validated.value.role),
-      "Identifier Type": sheetSafe_(validated.value.identifierType),
-      "DocuSign Status": "Awaiting verification",
-      "Consent Version": REGISTRATION_CONFIG_.consentVersion,
-    };
-
-    const row = headers.map(function (header) {
-      return Object.prototype.hasOwnProperty.call(valuesByHeader, header) ? valuesByHeader[header] : "";
+    const value = validated.value;
+    const spreadsheet = openRegistrationSpreadsheet_();
+    const people = requireSheet_(spreadsheet, REGISTRATION_CONFIG_.peopleSheet);
+    const identifiers = requireSheet_(spreadsheet, REGISTRATION_CONFIG_.identifiersSheet);
+    const registrations = requireSheet_(spreadsheet, REGISTRATION_CONFIG_.registrationsSheet);
+    const identifierHeaders = getHeaders_(identifiers);
+    const identifierRows = identifiers.getLastRow() > 1 ? identifiers.getRange(2, 1, identifiers.getLastRow() - 1, identifierHeaders.length).getDisplayValues() : [];
+    const typeLabel = identifierTypeLabel_(value.identifierType);
+    const normalizedIdentifier = canonicalIdentifier_(value.identifier, value.identifierType);
+    const normalizedEmail = value.primaryEmail.toLowerCase();
+    const typeIndex = identifierHeaders.indexOf("Type");
+    const normalizedIndex = identifierHeaders.indexOf("Normalized Value");
+    const activeIndex = identifierHeaders.indexOf("Active");
+    const duplicate = identifierRows.some(function (row) {
+      const active = String(row[activeIndex]).toUpperCase();
+      if (active === "FALSE" || active === "NO" || active === "0") return false;
+      const rowType = String(row[typeIndex]);
+      const rowValue = String(row[normalizedIndex]).trim();
+      if (rowType === "Email") return rowValue.toLowerCase() === normalizedEmail;
+      return rowType === typeLabel && canonicalIdentifier_(rowValue, value.identifierType) === normalizedIdentifier;
     });
-    const reviewSheet = openRegistrationReviewSheet_(false);
-    const reviewHeaders = reviewSheet.getRange(1, 1, 1, reviewSheet.getLastColumn()).getDisplayValues()[0];
-    const userDatabaseRow = sheet.getLastRow() + 1;
-    const reviewRow = reviewHeaders.map(function (header) {
-      if (header === "User Database Row") return userDatabaseRow;
-      return Object.prototype.hasOwnProperty.call(valuesByHeader, header) ? valuesByHeader[header] : "";
-    });
-    sheet.appendRow(row);
-    try {
-      reviewSheet.appendRow(reviewRow);
-    } catch (reviewError) {
-      sheet.deleteRow(userDatabaseRow);
-      throw reviewError;
-    }
+    if (duplicate) return { ok: false, message: "An account already exists for that ID or email. Return to the kiosk and choose I already registered." };
 
-    return {
-      ok: true,
-      firstName: validated.value.firstName,
-      waiverUrl: getRequiredScriptProperty_(REGISTRATION_CONFIG_.waiverUrlProperty),
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      message: "We could not create the account. No information was intentionally retained by this form. Please try again or ask Sandbox staff for help.",
-    };
+    const now = new Date();
+    const personId = newId_("person");
+    const source = "Online registration";
+    appendNamedRow_(people, { "Person ID": personId, "Status": "Active", "Display Name": value.name, "Role": value.role, "Primary Email": value.primaryEmail, "Secondary Emails": value.secondaryEmail || "", "Created At": now, "Updated At": now, "Source System": source, "Source Rows": "" });
+    appendIdentifierRow_(identifiers, { "Identifier ID": newId_("identifier"), "Person ID": personId, "Type": typeLabel, "Value": value.identifier, "Normalized Value": normalizedIdentifier, "Primary": true, "Verified": false, "Active": true, "Created At": now, "Source System": source, "Source Rows": "" });
+    appendIdentifierRow_(identifiers, { "Identifier ID": newId_("identifier"), "Person ID": personId, "Type": "Email", "Value": value.primaryEmail, "Normalized Value": normalizedEmail, "Primary": true, "Verified": false, "Active": true, "Created At": now, "Source System": source, "Source Rows": "" });
+    appendNamedRow_(registrations, { "Registration ID": newId_("registration"), "Person ID": personId, "Status": "Unreviewed", "Submitted At": now, "Reviewed By": "", "Reviewed At": "", "Program / Department": value.affiliation, "Identifier Type": value.identifierType, "DocuSign Status": "Awaiting verification", "Consent Version": REGISTRATION_CONFIG_.consentVersion, "Anticipated Graduation": value.anticipatedGraduation || "", "Source": source });
+    SpreadsheetApp.flush();
+    return { ok: true, displayName: value.firstName, waiverUrl: getRequiredScriptProperty_(REGISTRATION_CONFIG_.waiverUrlProperty) };
   } finally {
     lock.releaseLock();
   }
 }
 
-function openRegistrationSheet_() {
-  const spreadsheetId = getRequiredScriptProperty_(REGISTRATION_CONFIG_.spreadsheetProperty);
-  const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
-  const sheet = spreadsheet.getSheetByName(REGISTRATION_CONFIG_.sheetName);
-  if (!sheet) throw new Error("Registration sheet was not found.");
+function openRegistrationSpreadsheet_() {
+  return SpreadsheetApp.openById(getRequiredScriptProperty_(REGISTRATION_CONFIG_.spreadsheetProperty));
+}
+
+function requireSheet_(spreadsheet, name) {
+  const sheet = spreadsheet.getSheetByName(name);
+  if (!sheet) throw new Error("Registration sheet is missing: " + name);
   return sheet;
 }
 
-function openRegistrationReviewSheet_(createIfMissing) {
-  const spreadsheetId = getRequiredScriptProperty_(REGISTRATION_CONFIG_.spreadsheetProperty);
-  const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
-  let sheet = spreadsheet.getSheetByName(REGISTRATION_CONFIG_.reviewSheetName);
-  const headers = ["Student ID", "User Database Row"].concat(REGISTRATION_CONFIG_.reviewHeaders);
-  if (!sheet && createIfMissing) {
-    sheet = spreadsheet.insertSheet(REGISTRATION_CONFIG_.reviewSheetName);
-    const headerRange = sheet.getRange(1, 1, 1, headers.length);
-    headerRange.setValues([headers]);
-    headerRange.setBackground("#d9e2f3").setFontWeight("bold").setWrap(true);
-    sheet.setFrozenRows(1);
-  }
-  if (!sheet) throw new Error("Registration review sheet setup is incomplete.");
-  const actual = sheet.getRange(1, 1, 1, headers.length).getDisplayValues()[0];
-  headers.forEach(function (header, index) {
-    if (actual[index] !== header) throw new Error("Registration review sheet layout does not match the expected schema.");
+function getHeaders_(sheet) {
+  return sheet.getRange(1, 1, 1, sheet.getLastColumn()).getDisplayValues()[0];
+}
+
+function assertHeaders_(sheet, expected) {
+  const headers = getHeaders_(sheet);
+  expected.forEach(function (header) {
+    if (headers.indexOf(header) === -1) throw new Error(sheet.getName() + " is missing the " + header + " column.");
   });
-  return sheet;
+}
+
+function appendNamedRow_(sheet, valuesByHeader) {
+  const headers = getHeaders_(sheet);
+  const row = headers.map(function (header) { return Object.prototype.hasOwnProperty.call(valuesByHeader, header) ? valuesByHeader[header] : ""; });
+  sheet.getRange(sheet.getLastRow() + 1, 1, 1, headers.length).setValues([row]);
+}
+
+function appendIdentifierRow_(sheet, valuesByHeader) {
+  const headers = getHeaders_(sheet);
+  const nextRow = sheet.getLastRow() + 1;
+  const valueColumn = headers.indexOf("Value") + 1;
+  const normalizedColumn = headers.indexOf("Normalized Value") + 1;
+  if (valueColumn > 0) sheet.getRange(nextRow, valueColumn).setNumberFormat("@");
+  if (normalizedColumn > 0) sheet.getRange(nextRow, normalizedColumn).setNumberFormat("@");
+  const row = headers.map(function (header) { return Object.prototype.hasOwnProperty.call(valuesByHeader, header) ? valuesByHeader[header] : ""; });
+  sheet.getRange(nextRow, 1, 1, headers.length).setValues([row]);
+}
+
+function identifierTypeLabel_(type) {
+  if (type === "Student PID") return "PID";
+  if (type === "Triton Student Number (TSN)") return "TSN";
+  if (type === "Employee ID") return "Employee ID";
+  return "Other UCSD ID";
+}
+
+function canonicalIdentifier_(identifier, type) {
+  const cleaned = String(identifier || "").trim().toUpperCase().replace(/[\s-]+/g, "");
+  if (type === "Employee ID" && /^\d+$/.test(cleaned)) return cleaned.replace(/^0+(?=\d)/, "");
+  return cleaned;
+}
+
+function newId_(prefix) {
+  return prefix + "_" + Utilities.getUuid().replace(/-/g, "");
 }
 
 function getRequiredScriptProperty_(name) {
   const value = PropertiesService.getScriptProperties().getProperty(name);
   if (!value) throw new Error("Registration deployment is not configured.");
   return value;
-}
-
-function assertRegistrationHeaders_(headers) {
-  REGISTRATION_CONFIG_.baseHeaders.forEach(function (header) {
-    if (headers.indexOf(header) === -1) {
-      throw new Error("Registration sheet setup is incomplete.");
-    }
-  });
 }
