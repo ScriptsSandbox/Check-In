@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 
 type Screen =
@@ -29,6 +29,7 @@ type Announcement = {
 };
 
 const REGISTRATION_URL = process.env.NEXT_PUBLIC_REGISTRATION_URL?.trim() || "";
+const WAIVER_URL = process.env.NEXT_PUBLIC_WAIVER_URL?.trim() || "";
 
 type ScannerStatus = "demo" | "connecting" | "connected" | "disconnected";
 
@@ -80,6 +81,20 @@ const affiliations = [
 
 function Arrow({ direction = "right" }: { direction?: "right" | "left" }) {
   return <span aria-hidden="true">{direction === "right" ? "→" : "←"}</span>;
+}
+
+function ordinal(value: number) {
+  const modulo100 = value % 100;
+  const suffix = modulo100 >= 11 && modulo100 <= 13
+    ? "th"
+    : value % 10 === 1
+      ? "st"
+      : value % 10 === 2
+        ? "nd"
+        : value % 10 === 3
+          ? "rd"
+          : "th";
+  return String(value) + suffix;
 }
 
 export default function Home() {
@@ -305,7 +320,7 @@ export default function Home() {
     setScreen("reading");
   }
 
-  function reset() {
+  const reset = useCallback(() => {
     cardDetectedAtRef.current = null;
     setScannerResult(null);
     setWelcomeName("Sandbox member");
@@ -320,7 +335,15 @@ export default function Home() {
     setLinkError("");
     setStaffCardDetected(false);
     setDemoOpen(false);
-  }
+  }, []);
+
+  useEffect(() => {
+    const returnHome = (event: KeyboardEvent) => {
+      if (event.key === "Escape") reset();
+    };
+    window.addEventListener("keydown", returnHome);
+    return () => window.removeEventListener("keydown", returnHome);
+  }, [reset]);
 
   async function submitPid(event: FormEvent) {
     event.preventDefault();
@@ -538,18 +561,26 @@ export default function Home() {
         )}
 
         {screen === "waiver-required" && (
-          <div className="status-content screen-content">
+        <div className="status-content screen-content waiver-required-content">
+          <div className="waiver-copy">
             <p className="eyebrow warning">WAIVER REQUIRED</p>
-            <h1>One step before<br />you check in.</h1>
-            <p className="lede">We found your Sandbox account, but not a current waiver. Please ask staff for help before using the space.</p>
+            <h1>Sign the waiver<br />on your phone.</h1>
+            <p className="lede">We found your Sandbox account, but no signed waiver is on file. Scan the code, complete the DocuSign waiver, then return here and try again.</p>
             <div className="button-row">
               <button className="solid-action" onClick={() => setScreen("home")}>Done</button>
               <button className="outline-action" onClick={() => setScreen("pid")}>Use another ID</button>
             </div>
           </div>
-        )}
+          {WAIVER_URL && (
+            <div className="qr-code qr-code-large waiver-qr" aria-label="QR code for the Scripps Sandbox DocuSign waiver">
+              <QRCodeSVG value={WAIVER_URL} size={286} level="M" bgColor="#f2eee3" fgColor="#092235" />
+              <span>SCAN TO SIGN THE WAIVER</span>
+            </div>
+          )}
+        </div>
+      )}
 
-        {screen === "backend-error" && (
+      {screen === "backend-error" && (
           <div className="status-content screen-content">
             <p className="eyebrow warning">CHECK-IN NOT RECORDED</p>
             <h1>Please check in<br />with staff.</h1>
@@ -666,31 +697,36 @@ export default function Home() {
         )}
 
         {screen === "new-here" && (
-          <div className="onboarding-content screen-content">
-            <button className="back" onClick={() => setScreen("home")}><Arrow direction="left" /> Back</button>
-            <p className="eyebrow">WELCOME TO THE SANDBOX</p>
-            <h1>Make something<br />unexpected.</h1>
-            <div className="onboarding-grid">
+        <div className="onboarding-content screen-content">
+          <button className="back" onClick={() => setScreen("home")}><Arrow direction="left" /> Back</button>
+          <p className="eyebrow">WELCOME TO THE SANDBOX</p>
+          <h1>Start on<br />your phone.</h1>
+          {REGISTRATION_URL ? (
+            <div className="onboarding-primary">
+              <div className="qr-code qr-code-large" aria-label="QR code for the Scripps Sandbox registration form">
+                <QRCodeSVG value={REGISTRATION_URL + "?v=5"} size={286} level="M" bgColor="#f2eee3" fgColor="#092235" />
+                <span>SCAN TO CREATE YOUR ACCOUNT</span>
+              </div>
               <div>
-                <p className="lede">Scan with your phone to submit your Sandbox profile. After the waiver, ask staff to finish setup and connect your card.</p>
+                <p className="lede">Use your phone to create your account and complete the liability waiver. It takes about three minutes.</p>
                 <ol>
-                  <li><b>01</b><span>Submit your profile</span></li>
-                  <li><b>02</b><span>Complete the liability waiver</span></li>
-                  <li><b>03</b><span>Ask staff to activate your account</span></li>
+                  <li><b>01</b><span>Create your Sandbox profile</span></li>
+                  <li><b>02</b><span>Complete the waiver on your phone</span></li>
+                  <li><b>03</b><span>Return here and tap your card</span></li>
                 </ol>
               </div>
-              {REGISTRATION_URL && <div className="qr-code" aria-label="QR code for the Scripps Sandbox registration form">
-                <QRCodeSVG value={REGISTRATION_URL} size={178} level="M" bgColor="#f2eee3" fgColor="#092235" />
-                <span>SCAN TO JOIN</span>
-              </div>}
             </div>
-            {REGISTRATION_URL
-              ? <a className="outline-action onboarding-link" href={REGISTRATION_URL} target="_blank" rel="noreferrer">Open the registration form</a>
-              : <p className="lede compact">The registration link is not configured yet. Please ask Sandbox staff for help.</p>}
-            <button className="outline-action" onClick={() => setScreen("pid")}>I already registered</button>
+          ) : (
+            <p className="lede compact">Phone registration is not configured yet. Please ask Sandbox staff for help.</p>
+          )}
+          <div className="onboarding-fallback">
+            <p><b>No phone nearby?</b> You can create the account on this kiosk. The waiver must still be completed from a phone or another device.</p>
+            {REGISTRATION_URL && <a className="outline-action" href={REGISTRATION_URL + "?mode=kiosk&v=5"}>Create an account on this kiosk</a>}
+            <button className="quiet-action" onClick={() => setScreen("pid")}>I already registered</button>
           </div>
-        )}
-      </section>
+        </div>
+      )}
+    </section>
 
       {screen === "success" && (
         <section className="success-plane">
@@ -707,7 +743,7 @@ export default function Home() {
           <div className="visit-card">
             <span>TODAY</span>
             <b>{timeLabel}</b>
-            <span>{visitCount === null ? "CHECKED IN" : `VISIT DAY ${visitCount}`}</span>
+            <span>{visitCount === null ? "CHECKED IN" : ordinal(visitCount) + " Visit"}</span>
           </div>
           <button className="solid-action navy" onClick={reset}>Done</button>
           <p className="reset-note">Returning home in {countdown} seconds</p>
