@@ -274,7 +274,7 @@ class SheetsCheckInBackend:
         timings["user_lookup"] = elapsed_ms(stage_started)
         if not matches:
             timings["total"] = elapsed_ms(total_started)
-            return CheckInResult(outcome="unknown_identifier", message="We could not find that PID or employee ID.", timings_ms=timings)
+            return CheckInResult(outcome="unknown_identifier", message="We could not find that PID, TSN, or employee ID.", timings_ms=timings)
         if len(matches) > 1:
             timings["total"] = elapsed_ms(total_started)
             return CheckInResult(outcome="backend_error", message="More than one account uses that identifier. Please see staff.", timings_ms=timings)
@@ -284,7 +284,7 @@ class SheetsCheckInBackend:
         normalized_identifier = normalize_person_id(identifier)
         matches = [record for record in self.provider.user_records() if normalized_identifier and normalize_person_id(record.get("Student ID")) == normalized_identifier]
         if not matches:
-            return CheckInResult(outcome="unknown_identifier", message="We could not find that PID or employee ID.")
+            return CheckInResult(outcome="unknown_identifier", message="We could not find that PID, TSN, or employee ID.")
         if len(matches) > 1:
             return CheckInResult(outcome="card_link_error", message="More than one account uses that identifier. Please see an administrator.")
         target = matches[0]

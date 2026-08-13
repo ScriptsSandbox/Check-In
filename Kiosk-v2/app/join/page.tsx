@@ -24,6 +24,7 @@ export default function JoinPage() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [identifierType, setIdentifierType] = useState("pid");
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -108,13 +109,26 @@ export default function JoinPage() {
                 </label>
                 <div className="field-grid id-grid">
                   <label>ID type
-                    <select name="identifierType" required defaultValue="pid">
+                    <select
+                      name="identifierType"
+                      required
+                      value={identifierType}
+                      onChange={(event) => setIdentifierType(event.target.value)}
+                    >
                       <option value="pid">Student PID</option>
+                      <option value="tsn">Triton Student Number (TSN)</option>
                       <option value="employee_id">Employee ID</option>
                       <option value="other">Other UCSD ID</option>
                     </select>
                   </label>
-                  <label>ID number<input name="identifierValue" autoCapitalize="characters" autoComplete="off" placeholder="A12345678" required /></label>
+                  <label>ID number<input
+                    name="identifierValue"
+                    autoCapitalize="characters"
+                    autoComplete="off"
+                    inputMode={identifierType === "tsn" || identifierType === "employee_id" ? "numeric" : "text"}
+                    placeholder={identifierType === "tsn" ? "200010746" : identifierType === "employee_id" ? "000023" : "A12345678"}
+                    required
+                  /></label>
                 </div>
               </fieldset>
 

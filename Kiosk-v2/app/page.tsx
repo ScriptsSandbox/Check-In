@@ -456,7 +456,7 @@ export default function Home() {
             <h1>Tap your<br />UC San Diego ID.</h1>
             <p className="lede">Hold your card near the reader to check in.</p>
             {scannerStatus === "disconnected" && (
-              <p className="reader-offline-notice" role="status">Card reader unavailable. Use your PID or employee ID below.</p>
+              <p className="reader-offline-notice" role="status">Card reader unavailable. Use your PID, TSN, or employee ID below.</p>
             )}
             {(announcement.active || minutesUntilClose !== null) && (
               <div className="arrival-notices">
@@ -482,7 +482,7 @@ export default function Home() {
             )}
             <div className="primary-actions">
               <button className="text-action" onClick={() => setScreen("pid")}>
-                <span><small>NO CARD?</small>Check in with PID or employee ID</span>
+                <span><small>NO CARD?</small>Check in with UCSD ID or employee ID</span>
                 <Arrow />
               </button>
               <button className="text-action" onClick={() => setScreen("new-here")}>
@@ -514,9 +514,9 @@ export default function Home() {
             <button className="back" onClick={() => setScreen("home")}><Arrow direction="left" /> Back</button>
             <p className="eyebrow">CHECK IN WITHOUT A CARD</p>
             <h1>Enter your ID.</h1>
-            <p className="lede compact">Use your PID or UC San Diego employee ID.</p>
+            <p className="lede compact">Use your student PID, nine-digit TSN, or UC San Diego employee ID.</p>
             <form onSubmit={submitPid}>
-              <label htmlFor="pid">PID OR EMPLOYEE ID</label>
+              <label htmlFor="pid">PID, TSN, OR EMPLOYEE ID</label>
               <input
                 id="pid"
                 value={pid}
@@ -553,7 +553,7 @@ export default function Home() {
             <p className="lede">Already registered? Designated staff can connect this card after checking your physical ID.</p>
           <div className="stacked-actions">
             <button className="solid-action" onClick={() => setScreen("link-card")}>Ask staff to connect this card <Arrow /></button>
-            <button className="solid-action" onClick={() => setScreen("pid")}>Use my PID or employee ID <Arrow /></button>
+            <button className="solid-action" onClick={() => setScreen("pid")}>Use my UCSD ID or employee ID <Arrow /></button>
             <button className="outline-action" onClick={() => setScreen("new-here")}>I’m new here</button>
             <button className="quiet-action" onClick={() => setScreen("home")}>Try the card again</button>
           </div>
@@ -594,9 +594,9 @@ export default function Home() {
             <button className="back" onClick={() => setScreen("unknown-card")}><Arrow direction="left" /> Back</button>
             <p className="eyebrow">STAFF-ASSISTED CARD LINK</p>
             <h1>Confirm the<br />member’s account.</h1>
-            <p className="lede compact">Staff: inspect the member’s physical ID, then enter its PID or employee ID.</p>
+            <p className="lede compact">Staff: inspect the member’s physical ID, then enter their PID, TSN, or employee ID.</p>
             <form onSubmit={startCardLink}>
-              <label htmlFor="link-identifier">PID OR EMPLOYEE ID</label>
+              <label htmlFor="link-identifier">PID, TSN, OR EMPLOYEE ID</label>
               <input
                 id="link-identifier"
                 value={linkIdentifier}
@@ -650,7 +650,7 @@ export default function Home() {
             <p className="lede">Hold it flat against the reader for a full second.</p>
             <div className="button-row">
               <button className="solid-action" onClick={() => setScreen("home")}>Try again</button>
-              <button className="outline-action" onClick={() => setScreen("pid")}>Use PID</button>
+              <button className="outline-action" onClick={() => setScreen("pid")}>Use another ID</button>
             </div>
           </div>
         )}
@@ -764,7 +764,7 @@ export default function Home() {
           <button onClick={() => { setScreen("profile"); setDemoOpen(false); }}>Tap ID · missing info <Arrow /></button>
           <button onClick={() => { setScreen("unknown-card"); setDemoOpen(false); }}>Tap unknown ID <Arrow /></button>
           <button onClick={() => { setScreen("reader-error"); setDemoOpen(false); }}>Card reader error <Arrow /></button>
-          <button onClick={() => { setScreen("pid"); setDemoOpen(false); }}>Manual PID check-in <Arrow /></button>
+          <button onClick={() => { setScreen("pid"); setDemoOpen(false); }}>Manual ID check-in <Arrow /></button>
           <button onClick={() => { setScreen("new-here"); setDemoOpen(false); }}>New user <Arrow /></button>
           <button onClick={openStaffEditor}>Staff announcement <Arrow /></button>
           <button onClick={() => { setDemoClosingMinutes(18); setScreen("home"); setDemoOpen(false); }}>Simulate closing in 18 min <Arrow /></button>

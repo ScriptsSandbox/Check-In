@@ -334,7 +334,7 @@ class CardLinkStart(BaseModel):
 async def start_card_link(request: CardLinkStart) -> dict[str, Any]:
     identifier = request.identifier.strip()
     if not identifier or len(identifier) > 64:
-        raise HTTPException(status_code=422, detail="Enter a valid PID or employee ID")
+        raise HTTPException(status_code=422, detail="Enter a valid PID, TSN, or employee ID")
     if STATE.backend is None:
         raise HTTPException(status_code=409, detail="Card linking is unavailable in demo mode")
     if not STATE.designated_card_link_staff_ids:
@@ -375,7 +375,7 @@ async def cancel_card_link() -> dict[str, bool]:
 async def check_in_with_identifier(read: IdentifierCheckIn) -> dict[str, Any]:
     identifier = read.identifier.strip()
     if not identifier or len(identifier) > 64:
-        raise HTTPException(status_code=422, detail="Enter a valid PID or employee ID")
+        raise HTTPException(status_code=422, detail="Enter a valid PID, TSN, or employee ID")
 
     read_at = datetime.now(timezone.utc).isoformat()
     started_at = asyncio.get_running_loop().time()

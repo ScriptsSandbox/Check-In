@@ -99,6 +99,18 @@ test("appends an immediately active row with after-the-fact review metadata", ()
   assert.equal(harness.wasReleased(), true);
 });
 
+test("appends a TSN as the student's primary identifier", () => {
+  const harness = makeHarness();
+  harness.context.payload = validPayload({
+    identifierType: "Triton Student Number (TSN)",
+    identifier: "200010746",
+  });
+  const result = vm.runInContext("submitRegistration(payload)", harness.context);
+  assert.equal(result.ok, true);
+  assert.equal(harness.appendedUsers[0][userHeaders.indexOf("Student ID")], "200010746");
+  assert.equal(harness.appendedReviews[0][reviewHeaders.indexOf("Identifier Type")], "Triton Student Number (TSN)");
+});
+
 test("does not overwrite or append when an ID already exists", () => {
   const harness = makeHarness([["A12345678", "Graduate student", "someone@example.edu"]]);
   harness.context.payload = validPayload();

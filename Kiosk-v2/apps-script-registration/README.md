@@ -10,7 +10,8 @@ The kiosk still requires a matching waiver record before check-in succeeds. Afte
 - Give the script only the explicit Google Sheets OAuth scope in `appsscript.json`.
 - Keep the user database private to designated Sandbox staff.
 - The public app accepts writes only. It never returns database rows.
-- An anonymous submission cannot update an existing PID or email.
+- An anonymous submission cannot update an existing PID, TSN, employee ID, or email.
+- Student identifiers support legacy PIDs and nine-digit Triton Student Numbers (TSNs). They remain separate identifier types so a future authorized PID-to-TSN crosswalk can attach both values to one person without discarding the PID.
 - Input is length-limited, normalized, and protected against spreadsheet-formula injection.
 - A script lock serializes duplicate checks and appends.
 - The form includes a honeypot and minimum-fill-time check.

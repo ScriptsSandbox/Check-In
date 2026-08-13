@@ -12,6 +12,24 @@ export function normalizeIdentifier(value: string) {
   return value.trim().toUpperCase().replace(/[\s-]+/g, "");
 }
 
+export function normalizeRegistrationIdentifier(value: string, identifierType: string) {
+  const normalized = normalizeIdentifier(value);
+  if (identifierType === "pid") {
+    if (!/^A?\d{8}$/.test(normalized)) return "";
+    return normalized.startsWith("A") ? normalized : `A${normalized}`;
+  }
+  if (identifierType === "tsn") {
+    return /^\d{9}$/.test(normalized) ? normalized : "";
+  }
+  if (identifierType === "employee_id") {
+    return /^\d{6,12}$/.test(normalized) ? normalized : "";
+  }
+  if (identifierType === "other") {
+    return /^[A-Z0-9]{4,20}$/.test(normalized) ? normalized : "";
+  }
+  return "";
+}
+
 export function makeDisplayName(firstName: string, lastName: string, preferredName?: string) {
   return `${preferredName?.trim() || firstName.trim()} ${lastName.trim()}`.trim();
 }

@@ -103,8 +103,8 @@
           </label>
           <label id="other-wrap" hidden>Please specify<input name="otherAffiliation" maxlength="120"></label>
           <div class="grid">
-            <label>ID type<select name="identifierType" required><option>Student PID</option><option>Employee ID</option><option>Other UC San Diego ID</option></select></label>
-            <label>ID number<input name="identifier" autocomplete="off" autocapitalize="characters" maxlength="32" placeholder="A12345678" required></label>
+            <label>ID type<select id="identifier-type" name="identifierType" required><option>Student PID</option><option>Triton Student Number (TSN)</option><option>Employee ID</option><option>Other UC San Diego ID</option></select></label>
+            <label>ID number<input id="identifier" name="identifier" autocomplete="off" autocapitalize="characters" maxlength="32" placeholder="A12345678" required></label>
           </div>
         </fieldset>
 
@@ -134,7 +134,22 @@
       const form = document.getElementById("registration");
       const affiliation = document.getElementById("affiliation");
       const otherWrap = document.getElementById("other-wrap");
+      const identifierType = document.getElementById("identifier-type");
+      const identifier = document.getElementById("identifier");
       const startedAt = Date.now();
+
+      identifierType.addEventListener("change", () => {
+        if (identifierType.value === "Triton Student Number (TSN)") {
+          identifier.placeholder = "200010746";
+          identifier.inputMode = "numeric";
+        } else if (identifierType.value === "Employee ID") {
+          identifier.placeholder = "000023";
+          identifier.inputMode = "numeric";
+        } else {
+          identifier.placeholder = "A12345678";
+          identifier.inputMode = "text";
+        }
+      });
 
       affiliation.addEventListener("change", () => {
         const other = affiliation.value === "Other";

@@ -10,6 +10,7 @@ const REGISTRATION_ALLOWED_ROLES_ = [
 
 const REGISTRATION_ALLOWED_ID_TYPES_ = [
   "Student PID",
+  "Triton Student Number (TSN)",
   "Employee ID",
   "Other UC San Diego ID",
 ];
@@ -70,6 +71,9 @@ function normalizeIdentifier_(value, identifierType) {
     if (!/^A?\d{8}$/.test(normalized)) return "";
     return normalized.charAt(0) === "A" ? normalized : "A" + normalized;
   }
+  if (identifierType === "Triton Student Number (TSN)") {
+    return /^\d{9}$/.test(normalized) ? normalized : "";
+  }
   if (identifierType === "Employee ID") {
     return /^\d{6,12}$/.test(normalized) ? normalized : "";
   }
@@ -110,7 +114,7 @@ function validateRegistration_(payload, nowMs) {
   if (REGISTRATION_ALLOWED_ROLES_.indexOf(role) === -1) return { ok: false, message: "Choose your role." };
   if (!affiliation) return { ok: false, message: "Choose your program, department, or organization." };
   if (REGISTRATION_ALLOWED_ID_TYPES_.indexOf(identifierType) === -1 || !identifier) {
-    return { ok: false, message: "Enter a valid PID or employee ID." };
+    return { ok: false, message: "Enter a valid PID, TSN, or employee ID." };
   }
   if (!isValidEmail_(primaryEmail) || (secondaryEmail && !isValidEmail_(secondaryEmail))) {
     return { ok: false, message: "Enter a valid email address." };

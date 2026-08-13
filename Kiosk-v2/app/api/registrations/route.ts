@@ -12,7 +12,7 @@ import {
   id,
   makeDisplayName,
   normalizeEmail,
-  normalizeIdentifier,
+  normalizeRegistrationIdentifier,
   REGISTRATION_CONSENT_VERSION,
   WAIVER_POWERFORM_URL,
 } from "@/lib/registration";
@@ -31,7 +31,7 @@ type RegistrationPayload = {
 };
 
 const allowedUserTypes = new Set(["student", "staff", "faculty", "postdoc", "visitor", "other"]);
-const allowedIdentifierTypes = new Set(["pid", "employee_id", "other"]);
+const allowedIdentifierTypes = new Set(["pid", "tsn", "employee_id", "other"]);
 
 function validEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -66,7 +66,7 @@ export async function POST(request: Request) {
       : null;
     const identifierType = payload.identifierType?.trim().toLowerCase() ?? "";
     const identifierValue = payload.identifierValue?.trim() ?? "";
-    const normalizedIdentifier = normalizeIdentifier(identifierValue);
+    const normalizedIdentifier = normalizeRegistrationIdentifier(identifierValue, identifierType);
 
     if (!firstName || !lastName || !affiliation) {
       return Response.json({ error: "Name and affiliation are required." }, { status: 400 });
@@ -77,8 +77,8 @@ export async function POST(request: Request) {
     if (!validEmail(primaryEmail) || (secondaryEmail && !validEmail(secondaryEmail))) {
       return Response.json({ error: "Enter a valid email address." }, { status: 400 });
     }
-    if (normalizedIdentifier.length < 4 || normalizedIdentifier.length > 32) {
-      return Response.json({ error: "Enter a valid UC San Diego ID number." }, { status: 400 });
+    if (!normalizedIdentifier) {
+      return Response.json({ error: "Enter a valid PID, TSN, or employee ID." }, { status: 400 });
     }
     if (!payload.consent) {
       return Response.json({ error: "Consent is required to create an account." }, { status: 400 });

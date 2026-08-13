@@ -20,6 +20,12 @@ test("accepts employee IDs without pretending they are student PIDs", () => {
   assert.equal(call('normalizeIdentifier_("A12345678", "Employee ID")'), "");
 });
 
+test("accepts exactly nine digits for Triton Student Numbers", () => {
+  assert.equal(call('normalizeIdentifier_("200-010-746", "Triton Student Number (TSN)")'), "200010746");
+  assert.equal(call('normalizeIdentifier_("20001074", "Triton Student Number (TSN)")'), "");
+  assert.equal(call('normalizeIdentifier_("A00010746", "Triton Student Number (TSN)")'), "");
+});
+
 test("requires canonical affiliation choices and an explanation for Other", () => {
   assert.equal(call('canonicalAffiliation_("Scripps – Biological Oceanography", "")'), "Scripps – Biological Oceanography");
   assert.equal(call('canonicalAffiliation_("Other", "Coastal nonprofit")'), "Other – Coastal nonprofit");
