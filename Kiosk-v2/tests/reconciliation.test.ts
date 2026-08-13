@@ -75,6 +75,20 @@ test("uses the latest repeated user row and merges cards and positive training",
   assert.equal(result.metrics.duplicateUserGroups, 1);
 });
 
+test("quarantines a shared identifier when both name and email identify different people", () => {
+  const result = reconcileSourceSnapshot(snapshot({
+    users: [
+      user(84, { name: "Natalie Levy", email: "nrlevy@ucsd.edu", identifier: "260053" }),
+      user(243, { name: "Caitlyn Webster", email: "cwebster@ucsd.edu", identifier: "260053" }),
+    ],
+  }));
+
+  assert.equal(result.accounts.length, 0);
+  assert.ok(result.issues.some((issue) =>
+    issue.type === "identifier_shared_across_people" && issue.severity === "blocker"
+  ));
+});
+
 test("deduplicates a repeated card within one account", () => {
   const result = reconcileSourceSnapshot(snapshot({
     users: [user(2, { cardUid: "same-card" }), user(3, { identifier: "A00000002", cardUid: "same-card" })],

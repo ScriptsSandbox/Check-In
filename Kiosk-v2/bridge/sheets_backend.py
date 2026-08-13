@@ -54,6 +54,20 @@ def normalize_card_uid(value: Any) -> str:
     return str(value or "").strip().upper()
 
 
+def normalized_user_identifiers(record: dict[str, Any]) -> set[str]:
+    values = record.get("Identifiers") or [record.get("Student ID")]
+    if isinstance(values, str):
+        values = [values]
+    return {normalized for value in values if (normalized := normalize_person_id(value))}
+
+
+def users_matching_identifier(users: list[dict[str, Any]], identifier: Any) -> list[dict[str, Any]]:
+    normalized = normalize_person_id(identifier)
+    if not normalized:
+        return []
+    return [record for record in users if normalized in normalized_user_identifiers(record)]
+
+
 def elapsed_ms(started_at: float) -> int:
     return round((time.monotonic() - started_at) * 1000)
 
@@ -162,12 +176,19 @@ class GoogleSheetsProvider:
             if identity is None:
                 identity = next((r for r in person_identifiers if str(r.get("Type", "")).lower() != "email"), None)
             email_record = next((r for r in person_identifiers if str(r.get("Type", "")).lower() == "email" and bool(r.get("Primary"))), None)
+            aliases = [
+                str(record.get("Normalized Value", "")).strip()
+                for record in person_identifiers
+                if str(record.get("Type", "")).strip().lower() != "email"
+                and str(record.get("Normalized Value", "")).strip()
+            ]
             person_cards = cards_by_person.get(person_id, [])
             card = person_cards[-1] if person_cards else {}
             users.append({
                 "Person ID": person_id,
                 "Name": str(person.get("Display Name", "")).strip(),
                 "Student ID": str((identity or {}).get("Normalized Value", "")).strip(),
+                "Identifiers": tuple(dict.fromkeys(aliases)),
                 "Email Address": str(person.get("Primary Email", "") or (email_record or {}).get("Normalized Value", "")).strip(),
                 "Card Digest": str(card.get("Card Digest", "")).strip().lower(),
             })
@@ -212,7 +233,7 @@ class GoogleSheetsProvider:
         with self._lock:
             self._refresh_people_if_needed()
             users = self._users or []
-            matches = [record for record in users if normalize_person_id(record.get("Student ID")) == normalized_identifier]
+            matches = users_matching_identifier(users, normalized_identifier)
             if len(matches) != 1:
                 raise ValueError("The account could not be identified uniquely.")
             if any(str(record.get("Card Digest", "")).lower() == digest for record in users):
@@ -270,7 +291,7 @@ class SheetsCheckInBackend:
         timings: dict[str, int] = {}
         normalized_identifier = normalize_person_id(identifier)
         stage_started = time.monotonic()
-        matches = [record for record in self.provider.user_records() if normalized_identifier and normalize_person_id(record.get("Student ID")) == normalized_identifier]
+        matches = users_matching_identifier(self.provider.user_records(), normalized_identifier)
         timings["user_lookup"] = elapsed_ms(stage_started)
         if not matches:
             timings["total"] = elapsed_ms(total_started)
@@ -282,7 +303,7 @@ class SheetsCheckInBackend:
 
     def prepare_card_link(self, identifier: str) -> CheckInResult:
         normalized_identifier = normalize_person_id(identifier)
-        matches = [record for record in self.provider.user_records() if normalized_identifier and normalize_person_id(record.get("Student ID")) == normalized_identifier]
+        matches = users_matching_identifier(self.provider.user_records(), normalized_identifier)
         if not matches:
             return CheckInResult(outcome="unknown_identifier", message="We could not find that PID, TSN, or employee ID.")
         if len(matches) > 1:
@@ -301,10 +322,10 @@ class SheetsCheckInBackend:
         stage_started = time.monotonic()
         users = self.provider.user_records()
         staff = next((record for record in users if str(record.get("Card Digest", "")).lower() == staff_digest), None)
-        staff_id = normalize_person_id(staff.get("Student ID")) if staff else ""
+        staff_ids = normalized_user_identifiers(staff) if staff else set()
         allowed_staff = {normalize_person_id(value) for value in designated_staff_ids}
         timings["staff_lookup"] = elapsed_ms(stage_started)
-        if not staff or not staff_id or staff_id not in allowed_staff or staff_digest == member_digest:
+        if not staff or not staff_ids.intersection(allowed_staff) or staff_digest == member_digest:
             timings["total"] = elapsed_ms(total_started)
             return CheckInResult(outcome="staff_unauthorized", message="That card is not authorized to connect member cards.", timings_ms=timings)
         stage_started = time.monotonic()
@@ -332,11 +353,11 @@ class SheetsCheckInBackend:
         return CheckInResult(outcome="card_linked", display_name=display_name, message="Card connected. The member can now check in.", timings_ms=timings)
 
     def _check_in_user(self, user: dict[str, Any], total_started: float, timings: dict[str, int]) -> CheckInResult:
-        user_id = normalize_person_id(user.get("Student ID"))
+        user_ids = normalized_user_identifiers(user)
         user_email = normalize_email(user.get("Email Address"))
         stage_started = time.monotonic()
         waivers = self.provider.waiver_records()
-        waiver_found = any((bool(user_id) and normalize_person_id(waiver.get("A_Number")) == user_id) or (bool(user_email) and normalize_email(waiver.get("Email")) == user_email) for waiver in waivers)
+        waiver_found = any((normalize_person_id(waiver.get("A_Number")) in user_ids) or (bool(user_email) and normalize_email(waiver.get("Email")) == user_email) for waiver in waivers)
         timings["waiver_lookup"] = elapsed_ms(stage_started)
         if not waiver_found:
             timings["total"] = elapsed_ms(total_started)

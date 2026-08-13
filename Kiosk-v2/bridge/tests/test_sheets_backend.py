@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sheets_backend import GoogleSheetsProvider, SheetsCheckInBackend, normalize_person_id
+from sheets_backend import GoogleSheetsProvider, SheetsCheckInBackend, normalize_person_id, users_matching_identifier
 
 
 class FakeProvider:
@@ -38,7 +38,7 @@ class FakeProvider:
     def update_user_card(self, identifier, card_uid):
         self.calls["card_update"] += 1
         normalized = normalize_person_id(identifier)
-        matches = [row for row in self.users if normalize_person_id(row.get("Student ID")) == normalized]
+        matches = users_matching_identifier(self.users, normalized)
         if len(matches) != 1:
             raise ValueError("The account could not be identified uniquely.")
         digest = self.card_digest(card_uid)
@@ -58,11 +58,12 @@ def backend_for(provider):
     )
 
 
-def member(card="CARD123", person_id="person_1", student_id="A12345678", email="maker@example.com"):
+def member(card="CARD123", person_id="person_1", student_id="A12345678", email="maker@example.com", identifiers=None):
     return {
         "Person ID": person_id,
         "Name": "Test Maker",
         "Student ID": student_id,
+        "Identifiers": identifiers or [student_id],
         "Email Address": email,
         "Card Digest": FakeProvider.card_digest(card) if card else "",
     }
@@ -194,6 +195,31 @@ def test_identifier_checkin_uses_person_id_without_requiring_a_card():
     assert result.outcome == "success"
     assert provider.appended_rows[0][1] == "person_1"
     assert all("CARD123" not in str(value) for value in provider.appended_rows[0])
+
+
+def test_pid_and_tsn_aliases_resolve_to_the_same_person():
+    maker = member(card="", identifiers=["A12345678", "200010746"])
+    provider = FakeProvider(users=[maker], waivers=[signed_waiver()])
+    pid_result = backend_for(provider).check_in_identifier("A12345678")
+    tsn_result = backend_for(provider).check_in_identifier("200010746")
+    assert pid_result.outcome == "success"
+    assert tsn_result.outcome == "success"
+    assert {row[1] for row in provider.appended_rows} == {"person_1"}
+
+
+def test_tsn_alias_can_link_a_card_to_an_existing_pid_account():
+    maker = member(card="", identifiers=["A12345678", "200010746"])
+    staff = member(card="STAFFCARD", person_id="person_staff", student_id="A87654321")
+    provider = FakeProvider(users=[maker, staff])
+    result = backend_for(provider).link_card("200010746", "NEWCARD", "STAFFCARD", {"A87654321"})
+    assert result.outcome == "card_linked"
+    assert provider.calls["card_update"] == 1
+
+
+def test_waiver_on_pid_allows_checkin_through_tsn_alias():
+    maker = member(card="", identifiers=["A12345678", "200010746"])
+    provider = FakeProvider(users=[maker], waivers=[signed_waiver(student_id="A12345678")])
+    assert backend_for(provider).check_in_identifier("200010746").outcome == "success"
 
 
 def test_unknown_identifier_does_not_read_waivers_or_write():

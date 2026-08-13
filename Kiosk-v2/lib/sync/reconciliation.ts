@@ -49,6 +49,7 @@ export type ReconciliationIssue = {
   type:
     | "missing_user_identifier"
     | "duplicate_user_identifier"
+    | "identifier_shared_across_people"
     | "same_account_repeated_card"
     | "card_shared_across_accounts"
     | "duplicate_waiver_identifier"
@@ -154,6 +155,13 @@ function splitName(name: string): { firstName: string; lastName: string } {
   return { firstName: parts[0] ?? "", lastName: parts.slice(1).join(" ") };
 }
 
+function isIdentityCollision(group: LegacyUserRow[]): boolean {
+  if (group.length < 2) return false;
+  const names = new Set(group.map((row) => row.name.trim().toLowerCase()).filter(Boolean));
+  const emails = new Set(group.map((row) => normalizeEmail(row.email)).filter(Boolean));
+  return names.size > 1 && emails.size > 1;
+}
+
 function isCheckin(value: string): boolean {
   return value.trim().toLowerCase() === "user checkin";
 }
@@ -184,6 +192,16 @@ export function reconcileSourceSnapshot(snapshot: SourceSnapshot): Reconciliatio
 
   const duplicateUserGroups = [...userGroups.values()].filter((group) => group.length > 1);
   for (const group of duplicateUserGroups) {
+    if (isIdentityCollision(group)) {
+      issues.push({
+        type: "identifier_shared_across_people",
+        sourceSheet: USER_SHEET,
+        sourceRowNumbers: group.map((row) => row.rowNumber),
+        severity: "blocker",
+        recommendedHandling: "Quarantine every row until staff confirms identifier ownership; do not merge people by identifier alone.",
+      });
+      continue;
+    }
     issues.push({
       type: "duplicate_user_identifier",
       sourceSheet: USER_SHEET,
@@ -206,6 +224,7 @@ export function reconcileSourceSnapshot(snapshot: SourceSnapshot): Reconciliatio
 
   const accounts: CanonicalAccount[] = [];
   for (const [normalizedIdentifier, group] of userGroups) {
+    if (isIdentityCollision(group)) continue;
     const ordered = [...group].sort((a, b) => a.rowNumber - b.rowNumber);
     const canonicalUser = ordered.at(-1)!;
     const { firstName, lastName } = splitName(canonicalUser.name);
