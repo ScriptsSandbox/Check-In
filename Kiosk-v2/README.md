@@ -5,6 +5,8 @@ Interactive kiosk prototype and production technical spike for the Scripps Sandb
 - `app/` contains the 1920×1080 kiosk interface and interactive failure/exception flows.
 - `bridge/` contains the Raspberry Pi serial-to-browser reader bridge.
 - `docs/production-spec.md` captures the agreed workflows, permissions, data model, failure behavior, migration, and milestones.
+- `docs/recovery-manifest-v1.md` identifies the institutional recovery point.
+- `docs/disaster-recovery.md` is the fresh-Pi, ESP32, Apps Script, and data restore runbook.
 
 ## Prerequisites
 

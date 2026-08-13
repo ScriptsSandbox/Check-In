@@ -1,0 +1,14 @@
+[Unit]
+Description=Scripps Sandbox kiosk web interface
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/sandbox/Check-In-v2/Kiosk-v2
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/local/bin/npm start -- --host 127.0.0.1
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target

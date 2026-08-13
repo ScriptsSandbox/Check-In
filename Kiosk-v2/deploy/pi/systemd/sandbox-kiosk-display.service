@@ -1,0 +1,14 @@
+[Unit]
+Description=Scripps Sandbox full-screen kiosk
+After=sandbox-kiosk-web.service sandbox-kiosk-bridge.service
+Requires=sandbox-kiosk-web.service sandbox-kiosk-bridge.service
+
+[Service]
+Type=simple
+ExecStart=/home/sandbox/.local/bin/sandbox-kiosk-display
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=8
+
+[Install]
+WantedBy=default.target
