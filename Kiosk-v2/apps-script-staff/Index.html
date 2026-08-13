@@ -1,0 +1,182 @@
+<!doctype html>
+<html>
+<head>
+  <base target="_top">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Jost:wght@500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --navy:#102b4e; --orange:#f7931e; --cream:#f2eee3; --paper:#e7e4dc; --cyan:#5bc2cf; --red:#a43a31; --ink:#18313e; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--paper); color:var(--ink); font:16px/1.35 "Source Sans 3",Arial,sans-serif; }
+    button,input,textarea { font:inherit; }
+    button { cursor:pointer; }
+    h1,h2,h3,.brand,nav button,.name,.count,.btn { font-family:"Jost","Futura Now",Futura,sans-serif; }
+    header { display:flex; align-items:center; justify-content:space-between; min-height:72px; padding:14px clamp(16px,4vw,54px); background:var(--navy); color:var(--cream); }
+    .brand small { color:var(--orange); font-weight:700; letter-spacing:.15em; }
+    .brand b { display:block; font-size:20px; }
+    .header-tools { display:flex; align-items:center; gap:14px; }
+    .actor { text-align:right; font-size:13px; opacity:.9; }
+    .note-bell { position:relative; border:1px solid #8ea0b3; background:transparent; color:var(--cream); width:42px; height:42px; font-size:21px; }
+    .note-bell.has-notes { border-color:var(--orange); color:var(--orange); }
+    .note-count { position:absolute; top:-7px; right:-7px; min-width:20px; height:20px; padding:1px 5px; border-radius:10px; background:var(--orange); color:var(--navy); font-size:12px; font-weight:700; line-height:18px; }
+    nav { position:sticky; top:0; z-index:3; display:flex; gap:4px; padding:8px clamp(12px,4vw,54px); background:var(--navy); }
+    nav button { padding:10px 15px; border:0; background:transparent; color:#cbd4da; }
+    nav button.active { background:var(--cream); color:var(--navy); font-weight:700; }
+    main { padding:30px clamp(14px,4vw,54px) 80px; }
+    .view { display:none; }
+    .view.active { display:block; }
+    .page-head { display:flex; align-items:flex-end; justify-content:space-between; gap:20px; margin-bottom:22px; }
+    h1,h2,h3,p { margin-top:0; }
+    h1 { margin-bottom:4px; font-size:clamp(34px,6vw,64px); line-height:.95; color:var(--navy); }
+    .muted { color:#62717a; }
+    .actions { display:flex; flex-wrap:wrap; gap:9px; }
+    .btn { padding:10px 13px; border:1px solid var(--navy); background:transparent; color:var(--navy); }
+    .btn.primary { border-color:var(--orange); background:var(--orange); font-weight:700; }
+    .btn.small { padding:7px 9px; }
+    .layout { display:grid; grid-template-columns:minmax(0,1fr) 280px; gap:18px; }
+    .section-title { display:flex; align-items:center; justify-content:space-between; gap:14px; margin-bottom:10px; }
+    .count { color:var(--orange); font-size:34px; }
+    .live { color:#467966; font-size:13px; }
+    .loading-card { display:flex; align-items:center; gap:12px; min-height:78px; padding:18px; background:var(--cream); color:#62717a; }
+    .spinner { width:23px; height:23px; flex:0 0 auto; border:3px solid #c7d1d2; border-top-color:var(--orange); border-radius:50%; animation:spin .8s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .people { display:grid; gap:8px; }
+    .person { display:grid; grid-template-columns:minmax(120px,1fr) minmax(120px,.9fr) auto; align-items:center; gap:14px; padding:15px 16px; background:var(--cream); border-left:4px solid transparent; }
+    .person.flagged { border-left-color:var(--orange); }
+    .name { border:0; background:transparent; color:var(--navy); padding:0; font-size:22px; font-weight:700; text-align:left; }
+    .meta { color:#68747a; font-size:13px; }
+    .tags { display:flex; flex-wrap:wrap; gap:5px; }
+    .tag { padding:4px 7px; background:#d8eff1; color:#176071; font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; }
+    .tag.flag { background:#f6ded8; color:var(--red); }
+    .aside,.note,.compose,.search-panel,.training-panel { padding:18px; background:var(--cream); }
+    .aside { border-top:5px solid var(--orange); }
+    .attention { padding:13px 0; border-bottom:1px solid #ccd2cf; }
+    .attention:last-child { border:0; }
+    .attention b { display:block; color:var(--red); font-size:12px; letter-spacing:.06em; text-transform:uppercase; }
+    .attention h3 { margin:3px 0; }
+    .hidden { display:none!important; }
+    .empty { padding:34px 12px; color:#6d777c; text-align:center; }
+    .note { margin-bottom:9px; }
+    .note.resolved { opacity:.55; }
+    .note.resolved p { text-decoration:line-through; }
+    .note-foot { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    textarea,input { width:100%; padding:11px; border:1px solid #aeb8b6; background:white; color:var(--ink); }
+    textarea { min-height:82px; resize:vertical; }
+    .compose { margin-bottom:15px; }
+    .compose .actions { justify-content:flex-end; margin-top:9px; }
+    .manual-results { display:grid; gap:7px; margin-top:10px; }
+    .result { padding:12px; border:1px solid #b8bfbc; background:white; text-align:left; }
+    .training-panel { margin-top:15px; }
+    .training-row { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:12px 0; border-top:1px solid #cbd1ce; }
+    .toast { position:fixed; right:18px; bottom:18px; z-index:10; max-width:360px; padding:13px 17px; background:var(--navy); color:var(--cream); box-shadow:6px 6px 0 var(--orange); }
+    dialog { width:min(460px,calc(100% - 28px)); padding:24px; border:0; background:var(--cream); color:var(--ink); }
+    dialog::backdrop { background:rgba(8,25,38,.65); }
+    .dialog-head { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; }
+    .dialog-head button { border:0; background:transparent; font-size:24px; }
+    .user-card { width:min(620px,calc(100% - 28px)); }
+    .identity-line { display:flex; flex-wrap:wrap; gap:6px 14px; margin:-4px 0 18px; }
+    .attention-box { margin:0 0 18px; padding:13px; border-left:5px solid var(--orange); background:#f6ded8; }
+    .attention-box b { display:block; color:var(--red); font-size:12px; letter-spacing:.06em; text-transform:uppercase; }
+    .card-section { padding-top:16px; border-top:1px solid #c7ceca; }
+    .approval { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:14px; padding:14px 0; border-top:1px solid #c7ceca; }
+    .approval:first-of-type { border-top:0; }
+    .sync-state { display:block; margin-top:3px; color:#68747a; font-size:13px; }
+    .sync-pending { color:#8a5b13; font-weight:700; }
+    .link-panel { margin-top:12px; padding:14px; background:#fff; border:1px solid #c7ceca; }
+    .candidate { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:center; padding:12px 0; border-top:1px solid #d7dcda; }
+    .candidate:first-of-type { border-top:0; }
+    .candidate strong { display:block; }
+    @media (max-width:720px) {
+      header { min-height:62px; }
+      nav { position:fixed; top:auto; bottom:0; left:0; right:0; display:grid; grid-template-columns:repeat(3,1fr); padding:7px; }
+      nav button { padding:10px 6px; }
+      main { padding-top:22px; }
+      .page-head { align-items:flex-start; flex-direction:column; }
+      .actions,.actions .btn { width:100%; }
+      .layout { display:block; }
+      .aside { margin-top:20px; }
+      .person { grid-template-columns:1fr auto; }
+      .person .tags { grid-column:1/-1; grid-row:2; }
+      .approval { grid-template-columns:1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header><div class="brand"><small>SCRIPPS SANDBOX</small><b>Staff desk</b></div><div class="header-tools"><button id="noteBell" class="note-bell" aria-label="Open staff notes" title="Open staff notes">●<span id="noteCount" class="note-count hidden">0</span></button><div class="actor"><span id="actorName"></span><br><span id="actorRole"></span></div></div></header>
+  <nav><button class="active" data-view="here">Here</button><button data-view="training">Training</button><button data-view="notes">Notes</button></nav>
+  <main>
+    <section id="here" class="view active">
+      <div class="page-head"><div><h1>Here today</h1><p class="muted"><span id="headcount">—</span> people currently in the Makerspace</p></div><div class="actions"><button id="toggleLeft" class="btn">Left today</button><button id="openManual" class="btn primary">Manual check-in</button></div></div>
+      <div class="layout"><div><div class="section-title"><h2><span id="bigCount" class="count">—</span> Currently here</h2><span id="refreshStatus" class="live">Checking for updates…</span></div><div id="present" class="people"><div class="loading-card"><span class="spinner"></span><span><strong>Updating the staff desk</strong><br>Checking today’s latest activity…</span></div></div><div id="leftWrap" class="hidden"><h2>Left today</h2><div id="left" class="people"></div></div></div><aside class="aside"><h2>Needs attention</h2><div id="attention"><div class="loading-card"><span class="spinner"></span><span>Checking staff notes and flags…</span></div></div></aside></div>
+    </section>
+    <section id="training" class="view">
+      <div class="page-head"><div><h1>Laser training</h1><p class="muted">Search by name, role, or program. Results show limited identifiers only.</p></div></div>
+      <div class="search-panel"><label>Name, role, or program<input id="trainingSearch" autocomplete="off" placeholder="Start typing…"></label><div id="trainingResults" class="manual-results"></div></div>
+      <div class="training-panel"><h2>How approvals work</h2><p class="muted">Open a person card to verify their FabMan member and record training. Once linked, laser approvals are copied to FabMan automatically. A physical key still has to be assigned in FabMan.</p></div>
+    </section>
+    <section id="notes" class="view">
+      <div class="page-head"><div><h1>Staff notes</h1><p class="muted">Shift handoffs and operational reminders. Avoid sensitive visitor details.</p></div></div>
+      <div class="compose"><label>Add a note<textarea id="noteText" maxlength="500" placeholder="What should the next staff member know?"></textarea></label><div class="actions"><button id="postNote" class="btn primary">Post note</button></div></div>
+      <div id="notesList"></div><button id="toggleArchive" class="btn">Show resolved notes</button>
+    </section>
+  </main>
+  <dialog id="manualDialog"><div class="dialog-head"><div><small>STAFF ACTION</small><h2>Manual check-in</h2></div><button id="closeManual" aria-label="Close">×</button></div><p class="muted">Search by name, role, or program. Results show a last initial and partial ID only.</p><input id="manualSearch" autocomplete="off" placeholder="Name, role, or program"><div id="manualResults" class="manual-results"></div></dialog>
+  <dialog id="personDialog" class="user-card"><div class="dialog-head"><div><small>USER CARD</small><h2 id="personCardName">Member</h2></div><button id="closePerson" aria-label="Close">×</button></div><div id="personCardBody"><div class="loading-card"><span class="spinner"></span><span><strong>Loading user card</strong><br>Checking profile, attention items, and training…</span></div></div></dialog>
+  <dialog id="confirmDialog"><div class="dialog-head"><h2>Confirm laser training</h2><button id="closeConfirm" aria-label="Close">×</button></div><p id="confirmCopy"></p><p class="muted">This records the approval in the Sandbox database. If the FabMan member is linked, the Epilog training is added there too. Key assignment remains separate.</p><div class="actions"><button id="approveLaser" class="btn primary">Approve training</button></div></dialog>
+  <dialog id="fabmanDialog"><div class="dialog-head"><div><small>VERIFY MEMBER</small><h2>Link FabMan member</h2></div><button id="closeFabman" aria-label="Close">×</button></div><p class="muted">Members already enrolled at Scripps can be linked directly. For another UCSD makerspace member, “Add to Scripps Sandbox” adds only the Scripps Sandbox User package—no merging, profile edits, key changes, or changes to other packages.</p><div id="fabmanCandidates"><div class="loading-card"><span class="spinner"></span><span>Searching FabMan…</span></div></div></dialog>
+  <dialog id="packageDialog"><div class="dialog-head"><div><small>ADMINISTRATIVE ACTION</small><h2>Add to Scripps Sandbox?</h2></div><button id="closePackage" aria-label="Close">×</button></div><p id="packageCopy"></p><div class="attention-box"><b>This changes FabMan</b><div>Adds the <strong>Scripps Sandbox User</strong> package only. Existing memberships, packages, training, profile details, home space, and key remain unchanged.</div></div><p class="muted">After FabMan confirms the package, the app will link the member and copy any existing Scripps laser approval.</p><div class="actions"><button id="confirmPackage" class="btn primary">Add package and link</button></div></dialog>
+  <div id="toast" class="toast hidden" role="status"></div>
+  <script>const STAFF_BOOTSTRAP = <?!= bootstrap ?>;</script>
+  <script>
+    const state={data:null,showLeft:false,showArchive:false,personCard:null,searchCache:{},searchTimers:{},personCards:{}};
+    const el=id=>document.getElementById(id);
+    const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+    const time=v=>new Date(v).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"});
+    const role=v=>v.charAt(0).toUpperCase()+v.slice(1);
+    function call(name,...args){return new Promise((resolve,reject)=>google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[name](...args));}
+    function toast(message){el("toast").textContent=message;el("toast").classList.remove("hidden");clearTimeout(toast.timer);toast.timer=setTimeout(()=>el("toast").classList.add("hidden"),2600);}
+    function fail(error){toast(error&&error.message?error.message:"The staff app request failed.");}
+    function tags(person){return [...person.tools.map(t=>`<span class="tag">${esc(t)}</span>`),...person.flags.map(f=>`<span class="tag flag">${esc(f)}</span>`)].join("")||'<span class="tag">No tool approvals</span>';}
+    function personRow(person,left){const method=person.checkInMethod?` · ${esc(person.checkInMethod)}`:"";return `<article class="person ${person.flags.length?'flagged':''}"><div><button class="name" data-person="${esc(person.personId)}">${esc(person.name)}</button><div class="meta">${esc(person.role)} · Checked in ${time(person.checkedInAt)}${method}</div></div><div class="tags">${tags(person)}</div><button class="btn small" data-${left?'reopen':'left'}="${esc(person.personId)}">${left?'Undo':'Mark left'}</button></article>`;}
+    function render(){const d=state.data; if(!d)return;el("headcount").textContent=d.present.length;el("bigCount").textContent=d.present.length;el("present").innerHTML=d.present.length?d.present.map(p=>personRow(p,false)).join(""):'<div class="empty">No one is currently marked inside.</div>';el("left").innerHTML=d.left.length?d.left.map(p=>personRow(p,true)).join(""):'<div class="empty">No departures recorded today.</div>';el("leftWrap").classList.toggle("hidden",!state.showLeft);const flags=d.present.filter(p=>p.flags.length);el("attention").innerHTML=flags.length?flags.map(p=>`<div class="attention"><b>${esc(p.flags.join(" · "))}</b><h3><button class="name" data-person="${esc(p.personId)}">${esc(p.name)}</button></h3><span class="meta">${esc(p.role)}</span></div>`).join(""):'<div class="empty">Nothing needs attention.</div>';renderNotes();el("refreshStatus").textContent=`Updated ${time(d.refreshedAt)}`;}
+    function renderNotes(){if(!state.data)return;const openNotes=state.data.notes.filter(n=>String(n.status).toLowerCase()!=="resolved");const notes=state.data.notes.filter(n=>state.showArchive||String(n.status).toLowerCase()!=="resolved");el("notesList").innerHTML=notes.length?notes.map(n=>`<article class="note ${String(n.status).toLowerCase()==='resolved'?'resolved':''}"><p>${esc(n.note)}</p><div class="note-foot"><span class="meta">${esc(n.createdBy)} · ${time(n.createdAt)}</span><button class="btn small" data-note="${esc(n.id)}" data-reopen-note="${String(n.status).toLowerCase()==='resolved'}">${String(n.status).toLowerCase()==='resolved'?'Reopen':'Resolve'}</button></div></article>`).join(""):'<div class="empty">No open staff notes.</div>';el("toggleArchive").textContent=state.showArchive?'Hide resolved notes':'Show resolved notes';el("noteBell").classList.toggle("has-notes",openNotes.length>0);el("noteCount").classList.toggle("hidden",openNotes.length===0);el("noteCount").textContent=openNotes.length;}
+    async function refresh(silent){try{if(!silent)el("refreshStatus").textContent="Checking for updates…";state.data=await call("staffDashboard");render();}catch(e){fail(e);el("refreshStatus").textContent="Couldn’t update — retrying automatically";}}
+    function showSearchResults(target,results){target.innerHTML=results.length?results.map(p=>`<button class="result" data-result-person="${esc(p.personId)}" data-result-name="${esc(p.name)}" data-result-role="${esc(p.role)}"><b>${esc(p.name)}</b><div class="meta">${esc([p.role,p.affiliation,p.identifierHint].filter(Boolean).join(" · "))}</div></button>`).join(""):'<div class="empty">No matches.</div>';}
+    async function search(input,target){const q=input.value.trim();if(q.length<2){target.innerHTML="";return;}const key=q.toLowerCase();if(state.searchCache[key]){showSearchResults(target,state.searchCache[key]);return;}if(state.data&&state.data.peopleIndex){const results=state.data.peopleIndex.filter(p=>p.searchText.includes(key)).slice(0,8);state.searchCache[key]=results;showSearchResults(target,results);return;}try{const results=await call("staffSearchPeople",q);if(input.value.trim().toLowerCase()!==key)return;state.searchCache[key]=results;showSearchResults(target,results);}catch(e){fail(e);}}
+    function queueSearch(input,target){const key=input.id;clearTimeout(state.searchTimers[key]);if(input.value.trim().length<2){target.innerHTML="";return;}state.searchTimers[key]=setTimeout(()=>search(input,target),260);}
+    function renderPersonCard(card){
+      el("personCardName").textContent=card.name;
+      const laser=card.tools.find(tool=>tool.key==="epilog_laser_cutter");
+      const attention=card.attention.length?`<div class="attention-box"><b>Needs attention</b><div>${card.attention.map(esc).join(" · ")}</div></div>`:'<div class="attention-box" style="border-color:#5f8d78;background:#e0eee7"><b style="color:#467966">No profile alerts</b><div>Nothing currently needs staff follow-up.</div></div>';
+      const existing=card.tools.filter(tool=>tool.key!=="epilog_laser_cutter").map(tool=>`<div class="approval"><div><b>${esc(tool.label)}</b><span class="sync-state">${esc(tool.status)}${tool.approvedAt?` · ${new Date(tool.approvedAt).toLocaleDateString()}`:""}</span><span class="sync-state sync-pending">FabMan: ${esc(tool.fabmanStatus)}</span></div></div>`).join("");
+      const laserRow=laser?`<div class="approval"><div><b>Laser cutter</b><span class="sync-state">Training recorded${laser.approvedAt?` · ${new Date(laser.approvedAt).toLocaleDateString()}`:""}</span><span class="sync-state ${card.fabmanConnected&&!card.fabman.checking?'':'sync-pending'}">FabMan: ${esc(laser.fabmanStatus)}</span></div><button class="btn small" disabled>Approved</button></div>`:`<div class="approval"><div><b>Laser cutter</b><span class="sync-state">No training approval recorded</span><span class="sync-state sync-pending">FabMan: ${esc(card.fabman&&card.fabman.label||'No verified member link')}</span></div>${card.canApproveTraining?'<button class="btn primary" data-approve-card>Approve training</button>':'<span class="meta">Trainer access required</span>'}</div>`;
+      const linkAction=card.fabmanConnected?'':`<div class="link-panel"><b>FabMan member not linked</b><p class="muted">Find the matching FabMan member to synchronize training and show live key status.</p><button class="btn primary" data-find-fabman>Find FabMan member</button></div>`;
+      el("personCardBody").innerHTML=`<div class="identity-line"><span>${esc(card.role)}</span>${card.affiliation?`<span>${esc(card.affiliation)}</span>`:""}${card.identifierHint?`<span>${esc(card.identifierHint)}</span>`:""}</div>${attention}<section class="card-section"><h3>Tool training & access</h3><p class="muted">Training is recorded in the Sandbox database and synchronized after the FabMan member is verified. Physical key assignment is separate.</p>${linkAction}${laserRow}${existing}</section>`;
+    }
+    function cardFromIndex(personId){if(!state.data||!state.data.peopleIndex)return null;const p=state.data.peopleIndex.find(item=>item.personId===personId);if(!p)return null;return {ok:true,personId:p.personId,name:p.name,role:p.role,affiliation:p.affiliation,identifierHint:p.identifierHint,attention:p.attention||[],tools:(p.toolLabels||[]).map(label=>({key:label.toLowerCase()==="laser cutter"?"epilog_laser_cutter":label.toLowerCase().replace(/\s+/g,"_"),label,status:"Training recorded",approvedAt:"",fabmanStatus:p.fabmanMemberId?"Checking live status…":"No verified member link"})),canApproveTraining:["trainer","administrator"].includes(String(STAFF_BOOTSTRAP.role).toLowerCase()),fabmanConnected:Boolean(p.fabmanMemberId),fabman:p.fabmanMemberId?{connected:true,checking:true,memberId:p.fabmanMemberId,label:"Checking live status…"}:{connected:false,checking:false,label:"No verified member link"}};}
+    async function findFabmanMember(){
+      el("fabmanCandidates").innerHTML='<div class="loading-card"><span class="spinner"></span><span><strong>Searching FabMan</strong><br>Comparing email and name…</span></div>';
+      el("fabmanDialog").showModal();
+      try{const result=await call("staffFabmanCandidates",state.personCard.personId);el("fabmanCandidates").innerHTML=result.candidates.length?result.candidates.map(c=>`<div class="candidate"><div><strong>${esc(c.name)} · FabMan ${esc(c.memberNumberHint||('member '+c.memberId))}</strong><span class="meta">${esc([c.emailHint,c.match,c.state].filter(Boolean).join(" · "))}</span><span class="sync-state">${c.packageActive?'Scripps Sandbox member':'UCSD FabMan member — not enrolled at Scripps'} · ${c.trainingActive?'Laser training active':'No Scripps laser training'} · ${c.keyConnected?'Key connected':'No key'}</span></div>${c.packageActive?`<button class="btn primary" data-link-fabman="${esc(c.memberId)}">Link Scripps member</button>`:c.canAddSandboxPackage?`<button class="btn" data-add-package="${esc(c.memberId)}" data-candidate-name="${esc(c.name)}" data-candidate-id="${esc(c.memberNumberHint||c.memberId)}">Add to Scripps Sandbox</button>`:'<span class="meta">Administrator or Card Linking permission required</span>'}</div>`).join(""):'<div class="empty">No close FabMan match found. Check that the name or UCSD email matches in both systems.</div>';}catch(e){fail(e);el("fabmanDialog").close();}
+    }
+    async function openPersonCard(personId){
+      el("personCardName").textContent="Member";
+      el("personCardBody").innerHTML='<div class="loading-card"><span class="spinner"></span><span><strong>Loading user card</strong><br>Checking profile, attention items, and training…</span></div>';
+      if(!el("personDialog").open)el("personDialog").showModal();
+      try{state.personCard=state.personCards[personId]||cardFromIndex(personId);if(state.personCard){state.personCards[personId]=state.personCard;renderPersonCard(state.personCard);}else{state.personCard=await call("staffPersonCard",personId);state.personCards[personId]=state.personCard;renderPersonCard(state.personCard);}if(state.personCard.fabman&&state.personCard.fabman.checking){const status=await call("staffFabmanStatus",personId);if(!state.personCard||state.personCard.personId!==personId)return;state.personCard.fabman=status;state.personCard.fabmanConnected=status.connected;state.personCard.tools.forEach(tool=>{if(tool.key==="epilog_laser_cutter")tool.fabmanStatus=status.label;});state.personCards[personId]=state.personCard;renderPersonCard(state.personCard);}}catch(e){fail(e);if(!state.personCard)el("personDialog").close();}
+    }
+    function movePresence(personId,toLeft){if(!state.data)return;const source=toLeft?state.data.present:state.data.left;const target=toLeft?state.data.left:state.data.present;const index=source.findIndex(p=>p.personId===personId);if(index<0)return;const moved=source.splice(index,1)[0];target.unshift(moved);render();}
+    document.querySelectorAll("nav button").forEach(button=>button.onclick=()=>{document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("active",b===button));document.querySelectorAll(".view").forEach(v=>v.classList.toggle("active",v.id===button.dataset.view));});
+    el("noteBell").onclick=()=>document.querySelector('nav button[data-view="notes"]').click();
+    el("toggleLeft").onclick=()=>{state.showLeft=!state.showLeft;el("toggleLeft").textContent=state.showLeft?"Hide left":"Left today";render();};
+    el("openManual").onclick=()=>{el("manualDialog").showModal();el("manualSearch").focus();};el("closeManual").onclick=()=>el("manualDialog").close();
+    el("manualSearch").oninput=()=>queueSearch(el("manualSearch"),el("manualResults"));el("trainingSearch").oninput=()=>queueSearch(el("trainingSearch"),el("trainingResults"));
+    document.body.onclick=async event=>{const left=event.target.closest("[data-left]");const reopen=event.target.closest("[data-reopen]");const person=event.target.closest("[data-person]");const result=event.target.closest("[data-result-person]");const approve=event.target.closest("[data-approve-card]");const findFabman=event.target.closest("[data-find-fabman]");const linkFabman=event.target.closest("[data-link-fabman]");const addPackage=event.target.closest("[data-add-package]");const note=event.target.closest("[data-note]");try{if(left){const r=await call("staffMarkLeft",left.dataset.left);movePresence(left.dataset.left,true);toast(`${r.name} marked as left`);setTimeout(()=>refresh(true),800);return;}if(reopen){const r=await call("staffReopen",reopen.dataset.reopen);movePresence(reopen.dataset.reopen,false);toast(`${r.name} returned to Currently here`);setTimeout(()=>refresh(true),800);return;}if(person){await openPersonCard(person.dataset.person);return;}if(result&&result.closest("#manualResults")){const r=await call("staffManualCheckIn",result.dataset.resultPerson);el("manualDialog").close();toast(`${r.name} checked in`);setTimeout(()=>refresh(true),300);return;}if(result&&result.closest("#trainingResults")){await openPersonCard(result.dataset.resultPerson);return;}if(approve&&state.personCard){el("confirmCopy").textContent=`Confirm that ${state.personCard.name} completed laser-cutter training?`;el("confirmDialog").showModal();return;}if(findFabman&&state.personCard){await findFabmanMember();return;}if(linkFabman&&state.personCard){linkFabman.disabled=true;linkFabman.textContent="Linking…";const personId=state.personCard.personId;const r=await call("staffConfirmFabmanLink",personId,linkFabman.dataset.linkFabman);delete state.personCards[personId];el("fabmanDialog").close();toast(r.sync&&r.sync.label?r.sync.label:"FabMan member linked");await openPersonCard(personId);return;}if(addPackage&&state.personCard){state.pendingFabmanMember={id:addPackage.dataset.addPackage,name:addPackage.dataset.candidateName,hint:addPackage.dataset.candidateId};el("packageCopy").textContent=`Add ${state.pendingFabmanMember.name} (${state.pendingFabmanMember.hint}) to Scripps Sandbox and link this record?`;el("packageDialog").showModal();return;}if(note){await call("staffResolveNote",note.dataset.note,note.dataset.reopenNote==="true");toast(note.dataset.reopenNote==="true"?"Note reopened":"Note archived");refresh(true);}}catch(e){fail(e);}};
+    el("closePerson").onclick=()=>el("personDialog").close();
+    el("closeConfirm").onclick=()=>el("confirmDialog").close();el("closeFabman").onclick=()=>el("fabmanDialog").close();el("closePackage").onclick=()=>el("packageDialog").close();el("confirmPackage").onclick=async()=>{try{if(!state.pendingFabmanMember)return;const personId=state.personCard.personId;el("confirmPackage").disabled=true;el("confirmPackage").textContent="Adding…";const r=await call("staffAddSandboxPackageAndLink",personId,state.pendingFabmanMember.id);delete state.personCards[personId];el("packageDialog").close();el("fabmanDialog").close();toast(r.sync&&r.sync.label?r.sync.label:"Added to Scripps Sandbox");await openPersonCard(personId);}catch(e){fail(e);}finally{el("confirmPackage").disabled=false;el("confirmPackage").textContent="Add package and link";}};el("approveLaser").onclick=async()=>{try{const personId=state.personCard.personId;const r=await call("staffApproveLaser",personId);delete state.personCards[personId];el("confirmDialog").close();toast(`${r.name} approved · ${r.fabmanStatus}`);await openPersonCard(personId);}catch(e){fail(e);}};
+    el("postNote").onclick=async()=>{try{await call("staffAddNote",el("noteText").value);el("noteText").value="";toast("Staff note posted");await refresh(true);}catch(e){fail(e);}};el("toggleArchive").onclick=()=>{state.showArchive=!state.showArchive;renderNotes();};
+    el("actorName").textContent=STAFF_BOOTSTRAP.name;el("actorRole").textContent=role(STAFF_BOOTSTRAP.role);refresh(false);setInterval(()=>refresh(true),12000);
+  </script>
+</body>
+</html>
