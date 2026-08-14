@@ -27,6 +27,7 @@ const REGISTRATION_ALLOWED_ID_TYPES_ = [
 ];
 
 const REGISTRATION_ALLOWED_AFFILIATIONS_ = [
+  // SIO organizational units (faculty, staff, and postdocs)
   "IOD-Biology",
   "CMBB-Biology",
   "MBRD-Biology",
@@ -41,8 +42,69 @@ const REGISTRATION_ALLOWED_AFFILIATIONS_ = [
   "Sea Grant",
   "SIO Academic Department",
   "SOMTS",
-  "UCSD (Non-SIO Dept)",
+
+  // Scripps graduate curricular groups and MAS programs
+  "Applied Ocean Science",
+  "Climate Sciences",
+  "Physical Oceanography",
+  "Geophysics",
+  "Geosciences",
+  "Marine Chemistry and Geochemistry",
+  "Biological Oceanography",
+  "Marine Biology",
+  "Oceanic and Atmospheric Sciences",
+  "Marine Biodiversity & Conservation",
+  "Climate Science & Policy",
+
+  // UC San Diego majors, departments, and programs
+  "Mechanical & Aerospace Engineering",
+  "Mechanical Engineering",
+  "Aerospace Engineering",
+  "Electrical & Computer Engineering",
+  "Electrical Engineering",
+  "Computer Engineering",
+  "Computer Science & Engineering",
+  "Computer Science",
+  "Bioengineering",
+  "Chemical & NanoEngineering",
+  "Chemical Engineering",
+  "NanoEngineering",
+  "Structural Engineering",
+  "Biological Sciences",
+  "General Biology",
+  "Ecology, Behavior and Evolution",
+  "Molecular and Cell Biology",
+  "Microbiology",
+  "Human Biology",
+  "Neurobiology",
+  "Environmental Systems",
+  "Chemistry & Biochemistry",
+  "Chemistry or Biochemistry",
+  "Physics",
+  "Mathematics",
+  "Data Science",
+  "Cognitive Science",
+  "Public Health",
+  "School of Medicine or Health Sciences",
+  "Rady School of Management",
+  "School of Global Policy & Strategy",
+  "Social Sciences",
+  "Arts & Humanities",
+  "Business or Economics",
+  "Central administration or campus services",
+  "Other UCSD department or program",
+  "Undeclared",
+
+  // Visitors and external/community members
+  "Scripps Oceanography",
+  "UC San Diego – other department or unit",
   "External university or institution",
+  "San Diego State University",
+  "University of San Diego",
+  "CSU San Marcos",
+  "Government laboratory or agency",
+  "Nonprofit organization",
+  "Industry or company",
   "Community member – no institutional affiliation",
   "Other",
 ];
@@ -81,9 +143,16 @@ function normalizeIdentifier_(value, identifierType) {
 function canonicalAffiliation_(value, otherValue) {
   const affiliation = cleanText_(value, 120);
   if (REGISTRATION_ALLOWED_AFFILIATIONS_.indexOf(affiliation) === -1) return "";
-  if (affiliation !== "Other") return affiliation;
+  const needsDetail = [
+    "External university or institution",
+    "Government laboratory or agency",
+    "Nonprofit organization",
+    "Industry or company",
+    "Other",
+  ].indexOf(affiliation) !== -1;
+  if (!needsDetail) return affiliation;
   const other = cleanText_(otherValue, 120);
-  return other ? "Other – " + other : "";
+  return other ? affiliation + " – " + other : "";
 }
 
 function canonicalRole_(value, otherValue) {
@@ -129,7 +198,7 @@ function validateRegistration_(payload, nowMs) {
   }
   if (!firstName || !lastName) return { ok: false, message: "Enter your first and last name." };
   if (!role) return { ok: false, message: "Choose your role and specify it if you selected Other." };
-  if (!affiliation) return { ok: false, message: "Choose your SIO department or division and specify it if you selected Other." };
+  if (!affiliation) return { ok: false, message: "Choose the requested major, program, department, or organization and specify it if you selected Other." };
   if (isStudentRole_(selectedRole) && !anticipatedGraduation) {
     return { ok: false, message: "Enter your anticipated graduation month and year." };
   }

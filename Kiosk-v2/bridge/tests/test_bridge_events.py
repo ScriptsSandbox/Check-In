@@ -17,6 +17,8 @@ class BlockingBackend:
             display_name="Test member",
             message="Check-in recorded.",
             visit_count=3,
+            person_id="person_1",
+            profile={"role": "", "affiliation": "", "anticipatedGraduation": ""},
         )
 
 
@@ -65,8 +67,20 @@ def test_detection_is_broadcast_before_backend_finishes() -> None:
         assert completed["sequence"] == detected["sequence"]
         assert isinstance(completed["processing_ms"], int)
         assert completed["backend_timings_ms"] == {}
+        assert completed["person_id"] == "person_1"
+        assert completed["profile"]["role"] == ""
+        assert state.profile_session_is_active()
+        assert state.profile_person_id == "person_1"
 
     asyncio.run(scenario())
+
+
+def test_non_successful_read_clears_profile_session() -> None:
+    state = BridgeState()
+    state.start_profile_session(CheckInResult(outcome="success", person_id="person_1"))
+    assert state.profile_session_is_active()
+    state.start_profile_session(CheckInResult(outcome="waiver_required"))
+    assert not state.profile_session_is_active()
 
 
 def test_backend_failure_is_display_safe_and_allows_immediate_retry() -> None:

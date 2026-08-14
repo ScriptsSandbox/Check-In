@@ -29,6 +29,7 @@ SIMULATION_ENABLED = os.getenv("SCANNER_SIMULATE", "false").lower() == "true"
 BACKEND_MODE = os.getenv("SCANNER_CHECKIN_BACKEND", "demo").strip().lower()
 DUPLICATE_WINDOW_SECONDS = float(os.getenv("SCANNER_DUPLICATE_SECONDS", "15"))
 CARD_LINK_SESSION_SECONDS = float(os.getenv("CARD_LINK_SESSION_SECONDS", "300"))
+PROFILE_SESSION_SECONDS = float(os.getenv("PROFILE_SESSION_SECONDS", "300"))
 DESIGNATED_CARD_LINK_STAFF_IDS = {
     value.strip()
     for value in os.getenv("CARD_LINK_STAFF_IDS", "").split(",")
@@ -64,6 +65,8 @@ class BridgeState:
         self.pending_card_uid: str | None = None
         self.pending_card_expires_at = 0.0
         self.card_link_identifier: str | None = None
+        self.profile_person_id: str | None = None
+        self.profile_expires_at = 0.0
         self.designated_card_link_staff_ids = (
             DESIGNATED_CARD_LINK_STAFF_IDS
             if designated_card_link_staff_ids is None
@@ -80,6 +83,23 @@ class BridgeState:
     def card_link_is_active(self) -> bool:
         if not self.pending_card_uid or time.monotonic() >= self.pending_card_expires_at:
             self.clear_card_link()
+            return False
+        return True
+
+    def start_profile_session(self, result: CheckInResult) -> None:
+        if result.outcome == "success" and result.person_id:
+            self.profile_person_id = result.person_id
+            self.profile_expires_at = time.monotonic() + PROFILE_SESSION_SECONDS
+        else:
+            self.clear_profile_session()
+
+    def clear_profile_session(self) -> None:
+        self.profile_person_id = None
+        self.profile_expires_at = 0.0
+
+    def profile_session_is_active(self) -> bool:
+        if not self.profile_person_id or time.monotonic() >= self.profile_expires_at:
+            self.clear_profile_session()
             return False
         return True
 
@@ -185,11 +205,14 @@ class BridgeState:
             "display_name": result.display_name,
             "message": result.message,
             "visit_count": result.visit_count,
+            "person_id": result.person_id,
+            "profile": result.profile,
             "read_at": read_at,
             "sequence": sequence,
             "processing_ms": processing_ms,
             "backend_timings_ms": result.timings_ms,
         }
+        self.start_profile_session(result)
         self.broadcast(event)
         LOGGER.info(
             "Card read processed with outcome %s in %sms; backend stages=%s",
@@ -330,6 +353,11 @@ class CardLinkStart(BaseModel):
     identifier: str
 
 
+class ProfileAnswer(BaseModel):
+    field: str
+    value: str
+
+
 @app.post("/card-link/start")
 async def start_card_link(request: CardLinkStart) -> dict[str, Any]:
     identifier = request.identifier.strip()
@@ -410,16 +438,52 @@ async def check_in_with_identifier(read: IdentifierCheckIn) -> dict[str, Any]:
         processing_ms,
         result.timings_ms,
     )
+    STATE.start_profile_session(result)
     return {
         "type": "card_read",
         "outcome": result.outcome,
         "display_name": result.display_name,
         "message": result.message,
         "visit_count": result.visit_count,
+        "person_id": result.person_id,
+        "profile": result.profile,
         "read_at": read_at,
         "sequence": sequence,
         "processing_ms": processing_ms,
         "backend_timings_ms": result.timings_ms,
+    }
+
+
+@app.post("/profile")
+async def update_profile(answer: ProfileAnswer) -> dict[str, Any]:
+    field = answer.field.strip()
+    value = answer.value.strip()
+    if field not in {"role", "affiliation", "anticipatedGraduation"}:
+        raise HTTPException(status_code=422, detail="That profile field cannot be updated")
+    if not value or len(value) > 120:
+        raise HTTPException(status_code=422, detail="Enter a valid answer")
+    if STATE.backend is None:
+        raise HTTPException(status_code=409, detail="Profile updates are unavailable in demo mode")
+    if not STATE.profile_session_is_active() or not STATE.profile_person_id:
+        raise HTTPException(status_code=409, detail="This profile session expired. Check in again.")
+    try:
+        result = await asyncio.to_thread(
+            STATE.backend.update_profile,
+            STATE.profile_person_id,
+            field,
+            value,
+        )
+    except Exception:
+        LOGGER.exception("Profile update failed")
+        raise HTTPException(status_code=503, detail="That answer could not be saved")
+    if result.outcome != "profile_updated":
+        raise HTTPException(status_code=409, detail=result.message or "That answer could not be saved")
+    STATE.profile_expires_at = time.monotonic() + PROFILE_SESSION_SECONDS
+    return {
+        "ok": True,
+        "outcome": result.outcome,
+        "message": result.message,
+        "profile": result.profile,
     }
 
 

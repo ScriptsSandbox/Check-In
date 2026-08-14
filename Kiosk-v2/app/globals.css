@@ -460,6 +460,81 @@ input:focus { border-color: var(--orange); }
 .choice-grid button { display: flex; justify-content: space-between; gap: 14px; min-height: 70px; padding: 18px 20px; border: 0; background: var(--gray); cursor: pointer; text-align: left; font-size: clamp(16px, 1.15vw, 22px); }
 .choice-grid button:hover, .choice-grid button.selected { background: var(--cream); color: var(--navy); }
 
+.profile-shell { width: min(100%, 720px); }
+.profile-card {
+  position: relative;
+  width: 100%;
+  padding: clamp(34px, 4.2vw, 58px);
+  border: 3px solid var(--navy);
+  background: var(--cream);
+  color: var(--navy);
+  box-shadow: 12px 12px 0 var(--orange);
+  animation: profile-card-in .42s cubic-bezier(.2,.82,.24,1) both;
+}
+@keyframes profile-card-in {
+  from { opacity: 0; transform: translateY(20px) scale(.975); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.profile-card-tab {
+  position: absolute;
+  top: -19px;
+  left: 28px;
+  padding: 8px 13px;
+  background: var(--navy);
+  color: var(--cream);
+  font: 800 11px/1 "Jost";
+  letter-spacing: .15em;
+}
+.profile-card .eyebrow { margin-bottom: .9em; }
+.profile-card h1 { font-size: clamp(42px, 4.35vw, 76px); line-height: .96; }
+.profile-card .lede { max-width: 590px; color: #35485b; font-size: clamp(18px, 1.3vw, 25px); }
+.profile-card .back { margin-bottom: clamp(20px, 2.5vh, 34px); color: var(--navy); }
+.profile-card .solid-action { display: inline-flex; align-items: center; gap: 16px; margin-top: 30px; }
+.profile-card .quiet-action { margin: 20px 0 0 14px; color: var(--navy); }
+.profile-pulse { display: flex; height: 28px; align-items: flex-end; gap: 5px; margin-bottom: 24px; }
+.profile-pulse i { width: 8px; background: var(--cyan); animation: profile-pulse 1s ease-in-out infinite alternate; }
+.profile-pulse i:nth-child(1) { height: 10px; }
+.profile-pulse i:nth-child(2) { height: 19px; animation-delay: .12s; }
+.profile-pulse i:nth-child(3) { height: 28px; background: var(--orange); animation-delay: .24s; }
+@keyframes profile-pulse { to { opacity: .45; transform: scaleY(.72); transform-origin: bottom; } }
+
+.profile-form { width: 100%; max-width: none; margin-top: clamp(28px, 3.2vh, 42px); }
+.profile-fields { display: grid; gap: 12px; }
+.profile-fields label { margin: 0; color: var(--navy); }
+.profile-fields select {
+  display: block;
+  width: 100%;
+  min-height: 68px;
+  padding: 14px 52px 14px 18px;
+  border: 3px solid var(--navy);
+  border-radius: 0;
+  outline: 0;
+  background: #fffdf7;
+  color: var(--navy);
+  font: 650 clamp(18px, 1.3vw, 24px)/1.2 "Jost";
+}
+.profile-fields select:focus { border-color: var(--orange); box-shadow: 0 0 0 4px rgba(247,147,30,.2); }
+.profile-fields select option { background: #fffdf7; color: var(--navy); }
+.profile-fields input {
+  padding: 16px 14px;
+  border: 3px solid var(--navy);
+  background: #fffdf7;
+  color: var(--navy);
+  font-size: clamp(22px, 2vw, 34px);
+  color-scheme: light;
+}
+.profile-form > .solid-action { margin-top: 34px; }
+.profile-card .reader-offline-notice { color: var(--navy); }
+.profile-role-grid { max-width: none; margin-top: 26px; gap: 2px; background: var(--navy); }
+.profile-role-grid button {
+  min-height: 58px;
+  padding: 13px 16px;
+  background: #fffdf7;
+  color: var(--navy);
+  font-size: clamp(15px, 1vw, 19px);
+}
+.profile-role-grid button:hover, .profile-role-grid button:focus-visible { background: var(--orange); }
+
 .onboarding-grid { display: grid; grid-template-columns: 1fr 210px; gap: clamp(30px, 4vw, 70px); align-items: center; margin: 28px 0; }
 .onboarding-grid ol, .onboarding-primary ol { margin: 24px 0 0; padding: 0; list-style: none; }
 .onboarding-grid li, .onboarding-primary li { display: flex; gap: 18px; padding: 10px 0; border-top: 1px solid rgba(242,238,227,.4); font-size: 18px; }
@@ -565,6 +640,21 @@ input:focus { border-color: var(--orange); }
 .staff-poster b { position: relative; z-index: 1; font: 650 clamp(52px, 7vw, 128px)/.82 "Jost"; letter-spacing: -.07em; transform: rotate(-7deg); }
 .staff-panel > form { width: min(720px, 100%); max-width: none; margin: 0; padding: clamp(34px, 5vh, 70px) clamp(36px, 6vw, 100px); overflow-y: auto; }
 .staff-panel .demo-heading { margin-bottom: 18px; }
+.release-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 5px 24px;
+  margin: 0 0 22px;
+  padding: 16px 18px;
+  border: 2px solid var(--navy);
+  background: #fffaf0;
+  box-shadow: 6px 6px 0 var(--orange);
+}
+.release-card div { display: flex; align-items: baseline; gap: 12px; }
+.release-card small { font: 750 10px/1.2 "Jost"; letter-spacing: .14em; }
+.release-card strong { font: 750 22px/1 "Jost"; letter-spacing: .02em; }
+.release-card time { color: #53606b; font: 650 14px/1.2 "Jost"; }
+.release-card p { grid-column: 1 / -1; margin: 0; color: #53606b; font-size: 14px; line-height: 1.3; }
 .staff-intro { max-width: 610px; margin: 0 0 22px; color: #53606b; font-size: 18px; line-height: 1.4; }
 .preset-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 26px; }
 .preset-row button { padding: 9px 13px; border: 1px solid var(--navy); background: transparent; color: var(--navy); cursor: pointer; font-weight: 650; }
@@ -613,6 +703,10 @@ button:focus-visible { outline: 3px solid var(--orange); outline-offset: 4px; }
   .staff-panel { grid-template-columns: 1fr; overflow-y: auto; }
   .staff-poster { display: none; }
   .staff-panel > form { overflow: visible; }
+  .release-card { grid-template-columns: 1fr; }
+  .release-card time { grid-row: 2; }
+  .release-card p { grid-column: 1; }
+  .profile-card { padding: 34px 26px; }
 }
 
 @media (max-height: 760px) and (min-width: 881px) {
@@ -625,6 +719,12 @@ button:focus-visible { outline: 3px solid var(--orange); outline-offset: 4px; }
   .home-copy.has-alert .primary-actions { margin-top: 18px; }
   .home-copy.has-alert .text-action { padding-block: 9px; }
   .success-closing-alert { margin-top: 14px; }
+  .profile-card { padding: 30px 34px; }
+  .profile-card h1 { font-size: clamp(38px, 4vw, 60px); }
+  .profile-card .lede { font-size: 18px; }
+  .profile-card .back { margin-bottom: 16px; }
+  .profile-role-grid { margin-top: 18px; }
+  .profile-role-grid button { min-height: 49px; padding: 10px 13px; font-size: 14px; }
   footer { bottom: 18px; }
 }
 

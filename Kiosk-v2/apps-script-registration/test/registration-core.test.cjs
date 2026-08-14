@@ -28,9 +28,10 @@ test("accepts exactly nine digits for Triton Student Numbers", () => {
 
 test("requires canonical affiliation choices and an explanation for Other", () => {
   assert.equal(call('canonicalAffiliation_("CASPO-O&A", "")'), "CASPO-O&A");
-  assert.equal(call('canonicalAffiliation_("External university or institution", "")'), "External university or institution");
   assert.equal(call('canonicalAffiliation_("Community member – no institutional affiliation", "")'), "Community member – no institutional affiliation");
   assert.equal(call('canonicalAffiliation_("Other", "Coastal nonprofit")'), "Other – Coastal nonprofit");
+  assert.equal(call('canonicalAffiliation_("External university or institution", "Caltech")'), "External university or institution – Caltech");
+  assert.equal(call('canonicalAffiliation_("External university or institution", "")'), "");
   assert.equal(call('canonicalAffiliation_("Other", "")'), "");
   assert.equal(call('canonicalAffiliation_("BO", "")'), "");
 });
@@ -38,6 +39,14 @@ test("requires canonical affiliation choices and an explanation for Other", () =
 test("accepts visitor and community roles", () => {
   assert.equal(call('canonicalRole_("Visiting scholar or visitor", "")'), "Visiting scholar or visitor");
   assert.equal(call('canonicalRole_("Community member", "")'), "Community member");
+});
+
+test("accepts role-specific majors, graduate programs, and UCSD departments", () => {
+  assert.equal(call('canonicalAffiliation_("Marine Biology", "")'), "Marine Biology");
+  assert.equal(call('canonicalAffiliation_("Applied Ocean Science", "")'), "Applied Ocean Science");
+  assert.equal(call('canonicalAffiliation_("Mechanical & Aerospace Engineering", "")'), "Mechanical & Aerospace Engineering");
+  assert.equal(call('canonicalAffiliation_("Electrical & Computer Engineering", "")'), "Electrical & Computer Engineering");
+  assert.equal(call('canonicalAffiliation_("San Diego State University", "")'), "San Diego State University");
 });
 
 test("requires anticipated graduation for student roles only", () => {

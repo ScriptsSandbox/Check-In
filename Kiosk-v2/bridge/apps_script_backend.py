@@ -84,6 +84,12 @@ class AppsScriptCheckInBackend:
             display_name=payload.get("displayName"),
             message=str(payload.get("message") or ""),
             visit_count=payload.get("visitCount"),
+            person_id=payload.get("personId"),
+            profile={
+                "role": str((payload.get("profile") or {}).get("role") or ""),
+                "affiliation": str((payload.get("profile") or {}).get("affiliation") or ""),
+                "anticipatedGraduation": str((payload.get("profile") or {}).get("anticipatedGraduation") or ""),
+            },
             timings_ms={"apps_script": request_ms},
         )
 
@@ -119,6 +125,15 @@ class AppsScriptCheckInBackend:
 
     def prepare_card_link(self, identifier: str) -> CheckInResult:
         payload, request_ms = self._identifier_request("prepare_card_link", identifier)
+        return self._result(payload, request_ms)
+
+    def update_profile(self, person_id: str, field: str, value: str) -> CheckInResult:
+        payload, request_ms = self._request(
+            "update_profile",
+            personId=person_id,
+            field=field,
+            value=value,
+        )
         return self._result(payload, request_ms)
 
     def link_card(

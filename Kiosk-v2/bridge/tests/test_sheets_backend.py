@@ -49,6 +49,17 @@ class FakeProvider:
         matches[0]["Card Digest"] = digest
         return dict(matches[0])
 
+    def update_profile(self, person_id, field, value):
+        user = next((row for row in self.users if row.get("Person ID") == person_id), None)
+        if not user:
+            raise ValueError("That active Sandbox account could not be found.")
+        profile = dict(user.get("Profile") or {})
+        if profile.get(field) and profile[field] != value:
+            raise ValueError("That profile field is already filled in.")
+        profile[field] = value
+        user["Profile"] = profile
+        return profile
+
 
 def backend_for(provider):
     return SheetsCheckInBackend(
@@ -66,6 +77,7 @@ def member(card="CARD123", person_id="person_1", student_id="A12345678", email="
         "Identifiers": identifiers or [student_id],
         "Email Address": email,
         "Card Digest": FakeProvider.card_digest(card) if card else "",
+        "Profile": {"role": "", "affiliation": "", "anticipatedGraduation": ""},
     }
 
 
@@ -136,6 +148,8 @@ def test_known_card_with_waiver_appends_normalized_visit_shape():
     assert result.outcome == "success"
     assert result.display_name == "Test Maker"
     assert result.visit_count == 1
+    assert result.person_id == "person_1"
+    assert result.profile == {"role": "", "affiliation": "", "anticipatedGraduation": ""}
     assert provider.calls["append"] == 1
     row = provider.appended_rows[0]
     assert len(row) == 9
@@ -145,6 +159,16 @@ def test_known_card_with_waiver_appends_normalized_visit_shape():
     assert row[3] == "User Checkin"
     assert row[7] == "Kiosk v2"
     assert "CARD123" not in row
+
+
+def test_profile_answers_fill_blanks_without_overwriting_existing_values():
+    provider = FakeProvider(users=[member()])
+    backend = backend_for(provider)
+    first = backend.update_profile("person_1", "role", "Undergraduate Student (UG)")
+    assert first.outcome == "profile_updated"
+    assert first.profile["role"] == "Undergraduate Student (UG)"
+    rejected = backend.update_profile("person_1", "role", "Staff")
+    assert rejected.outcome == "profile_error"
 
 
 def test_unknown_card_does_not_read_waivers_or_activity_or_write():

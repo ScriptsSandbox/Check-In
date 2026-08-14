@@ -14,6 +14,7 @@ The kiosk still requires a matching waiver record before check-in succeeds. Afte
 - Student identifiers support legacy PIDs and nine-digit Triton Student Numbers (TSNs). They remain separate identifier types so a future authorized PID-to-TSN crosswalk can attach both values to one person without discarding the PID.
 - Role and SIO department/division choices follow the commonly used SIO taxonomy. Student roles require an anticipated graduation month and year, stored in `Registrations`.
 - Visitors can also identify an external university or institution, a community affiliation, or another organization.
+- The affiliation question branches by role: undergraduates choose a major; Scripps and non-Scripps graduate students choose an appropriate program or department; MAS students choose their program; and employees or visitors choose a unit or organization.
 - Input is length-limited, normalized, and protected against spreadsheet-formula injection.
 - A script lock serializes duplicate checks and appends.
 - The form includes a honeypot and minimum-fill-time check.

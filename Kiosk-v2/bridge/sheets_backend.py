@@ -29,6 +29,8 @@ class CheckInResult:
     display_name: str | None = None
     message: str = ""
     visit_count: int | None = None
+    person_id: str | None = None
+    profile: dict[str, str] = field(default_factory=dict)
     timings_ms: dict[str, int] = field(default_factory=dict)
 
 
@@ -38,6 +40,7 @@ class SheetsProvider(Protocol):
     def activity_rows(self) -> list[list[Any]]: ...
     def append_activity(self, row: list[Any]) -> None: ...
     def update_user_card(self, identifier: str, card_uid: str) -> dict[str, Any]: ...
+    def update_profile(self, person_id: str, field: str, value: str) -> dict[str, str]: ...
     def card_digest(self, card_uid: str) -> str: ...
 
 
@@ -104,6 +107,7 @@ class GoogleSheetsProvider:
         self._people_sheet: Any = None
         self._identifiers_sheet: Any = None
         self._cards_sheet: Any = None
+        self._registrations_sheet: Any = None
         self._visits_sheet: Any = None
         self._waiver_sheet: Any = None
         self._users: list[dict[str, Any]] | None = None
@@ -144,6 +148,7 @@ class GoogleSheetsProvider:
         self._people_sheet = database.worksheet("People")
         self._identifiers_sheet = database.worksheet("Identifiers")
         self._cards_sheet = database.worksheet("Cards")
+        self._registrations_sheet = database.worksheet("Registrations")
         self._visits_sheet = database.worksheet("Visits")
         self._waiver_sheet = client.open(self.waiver_sheet_name).sheet1
 
@@ -155,6 +160,7 @@ class GoogleSheetsProvider:
         people = self._people_sheet.get_all_records(numericise_ignore=["all"])
         identifiers = self._identifiers_sheet.get_all_records(numericise_ignore=["all"])
         cards = self._cards_sheet.get_all_records(numericise_ignore=["all"])
+        registrations = self._registrations_sheet.get_all_records(numericise_ignore=["all"])
         self._waivers = self._waiver_sheet.get_all_records(numericise_ignore=["all"])
         identifiers_by_person: dict[str, list[dict[str, Any]]] = {}
         cards_by_person: dict[str, list[dict[str, Any]]] = {}
@@ -184,6 +190,7 @@ class GoogleSheetsProvider:
             ]
             person_cards = cards_by_person.get(person_id, [])
             card = person_cards[-1] if person_cards else {}
+            registration = next((record for record in reversed(registrations) if str(record.get("Person ID", "")).strip() == person_id), {})
             users.append({
                 "Person ID": person_id,
                 "Name": str(person.get("Display Name", "")).strip(),
@@ -191,6 +198,12 @@ class GoogleSheetsProvider:
                 "Identifiers": tuple(dict.fromkeys(aliases)),
                 "Email Address": str(person.get("Primary Email", "") or (email_record or {}).get("Normalized Value", "")).strip(),
                 "Card Digest": str(card.get("Card Digest", "")).strip().lower(),
+                "Role": str(person.get("Role", "")).strip(),
+                "Profile": {
+                    "role": str(person.get("Role", "")).strip(),
+                    "affiliation": str(registration.get("Program / Department", "")).strip(),
+                    "anticipatedGraduation": str(registration.get("Anticipated Graduation", "")).strip(),
+                },
             })
         self._users = users
         self._cache_expires_at = now + self.cache_seconds
@@ -257,6 +270,63 @@ class GoogleSheetsProvider:
             self._cache_expires_at = time.monotonic() + self.cache_seconds
             return dict(record)
 
+    def update_profile(self, person_id: str, field: str, value: str) -> dict[str, str]:
+        field_headers = {
+            "role": ("people", "Role"),
+            "affiliation": ("registrations", "Program / Department"),
+            "anticipatedGraduation": ("registrations", "Anticipated Graduation"),
+        }
+        if field not in field_headers:
+            raise ValueError("That profile field cannot be updated.")
+        safe_value = str(value).strip()
+        if not safe_value or len(safe_value) > 120:
+            raise ValueError("That profile answer is not valid.")
+        if safe_value.startswith(("=", "+", "-", "@")):
+            safe_value = "'" + safe_value
+
+        with self._lock:
+            self._refresh_people_if_needed()
+            user = next((record for record in self._users or [] if record.get("Person ID") == person_id), None)
+            if user is None:
+                raise ValueError("That active Sandbox account could not be found.")
+            profile = dict(user.get("Profile") or {})
+            current = str(profile.get(field, "")).strip()
+            if current:
+                if current == value:
+                    return profile
+                raise ValueError("That profile field is already filled in. Ask Sandbox staff if it needs to change.")
+
+            sheet_name, header = field_headers[field]
+            sheet = self._people_sheet if sheet_name == "people" else self._registrations_sheet
+            headers = sheet.row_values(1)
+            person_column = headers.index("Person ID")
+            target_column = headers.index(header)
+            rows = sheet.get_all_values()
+            row_number = next((index + 1 for index in range(len(rows) - 1, 0, -1) if str(rows[index][person_column]).strip() == person_id), 0)
+            if not row_number and sheet_name == "registrations":
+                now = datetime.now().isoformat(timespec="seconds")
+                named = {
+                    "Registration ID": "registration_" + uuid4().hex,
+                    "Person ID": person_id,
+                    "Status": "Profile enrichment",
+                    "Submitted At": now,
+                    "Consent Version": "2026-08-11",
+                    "Source": "Kiosk profile enrichment",
+                }
+                sheet.append_row([named.get(column, "") for column in headers], value_input_option="USER_ENTERED")
+                row_number = len(rows) + 1
+            if not row_number:
+                raise ValueError("That active Sandbox account could not be found.")
+            sheet.update_cell(row_number, target_column + 1, safe_value)
+            if field == "role":
+                updated_at = headers.index("Updated At")
+                sheet.update_cell(row_number, updated_at + 1, datetime.now().isoformat(timespec="seconds"))
+                user["Role"] = value
+            profile[field] = value
+            user["Profile"] = profile
+            self._cache_expires_at = time.monotonic() + self.cache_seconds
+            return dict(profile)
+
 
 class SheetsCheckInBackend:
     def __init__(self, provider: SheetsProvider, now: Callable[[], float] = time.time, local_datetime: Callable[[], datetime] = datetime.now) -> None:
@@ -312,6 +382,18 @@ class SheetsCheckInBackend:
         if str(target.get("Card Digest", "")).strip():
             return CheckInResult(outcome="card_link_error", message="That account already has a connected card.")
         return CheckInResult(outcome="link_ready", display_name=str(target.get("Name", "")).strip() or "Sandbox member", message="Ask designated staff to tap their own card.")
+
+    def update_profile(self, person_id: str, field: str, value: str) -> CheckInResult:
+        try:
+            profile = self.provider.update_profile(person_id, field, value)
+        except ValueError as error:
+            return CheckInResult(outcome="profile_error", person_id=person_id, message=str(error))
+        return CheckInResult(
+            outcome="profile_updated",
+            person_id=person_id,
+            profile=profile,
+            message="Profile updated.",
+        )
 
     def link_card(self, identifier: str, card_uid: str, staff_card_uid: str, designated_staff_ids: set[str]) -> CheckInResult:
         total_started = time.monotonic()
@@ -390,4 +472,12 @@ class SheetsCheckInBackend:
         self.provider.append_activity(row)
         timings["activity_append"] = elapsed_ms(stage_started)
         timings["total"] = elapsed_ms(total_started)
-        return CheckInResult(outcome="success", display_name=display_name, message="Check-in recorded.", visit_count=visit_count, timings_ms=timings)
+        return CheckInResult(
+            outcome="success",
+            display_name=display_name,
+            message="Check-in recorded.",
+            visit_count=visit_count,
+            person_id=person_id,
+            profile=dict(user.get("Profile") or {}),
+            timings_ms=timings,
+        )

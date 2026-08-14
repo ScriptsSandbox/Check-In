@@ -2,6 +2,16 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
+import {
+  PROFILE_ROLES,
+  affiliationOptions,
+  emptyProfile,
+  nextProfileQuestion,
+  normalizedProfileAnswer,
+  type ProfileField,
+  type ProfileSnapshot,
+} from "@/lib/profile-enrichment";
+import { KIOSK_RELEASE } from "@/lib/kiosk-release";
 
 type Screen =
   | "home"
@@ -59,6 +69,8 @@ type ScannerResultEvent = {
   read_at: string;
   sequence: number;
   processing_ms?: number;
+  person_id?: string | null;
+  profile?: Partial<ProfileSnapshot>;
 };
 
 type ScannerEvent = ScannerDetectedEvent | ScannerResultEvent;
@@ -69,15 +81,6 @@ const emptyAnnouncement: Announcement = {
   body: "Please check in with me upstairs before starting work.",
   closingTime: "",
 };
-
-const affiliations = [
-  "Undergraduate",
-  "Graduate student",
-  "Postdoc",
-  "Faculty",
-  "Staff",
-  "Visitor",
-];
 
 function Arrow({ direction = "right" }: { direction?: "right" | "left" }) {
   return <span aria-hidden="true">{direction === "right" ? "→" : "←"}</span>;
@@ -102,8 +105,12 @@ export default function Home() {
   const [demoOpen, setDemoOpen] = useState(false);
   const [pid, setPid] = useState("");
   const [checkInMethod, setCheckInMethod] = useState<"card" | "identifier">("card");
-  const [affiliation, setAffiliation] = useState("");
-  const [detail, setDetail] = useState("");
+  const [profile, setProfile] = useState<ProfileSnapshot>(emptyProfile);
+  const [profileSessionAvailable, setProfileSessionAvailable] = useState(false);
+  const [profileAnswer, setProfileAnswer] = useState("");
+  const [profileOther, setProfileOther] = useState("");
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileError, setProfileError] = useState("");
   const [linkIdentifier, setLinkIdentifier] = useState("");
   const [linkTargetName, setLinkTargetName] = useState("Sandbox member");
   const [linkError, setLinkError] = useState("");
@@ -121,6 +128,10 @@ export default function Home() {
   const demoControlsEnabled = process.env.NEXT_PUBLIC_KIOSK_DEMO === "true";
   const screenRef = useRef<Screen>("home");
   const cardDetectedAtRef = useRef<number | null>(null);
+  const profileQuestion = useMemo(
+    () => profileSessionAvailable ? nextProfileQuestion(profile) : null,
+    [profile, profileSessionAvailable],
+  );
 
   useEffect(() => {
     screenRef.current = screen;
@@ -218,17 +229,23 @@ export default function Home() {
     const delay = Math.max(0, minimumFeedbackMs - (performance.now() - detectedAt));
     const timer = window.setTimeout(() => {
       if (scannerResult.outcome === "demo") {
+        setCountdown(8);
         setScreen("success");
         return;
       }
       if (scannerResult.outcome === "success") {
+        const incomingProfile = { ...emptyProfile(), ...(scannerResult.profile || {}) };
+        const hasQuestion = Boolean(scannerResult.person_id && nextProfileQuestion(incomingProfile));
         setWelcomeName(scannerResult.display_name || "Sandbox member");
         setVisitCount(scannerResult.visit_count);
-        setScreen("success");
+        setProfile(incomingProfile);
+        setProfileSessionAvailable(Boolean(scannerResult.person_id));
+        setCountdown(8);
+        setScreen(hasQuestion ? "profile" : "success");
       } else if (scannerResult.outcome === "unknown_card") {
         setScreen("unknown-card");
-    } else if (scannerResult.outcome === "unknown_identifier") {
-      setScreen("not-found");
+      } else if (scannerResult.outcome === "unknown_identifier") {
+        setScreen("not-found");
       } else if (scannerResult.outcome === "waiver_required") {
         setScreen("waiver-required");
       } else {
@@ -240,7 +257,6 @@ export default function Home() {
 
   useEffect(() => {
     if (screen !== "success") return;
-    setCountdown(8);
     const interval = window.setInterval(() => {
       setCountdown((value) => {
         if (value <= 1) {
@@ -328,8 +344,12 @@ export default function Home() {
     setScreen("home");
     setCheckInMethod("card");
     setPid("");
-    setAffiliation("");
-    setDetail("");
+    setProfile(emptyProfile());
+    setProfileSessionAvailable(false);
+    setProfileAnswer("");
+    setProfileOther("");
+    setProfileSaving(false);
+    setProfileError("");
     setLinkIdentifier("");
     setLinkTargetName("Sandbox member");
     setLinkError("");
@@ -415,6 +435,51 @@ export default function Home() {
     reset();
   }
 
+  async function saveProfileAnswer(field: ProfileField, rawValue: string) {
+    const value = normalizedProfileAnswer(field, rawValue);
+    if (!value || profileSaving) return;
+    setProfileSaving(true);
+    setProfileError("");
+    try {
+      let updatedProfile: ProfileSnapshot;
+      if (demoControlsEnabled && !profileSessionAvailable) {
+        updatedProfile = { ...profile, [field]: value };
+      } else {
+        const response = await fetch("http://127.0.0.1:8765/profile", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ field, value }),
+        });
+        const result = await response.json() as {
+          ok?: boolean;
+          profile?: Partial<ProfileSnapshot>;
+          detail?: string;
+          message?: string;
+        };
+        if (!response.ok || !result.ok) {
+          throw new Error(result.detail || result.message || "That answer could not be saved.");
+        }
+        updatedProfile = { ...profile, ...(result.profile || {}), [field]: value };
+      }
+      setProfile(updatedProfile);
+      setProfileAnswer("");
+      setProfileOther("");
+      if (!nextProfileQuestion(updatedProfile)) {
+        setCountdown(8);
+        setScreen("success");
+      }
+    } catch (error) {
+      setProfileError(error instanceof Error ? error.message : "That answer could not be saved.");
+    } finally {
+      setProfileSaving(false);
+    }
+  }
+
+  function skipProfileQuestions() {
+    setCountdown(8);
+    setScreen("success");
+  }
+
   const showBrand = screen !== "success";
 
   return (
@@ -425,7 +490,13 @@ export default function Home() {
         </button>
         <div className="utility-right">
           <span className="clock" aria-label="Current time">{timeLabel}</span>
-          <button className="staff-toggle" onClick={openStaffEditor}>STAFF</button>
+          <button
+            className="staff-toggle"
+            onClick={openStaffEditor}
+            aria-label={`Open staff controls. Kiosk revision ${KIOSK_RELEASE.revision}`}
+          >
+            STAFF
+          </button>
           {demoControlsEnabled && <button
             className={`demo-toggle ${demoOpen ? "active" : ""}`}
             onClick={() => setDemoOpen((open) => !open)}
@@ -656,43 +727,71 @@ export default function Home() {
         )}
 
         {screen === "profile" && (
-          <div className="form-content screen-content">
-            <p className="eyebrow">YOU’RE CHECKED IN</p>
-            <h1>One quick<br />question.</h1>
-            <p className="lede compact">What best describes your role at UC San Diego?</p>
-            <div className="choice-grid">
-              {affiliations.map((item) => (
-                <button
-                  key={item}
-                  className={affiliation === item ? "selected" : ""}
-                  onClick={() => { setAffiliation(item); setScreen("profile-detail"); }}
-                >
-                  {item}<Arrow />
-                </button>
-              ))}
+          <div className="profile-shell screen-content">
+            <div className="profile-card profile-intro-card">
+              <span className="profile-card-tab" aria-hidden="true">PROFILE UPDATE</span>
+              <div className="profile-pulse" aria-hidden="true"><i /><i /><i /></div>
+              <p className="eyebrow">ONE QUICK UPDATE</p>
+              <h1>Your account is missing<br />a few details.</h1>
+              <p className="lede compact">Before the confirmation screen, please answer a few short questions. We’ll only ask for information that’s missing.</p>
+              <button className="solid-action" onClick={() => setScreen("profile-detail")}>Answer the first question <Arrow /></button>
+              <button className="quiet-action align-left" onClick={skipProfileQuestions}>Skip for now</button>
             </div>
-            <button className="quiet-action align-left" onClick={() => setScreen("success")}>Skip for now</button>
           </div>
         )}
 
         {screen === "profile-detail" && (
-          <div className="form-content screen-content">
-            <button className="back" onClick={() => setScreen("profile")}><Arrow direction="left" /> Back</button>
-            <p className="eyebrow">LAST ONE</p>
-            <h1>Your program<br />or department?</h1>
-            <p className="lede compact">This helps us understand who the Makerspace serves.</p>
-            <form onSubmit={(event) => { event.preventDefault(); setScreen("success"); }}>
-              <label htmlFor="detail">PROGRAM OR DEPARTMENT</label>
-              <input
-                id="detail"
-                value={detail}
-                onChange={(event) => setDetail(event.target.value)}
-                placeholder="e.g. Scripps Oceanography"
-                autoFocus
-              />
-              <button className="solid-action" type="submit" disabled={!detail.trim()}>Save and finish <Arrow /></button>
-            </form>
-            <button className="quiet-action align-left" onClick={() => setScreen("success")}>Skip for now</button>
+          <div className="profile-shell screen-content">
+            <div className="profile-card profile-question-card">
+              <span className="profile-card-tab" aria-hidden="true">ADDING TO YOUR PROFILE</span>
+              <button className="back" onClick={() => setScreen("profile")}><Arrow direction="left" /> Back</button>
+              {profileQuestion ? <>
+                <p className="eyebrow">{profileQuestion.eyebrow}</p>
+                <h1>{profileQuestion.heading}</h1>
+                <p className="lede compact">{profileQuestion.prompt}</p>
+                {profileQuestion.field === "role" ? (
+                  <div className="choice-grid profile-role-grid">
+                    {PROFILE_ROLES.map((item) => (
+                      <button key={item} disabled={profileSaving} onClick={() => saveProfileAnswer("role", item)}>
+                        {item}<Arrow />
+                      </button>
+                    ))}
+                    {profileError && <p className="reader-offline-notice" role="alert">{profileError}</p>}
+                  </div>
+                ) : (
+                  <form className="profile-form" onSubmit={(event) => {
+                    event.preventDefault();
+                    const value = profileAnswer === "Other" ? `Other – ${profileOther}` : profileAnswer;
+                    saveProfileAnswer(profileQuestion.field, value);
+                  }}>
+                    <div className="profile-fields">
+                      {profileQuestion.field === "anticipatedGraduation" ? (
+                        <>
+                          <label htmlFor="profile-answer">ANTICIPATED GRADUATION</label>
+                          <input id="profile-answer" type="month" value={profileAnswer} onChange={(event) => setProfileAnswer(event.target.value)} />
+                        </>
+                      ) : (
+                        <>
+                          <label htmlFor="profile-answer">PROGRAM, DEPARTMENT, MAJOR, OR ORGANIZATION</label>
+                          <select id="profile-answer" value={profileAnswer} onChange={(event) => setProfileAnswer(event.target.value)}>
+                            <option value="">Choose one</option>
+                            {affiliationOptions(profile.role).map((item) => <option key={item}>{item}</option>)}
+                          </select>
+                          {profileAnswer === "Other" && (
+                            <input value={profileOther} onChange={(event) => setProfileOther(event.target.value)} placeholder="Type your answer" />
+                          )}
+                        </>
+                      )}
+                    </div>
+                    {profileError && <p className="reader-offline-notice" role="alert">{profileError}</p>}
+                    <button className="solid-action" type="submit" disabled={profileSaving || !profileAnswer || (profileAnswer === "Other" && !profileOther.trim())}>
+                      {profileSaving ? "Saving…" : "Save and continue"} <Arrow />
+                    </button>
+                  </form>
+                )}
+              </> : null}
+              <button className="quiet-action align-left" onClick={skipProfileQuestions}>Skip for now</button>
+            </div>
           </div>
         )}
 
@@ -761,7 +860,7 @@ export default function Home() {
             <div><small>LOCAL CARD READER</small><b>{scannerStatus === "demo" ? "Demo mode" : scannerStatus}</b></div>
           </div>
           <button onClick={() => { startDemoCheckIn(); setDemoOpen(false); }}>Tap recognized ID <Arrow /></button>
-          <button onClick={() => { setScreen("profile"); setDemoOpen(false); }}>Tap ID · missing info <Arrow /></button>
+          <button onClick={() => { setProfile(emptyProfile()); setProfileSessionAvailable(false); setScreen("profile"); setDemoOpen(false); }}>Tap ID · missing info <Arrow /></button>
           <button onClick={() => { setScreen("unknown-card"); setDemoOpen(false); }}>Tap unknown ID <Arrow /></button>
           <button onClick={() => { setScreen("reader-error"); setDemoOpen(false); }}>Card reader error <Arrow /></button>
           <button onClick={() => { setScreen("pid"); setDemoOpen(false); }}>Manual ID check-in <Arrow /></button>
@@ -784,6 +883,14 @@ export default function Home() {
               <div><small>STAFF CONTROL</small><b>Front-screen message</b></div>
               <button type="button" onClick={() => setStaffOpen(false)} aria-label="Close staff controls">×</button>
             </div>
+            <section className="release-card" aria-label={`Current kiosk revision ${KIOSK_RELEASE.revision}`}>
+              <div>
+                <small>CURRENT KIOSK REV</small>
+                <strong>{KIOSK_RELEASE.revision}</strong>
+              </div>
+              <time dateTime="2026-08-14">{KIOSK_RELEASE.date}</time>
+              <p>{KIOSK_RELEASE.summary}</p>
+            </section>
             <p className="staff-intro">Keep it brief. The kiosk gives the announcement the scale and urgency of a temporary poster.</p>
             <div className="preset-row" aria-label="Message presets">
               <button type="button" onClick={() => setAnnouncementDraft({ ...announcementDraft, active: true, heading: "CHECK IN WITH STAFF", body: "Please check in with me upstairs before starting work." })}>Upstairs</button>
