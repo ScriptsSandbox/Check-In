@@ -527,10 +527,11 @@ input:focus { border-color: var(--orange); }
 }
 .profile-form > .solid-action { margin-top: 34px; }
 .profile-card .reader-offline-notice { color: var(--navy); }
-.profile-role-grid { max-width: none; margin-top: 26px; gap: 2px; background: var(--navy); }
+.profile-role-grid { max-width: none; margin-top: 26px; gap: 2px; background: transparent; }
 .profile-role-grid button {
   min-height: 58px;
   padding: 13px 16px;
+  border: 2px solid var(--navy);
   background: #fffdf7;
   color: var(--navy);
   font-size: clamp(15px, 1vw, 19px);

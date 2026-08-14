@@ -4,7 +4,7 @@ const STAFF_CONFIG_ = {
     people: { name: "People", headers: ["Person ID", "Status", "Display Name", "Role", "Primary Email", "Secondary Emails", "Created At", "Updated At", "Source System", "Source Rows"] },
     identifiers: { name: "Identifiers", headers: ["Identifier ID", "Person ID", "Type", "Value", "Normalized Value", "Primary", "Verified", "Active", "Created At", "Source System", "Source Rows"] },
     certifications: { name: "Tool Certifications", headers: ["Certification ID", "Person ID", "Tool Key", "Status", "Granted At", "Removed At", "Source System", "Source Rows", "Notes"] },
-    registrations: { name: "Registrations", headers: ["Registration ID", "Person ID", "Status", "Submitted At", "Reviewed By", "Reviewed At", "Program / Department", "Identifier Type", "DocuSign Status", "Consent Version", "Source"], allowAdditionalHeaders: true },
+    registrations: { name: "Registrations", headers: ["Registration ID", "Person ID", "Status", "Submitted At", "Reviewed By", "Reviewed At", "Program / Department", "Identifier Type", "DocuSign Status", "Consent Version", "Anticipated Graduation", "Source"], allowAdditionalHeaders: true },
     visits: { name: "Visits", headers: ["Visit ID", "Person ID", "Check In At", "Event Type", "Authorizing Entity", "Flags", "Notes", "Source System", "Source Row"] },
     staffAccess: { name: "Staff Access", headers: ["Staff ID", "Name", "Email", "Role", "Active", "Card Linking Allowed", "Notes"] },
     training: { name: "Tool Training", headers: ["Training ID", "Person ID", "Tool", "Status", "Approved By", "Approved At", "FabMan Status", "Notes"] },
@@ -95,7 +95,9 @@ function staffDashboard() {
       personId: personId,
       name: staffPrivateName_(person["Display Name"]),
       role: staffRoleLabel_(person.Role),
+      profileRole: staffClean_(person.Role, 80),
       affiliation: registration ? staffClean_(registration["Program / Department"], 80) : "",
+      anticipatedGraduation: registration ? staffClean_(registration["Anticipated Graduation"], 7) : "",
       identifierHint: identifier ? staffIdentifierHint_(identifier.Value) : "",
       attention: staffAttentionFlags_(registration),
       toolLabels: toolsByPerson[personId] || [],
@@ -233,7 +235,9 @@ function staffPersonCard(personId) {
     personId: personId,
     name: staffPrivateName_(person["Display Name"]),
     role: staffRoleLabel_(person.Role),
+    profileRole: staffClean_(person.Role, 80),
     affiliation: registration ? staffClean_(registration["Program / Department"], 80) : "",
+    anticipatedGraduation: registration ? staffClean_(registration["Anticipated Graduation"], 7) : "",
     identifierHint: identifier ? staffIdentifierHint_(identifier.Value) : "",
     attention: staffAttentionFlags_(registration),
     tools: Object.keys(tools).map(function (key) { return tools[key]; }),
@@ -244,6 +248,48 @@ function staffPersonCard(personId) {
   staffCachePutJson_(cacheKey, result, STAFF_CACHE_SECONDS_.person);
   result.performance = { totalMs: Date.now() - started, cache: "miss" };
   return result;
+}
+
+function staffUpdateProfile(personId, payload) {
+  const access = staffRequireAccess_();
+  const validated = staffValidateProfile_(payload);
+  if (!validated.ok) throw new Error(validated.message);
+  const profile = validated.value;
+  const cleanPersonId = staffClean_(personId, 120);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const db = staffDatabase_();
+    staffFindPerson_(db.people, cleanPersonId);
+    const personRow = staffLastPersonRow_(db.people, cleanPersonId);
+    staffSetNamedCell_(db.people, personRow, "Role", profile.role);
+    staffSetNamedCell_(db.people, personRow, "Updated At", new Date());
+
+    let registrationRow = staffLastPersonRow_(db.registrations, cleanPersonId);
+    if (!registrationRow) {
+      registrationRow = staffAppendNamedRow_(db.registrations, {
+        "Registration ID": staffId_("registration"),
+        "Person ID": cleanPersonId,
+        "Status": "Profile updated",
+        "Submitted At": new Date(),
+        "Reviewed By": access.email,
+        "Reviewed At": new Date(),
+        "Program / Department": profile.affiliation,
+        "Anticipated Graduation": profile.anticipatedGraduation,
+        "Source": "Staff profile update",
+      });
+    } else {
+      staffSetNamedCell_(db.registrations, registrationRow, "Program / Department", profile.affiliation);
+      staffSetNamedCell_(db.registrations, registrationRow, "Anticipated Graduation", profile.anticipatedGraduation);
+      staffSetNamedCell_(db.registrations, registrationRow, "Reviewed By", access.email);
+      staffSetNamedCell_(db.registrations, registrationRow, "Reviewed At", new Date());
+    }
+    SpreadsheetApp.flush();
+    staffAfterWrite_(cleanPersonId);
+  } finally {
+    lock.releaseLock();
+  }
+  return staffPersonCard(cleanPersonId);
 }
 
 function staffFabmanStatus(personId) {
@@ -724,6 +770,36 @@ function staffRecords_(sheet) {
   });
   STAFF_RECORDS_MEMO_[memoKey] = records;
   return records;
+}
+
+function staffColumn_(sheet, header) {
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getDisplayValues()[0];
+  const index = headers.indexOf(header);
+  if (index < 0) throw new Error(sheet.getName() + " is missing the " + header + " column.");
+  return index + 1;
+}
+
+function staffLastPersonRow_(sheet, personId) {
+  if (sheet.getLastRow() < 2) return 0;
+  const column = staffColumn_(sheet, "Person ID");
+  const values = sheet.getRange(2, column, sheet.getLastRow() - 1, 1).getDisplayValues();
+  for (let index = values.length - 1; index >= 0; index -= 1) {
+    if (String(values[index][0]) === personId) return index + 2;
+  }
+  return 0;
+}
+
+function staffSetNamedCell_(sheet, row, header, value) {
+  sheet.getRange(row, staffColumn_(sheet, header)).setValue(typeof value === "string" ? staffSheetSafe_(value) : value);
+}
+
+function staffAppendNamedRow_(sheet, record) {
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getDisplayValues()[0];
+  sheet.appendRow(headers.map(function (header) {
+    const value = Object.prototype.hasOwnProperty.call(record, header) ? record[header] : "";
+    return typeof value === "string" ? staffSheetSafe_(value) : value;
+  }));
+  return sheet.getLastRow();
 }
 
 function staffCacheGetJson_(key) {

@@ -6,6 +6,42 @@ function staffTrue_(value) {
   return ["true", "1", "yes"].indexOf(String(value || "").trim().toLowerCase()) !== -1;
 }
 
+const STAFF_PROFILE_ROLES_ = [
+  "Academic",
+  "Staff",
+  "Postdoc",
+  "Graduate Student (MS)",
+  "Graduate Student (PhD)",
+  "MAS Student",
+  "Undergraduate Student (UG)",
+  "Affiliate (Retirees, Volunteers, etc.)",
+  "Visiting scholar or visitor",
+  "Community member",
+  "Other",
+];
+
+const STAFF_PROFILE_STUDENT_ROLES_ = [
+  "Graduate Student (MS)",
+  "Graduate Student (PhD)",
+  "MAS Student",
+  "Undergraduate Student (UG)",
+];
+
+function staffValidateProfile_(payload) {
+  const input = payload || {};
+  const role = staffClean_(input.role, 80);
+  const affiliation = staffClean_(input.affiliation, 120);
+  let anticipatedGraduation = staffClean_(input.anticipatedGraduation, 7);
+  if (STAFF_PROFILE_ROLES_.indexOf(role) === -1) return { ok: false, message: "Choose a listed role." };
+  if (!affiliation) return { ok: false, message: "Choose a program, department, major, or organization." };
+  const isStudent = STAFF_PROFILE_STUDENT_ROLES_.indexOf(role) !== -1;
+  if (isStudent && !/^\d{4}-(0[1-9]|1[0-2])$/.test(anticipatedGraduation)) {
+    return { ok: false, message: "Choose the student's anticipated graduation month and year." };
+  }
+  if (!isStudent) anticipatedGraduation = "";
+  return { ok: true, value: { role: role, affiliation: affiliation, anticipatedGraduation: anticipatedGraduation } };
+}
+
 function staffMissingHeaders_(actual, required) {
   const present = (actual || []).map(function (header) { return String(header || "").trim(); });
   return (required || []).filter(function (header) { return present.indexOf(header) === -1; });
@@ -134,4 +170,5 @@ if (typeof module !== "undefined") module.exports = {
   staffRoleLabel_: staffRoleLabel_,
   staffAttentionFlags_: staffAttentionFlags_,
   staffVisitFlagDetails_: staffVisitFlagDetails_,
+  staffValidateProfile_: staffValidateProfile_,
 };

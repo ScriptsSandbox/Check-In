@@ -2,7 +2,8 @@ const REGISTRATION_ALLOWED_ROLES_ = [
   "Academic",
   "Staff",
   "Postdoc",
-  "Graduate Student MS, PhD",
+  "Graduate Student (MS)",
+  "Graduate Student (PhD)",
   "MAS Student",
   "Undergraduate Student (UG)",
   "Affiliate (Retirees, Volunteers, etc.)",
@@ -12,7 +13,8 @@ const REGISTRATION_ALLOWED_ROLES_ = [
 ];
 
 const REGISTRATION_STUDENT_ROLES_ = [
-  "Graduate Student MS, PhD",
+  "Graduate Student (MS)",
+  "Graduate Student (PhD)",
   "MAS Student",
   "Undergraduate Student (UG)",
 ];

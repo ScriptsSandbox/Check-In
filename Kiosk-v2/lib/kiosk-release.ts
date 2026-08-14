@@ -1,5 +1,5 @@
 export const KIOSK_RELEASE = {
-  revision: "2026.08.14.9",
+  revision: "2026.08.14.10",
   date: "August 14, 2026",
-  summary: "Smaller profile prompts, simple back navigation, and unified undergraduate role",
+  summary: "Separate MS and PhD roles with staff profile editing",
 } as const;

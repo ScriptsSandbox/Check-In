@@ -13,4 +13,6 @@ Responsive staff-only web app backed by the same normalized Google spreadsheet a
 
 The app also enforces the active `Staff Access` allowlist on every server call. Roles are `staff`, `trainer`, and `administrator`; only trainers and administrators can record laser training.
 
+Any approved staff member can edit a member's profile from the person card. The update writes the role to `People` and the role-dependent affiliation and anticipated graduation to the latest `Registrations` row, with the staff reviewer and timestamp recorded.
+
 FabMan synchronization is deliberately not claimed by this MVP. A recorded approval displays `Not connected` until credentials and resource mapping are configured.

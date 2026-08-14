@@ -101,7 +101,7 @@
             <select id="role" name="role" required>
               <option value="">Choose one</option>
               <option>Academic</option><option>Staff</option><option>Postdoc</option>
-              <option>Graduate Student MS, PhD</option><option>MAS Student</option><option>Undergraduate Student (UG)</option>
+              <option>Graduate Student (MS)</option><option>Graduate Student (PhD)</option><option>MAS Student</option><option>Undergraduate Student (UG)</option>
               <option>Affiliate (Retirees, Volunteers, etc.)</option>
               <option>Visiting scholar or visitor</option><option>Community member</option><option>Other</option>
             </select>
@@ -169,7 +169,8 @@
       const identifierType = document.getElementById("identifier-type");
       const identifier = document.getElementById("identifier");
       const startedAt = Date.now();
-      const studentRoles = new Set(["Graduate Student MS, PhD", "MAS Student", "Undergraduate Student (UG)"]);
+      const graduateRoles = new Set(["Graduate Student (MS)", "Graduate Student (PhD)"]);
+      const studentRoles = new Set([...graduateRoles, "MAS Student", "Undergraduate Student (UG)"]);
 
       const scrippsUnits = ["IOD-Biology", "CMBB-Biology", "MBRD-Biology", "GRD-Earth", "IGPP-Earth", "CASPO-O&A", "MPL-O&A", "SIO/DO", "Birch Aquarium", "MarFac", "MSDC", "Sea Grant", "SIO Academic Department", "SOMTS"];
       const scrippsGraduate = ["Applied Ocean Science", "Climate Sciences", "Physical Oceanography", "Geophysics", "Geosciences", "Marine Chemistry and Geochemistry", "Biological Oceanography", "Marine Biology", "Other"];
@@ -261,7 +262,7 @@
         anticipatedGraduation.required = isStudent;
         if (!isStudent) anticipatedGraduation.value = "";
 
-        const isGraduate = role.value === "Graduate Student MS, PhD";
+        const isGraduate = graduateRoles.has(role.value);
         graduateScopeWrap.hidden = !isGraduate;
         graduateScope.required = isGraduate;
         graduateScope.value = "";

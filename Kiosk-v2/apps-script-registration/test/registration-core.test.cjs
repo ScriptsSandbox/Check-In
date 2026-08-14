@@ -41,6 +41,12 @@ test("accepts visitor and community roles", () => {
   assert.equal(call('canonicalRole_("Community member", "")'), "Community member");
 });
 
+test("records master's and doctoral students as separate roles", () => {
+  assert.equal(call('canonicalRole_("Graduate Student (MS)", "")'), "Graduate Student (MS)");
+  assert.equal(call('canonicalRole_("Graduate Student (PhD)", "")'), "Graduate Student (PhD)");
+  assert.equal(call('canonicalRole_("Graduate Student MS, PhD", "")'), "");
+});
+
 test("uses one consolidated undergraduate role", () => {
   assert.equal(call('canonicalRole_("Undergraduate Student (UG)", "")'), "Undergraduate Student (UG)");
   assert.equal(call('canonicalRole_("UG Student Employee", "")'), "");
@@ -65,7 +71,7 @@ test("rejects bots, rushed submissions, and missing consent", () => {
   const base = {
     firstName: "Test",
     lastName: "Member",
-    role: "Graduate Student MS, PhD",
+    role: "Graduate Student (PhD)",
     affiliation: "CASPO-O&A",
     anticipatedGraduation: "2028-06",
     identifierType: "Student PID",

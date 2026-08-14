@@ -22,6 +22,13 @@ test("offers one consolidated undergraduate role", () => {
   assert.ok(affiliationOptions("UG Student Employee").includes("Marine Biology"));
 });
 
+test("offers separate master's and doctoral roles", () => {
+  const roles = Array.from<string>(PROFILE_ROLES);
+  assert.ok(roles.includes("Graduate Student (MS)"));
+  assert.ok(roles.includes("Graduate Student (PhD)"));
+  assert.equal(roles.includes("Graduate Student MS, PhD"), false);
+});
+
 test("asks only the next missing profile question", () => {
   const profile = emptyProfile();
   assert.equal(nextProfileQuestion(profile)?.field, "role");
@@ -35,12 +42,13 @@ test("asks only the next missing profile question", () => {
 
 test("does not ask non-undergraduates for graduation", () => {
   assert.equal(nextProfileQuestion({ role: "Staff", affiliation: "SIO/DO", anticipatedGraduation: "" }), null);
-  assert.equal(nextProfileQuestion({ role: "Graduate Student MS, PhD", affiliation: "Marine Biology", anticipatedGraduation: "" }), null);
+  assert.equal(nextProfileQuestion({ role: "Graduate Student (PhD)", affiliation: "Marine Biology", anticipatedGraduation: "" }), null);
 });
 
 test("offers role-appropriate choices", () => {
   assert.ok(affiliationOptions("Undergraduate Student (UG)").includes("Marine Biology"));
-  assert.ok(affiliationOptions("Graduate Student MS, PhD").includes("Electrical & Computer Engineering"));
+  assert.ok(affiliationOptions("Graduate Student (MS)").includes("Electrical & Computer Engineering"));
+  assert.ok(affiliationOptions("Graduate Student (PhD)").includes("Electrical & Computer Engineering"));
   assert.ok(affiliationOptions("Staff").includes("IOD-Biology"));
 });
 

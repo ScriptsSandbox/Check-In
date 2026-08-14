@@ -67,7 +67,7 @@ function validPayload(overrides = {}) {
     firstName: "Test",
     lastName: "Member",
     preferredName: "",
-    role: "Graduate Student MS, PhD",
+    role: "Graduate Student (PhD)",
     affiliation: "CASPO-O&A",
     anticipatedGraduation: "2028-06",
     identifierType: "Student PID",
@@ -89,7 +89,7 @@ test("creates normalized person, identifier, email, and registration rows", () =
   assert.equal(harness.people.appended.length, 1);
   assert.equal(harness.identifiers.appended.length, 2);
   assert.equal(harness.registrations.appended.length, 1);
-  assert.equal(harness.people.appended[0][peopleHeaders.indexOf("Role")], "Graduate Student MS, PhD");
+  assert.equal(harness.people.appended[0][peopleHeaders.indexOf("Role")], "Graduate Student (PhD)");
   assert.equal(harness.identifiers.appended[0][identifierHeaders.indexOf("Type")], "PID");
   assert.equal(harness.registrations.appended[0][registrationHeaders.indexOf("Program / Department")], "CASPO-O&A");
   assert.equal(harness.registrations.appended[0][registrationHeaders.indexOf("Anticipated Graduation")], "2028-06");

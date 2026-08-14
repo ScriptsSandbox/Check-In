@@ -17,7 +17,8 @@ export const PROFILE_ROLES = [
   "Academic",
   "Staff",
   "Postdoc",
-  "Graduate Student MS, PhD",
+  "Graduate Student (MS)",
+  "Graduate Student (PhD)",
   "MAS Student",
   "Undergraduate Student (UG)",
   "Affiliate (Retirees, Volunteers, etc.)",
@@ -29,6 +30,12 @@ export const PROFILE_ROLES = [
 const UNDERGRADUATE_ROLES = new Set([
   "Undergraduate Student (UG)",
   "UG Student Employee",
+]);
+
+const GRADUATE_ROLES = new Set([
+  "Graduate Student (MS)",
+  "Graduate Student (PhD)",
+  "Graduate Student MS, PhD",
 ]);
 
 export const SCRIPPS_UNITS = [
@@ -116,7 +123,7 @@ export function profileQuestionForField(field: ProfileField, role: string): Prof
 
 export function affiliationLabel(role: string): string {
   if (UNDERGRADUATE_ROLES.has(role)) return "Choose your major.";
-  if (role === "Graduate Student MS, PhD") return "Choose your graduate program or department.";
+  if (GRADUATE_ROLES.has(role)) return "Choose your graduate program or department.";
   if (role === "MAS Student") return "Choose your MAS program.";
   if (["Academic", "Staff", "Postdoc"].includes(role)) return "Choose your department, division, or unit.";
   return "Choose your organization or affiliation.";
@@ -124,7 +131,7 @@ export function affiliationLabel(role: string): string {
 
 export function affiliationOptions(role: string): string[] {
   if (UNDERGRADUATE_ROLES.has(role)) return [...UNDERGRADUATE_MAJORS, "Other"];
-  if (role === "Graduate Student MS, PhD") {
+  if (GRADUATE_ROLES.has(role)) {
     return [...SCRIPPS_GRADUATE_PROGRAMS, ...UCSD_DEPARTMENTS, "External university or institution", "Other"];
   }
   if (role === "MAS Student") return ["Marine Biodiversity & Conservation", "Climate Science & Policy", "Other"];

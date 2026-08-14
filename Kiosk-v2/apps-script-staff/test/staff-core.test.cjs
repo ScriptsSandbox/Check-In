@@ -61,3 +61,16 @@ test("manual check-in is provenance rather than an attention flag", () => {
   assert.deepEqual(Array.from(normal.flags), ["Duplicate tap"]);
   assert.equal(normal.checkInMethod, "");
 });
+
+test("staff profile edits validate role and student graduation", () => {
+  const undergraduate = core.staffValidateProfile_({ role: "Undergraduate Student (UG)", affiliation: "Marine Biology", anticipatedGraduation: "2028-06" });
+  assert.equal(undergraduate.ok, true);
+  assert.equal(undergraduate.value.anticipatedGraduation, "2028-06");
+  assert.equal(core.staffValidateProfile_({ role: "UG Student Employee", affiliation: "Marine Biology", anticipatedGraduation: "2028-06" }).ok, false);
+  assert.equal(core.staffValidateProfile_({ role: "Graduate Student (MS)", affiliation: "Marine Biology", anticipatedGraduation: "" }).ok, false);
+  assert.equal(core.staffValidateProfile_({ role: "Graduate Student (PhD)", affiliation: "Marine Biology", anticipatedGraduation: "2030-06" }).ok, true);
+  assert.equal(core.staffValidateProfile_({ role: "Graduate Student MS, PhD", affiliation: "Marine Biology", anticipatedGraduation: "2030-06" }).ok, false);
+  const staff = core.staffValidateProfile_({ role: "Staff", affiliation: "SIO/DO", anticipatedGraduation: "2028-06" });
+  assert.equal(staff.ok, true);
+  assert.equal(staff.value.anticipatedGraduation, "");
+});
