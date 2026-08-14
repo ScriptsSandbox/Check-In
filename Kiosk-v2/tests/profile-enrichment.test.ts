@@ -5,14 +5,21 @@ import {
   affiliationOptions,
   emptyProfile,
   nextProfileQuestion,
+  PROFILE_ROLES,
   profileQuestionForField,
   normalizedProfileAnswer,
 } from "../lib/profile-enrichment.ts";
 
 test("can reopen an earlier profile question for correction", () => {
-  const question = profileQuestionForField("role", "UG Student Employee");
+  const question = profileQuestionForField("role", "Undergraduate Student (UG)");
   assert.equal(question.field, "role");
-  assert.match(question.prompt, /change it/i);
+  assert.equal(question.prompt, "Choose your role.");
+});
+
+test("offers one consolidated undergraduate role", () => {
+  assert.ok(PROFILE_ROLES.includes("Undergraduate Student (UG)"));
+  assert.equal(Array.from<string>(PROFILE_ROLES).includes("UG Student Employee"), false);
+  assert.ok(affiliationOptions("UG Student Employee").includes("Marine Biology"));
 });
 
 test("asks only the next missing profile question", () => {

@@ -854,7 +854,7 @@ export default function Home() {
           <div className="profile-shell screen-content">
             <div className="profile-card profile-question-card">
               <span className="profile-card-tab" aria-hidden="true">ADDING TO YOUR PROFILE</span>
-              <button className="back" onClick={profileBack}><Arrow direction="left" /> {profileQuestion?.field === "role" ? "Back" : "Change previous answer"}</button>
+              <button className="back" onClick={profileBack}><Arrow direction="left" /> Back</button>
               {profileQuestion ? <>
                 <p className="eyebrow">{profileQuestion.eyebrow}</p>
                 <h1>{profileQuestion.heading}</h1>

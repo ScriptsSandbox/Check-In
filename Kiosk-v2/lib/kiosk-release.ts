@@ -1,5 +1,5 @@
 export const KIOSK_RELEASE = {
-  revision: "2026.08.14.8",
+  revision: "2026.08.14.9",
   date: "August 14, 2026",
-  summary: "Quiet 45-second page timeout with a 15-second warning",
+  summary: "Smaller profile prompts, simple back navigation, and unified undergraduate role",
 } as const;

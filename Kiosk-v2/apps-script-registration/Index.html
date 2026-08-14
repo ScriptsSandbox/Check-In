@@ -102,7 +102,7 @@
               <option value="">Choose one</option>
               <option>Academic</option><option>Staff</option><option>Postdoc</option>
               <option>Graduate Student MS, PhD</option><option>MAS Student</option><option>Undergraduate Student (UG)</option>
-              <option>UG Student Employee</option><option>Affiliate (Retirees, Volunteers, etc.)</option>
+              <option>Affiliate (Retirees, Volunteers, etc.)</option>
               <option>Visiting scholar or visitor</option><option>Community member</option><option>Other</option>
             </select>
           </label>
@@ -169,7 +169,7 @@
       const identifierType = document.getElementById("identifier-type");
       const identifier = document.getElementById("identifier");
       const startedAt = Date.now();
-      const studentRoles = new Set(["Graduate Student MS, PhD", "MAS Student", "Undergraduate Student (UG)", "UG Student Employee"]);
+      const studentRoles = new Set(["Graduate Student MS, PhD", "MAS Student", "Undergraduate Student (UG)"]);
 
       const scrippsUnits = ["IOD-Biology", "CMBB-Biology", "MBRD-Biology", "GRD-Earth", "IGPP-Earth", "CASPO-O&A", "MPL-O&A", "SIO/DO", "Birch Aquarium", "MarFac", "MSDC", "Sea Grant", "SIO Academic Department", "SOMTS"];
       const scrippsGraduate = ["Applied Ocean Science", "Climate Sciences", "Physical Oceanography", "Geophysics", "Geosciences", "Marine Chemistry and Geochemistry", "Biological Oceanography", "Marine Biology", "Other"];
@@ -267,7 +267,7 @@
         graduateScope.value = "";
         hideAffiliation();
 
-        if (role.value === "Undergraduate Student (UG)" || role.value === "UG Student Employee") {
+        if (role.value === "Undergraduate Student (UG)") {
           showAffiliation("What is your major?", undergraduateMajors);
         } else if (role.value === "MAS Student") {
           showAffiliation("Which MAS program?", [["Marine Biodiversity & Conservation", "Climate Science & Policy", "Other"]]);

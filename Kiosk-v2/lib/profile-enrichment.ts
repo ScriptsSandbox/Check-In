@@ -20,7 +20,6 @@ export const PROFILE_ROLES = [
   "Graduate Student MS, PhD",
   "MAS Student",
   "Undergraduate Student (UG)",
-  "UG Student Employee",
   "Affiliate (Retirees, Volunteers, etc.)",
   "Visiting scholar or visitor",
   "Community member",
@@ -95,7 +94,7 @@ export function profileQuestionForField(field: ProfileField, role: string): Prof
       field,
       eyebrow: "COMPLETE YOUR PROFILE",
       heading: "What best describes you?",
-      prompt: "Choose your role. You can go back and change it before finishing.",
+      prompt: "Choose your role.",
     };
   }
   if (field === "affiliation") {

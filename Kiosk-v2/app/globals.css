@@ -462,11 +462,11 @@ input:focus { border-color: var(--orange); }
 .choice-grid button { display: flex; justify-content: space-between; gap: 14px; min-height: 70px; padding: 18px 20px; border: 0; background: var(--gray); cursor: pointer; text-align: left; font-size: clamp(16px, 1.15vw, 22px); }
 .choice-grid button:hover, .choice-grid button.selected { background: var(--cream); color: var(--navy); }
 
-.profile-shell { width: min(100%, 720px); }
+.profile-shell { width: min(100%, 650px); }
 .profile-card {
   position: relative;
   width: 100%;
-  padding: clamp(34px, 4.2vw, 58px);
+  padding: clamp(30px, 3.5vw, 48px);
   border: 3px solid var(--navy);
   background: var(--cream);
   color: var(--navy);
@@ -488,7 +488,7 @@ input:focus { border-color: var(--orange); }
   letter-spacing: .15em;
 }
 .profile-card .eyebrow { margin-bottom: .9em; }
-.profile-card h1 { font-size: clamp(42px, 4.35vw, 76px); line-height: .96; }
+.profile-card h1 { font-size: clamp(40px, 3.85vw, 68px); line-height: .96; }
 .profile-card .lede { max-width: 590px; color: #35485b; font-size: clamp(18px, 1.3vw, 25px); }
 .profile-card .back { margin-bottom: clamp(20px, 2.5vh, 34px); color: var(--navy); }
 .profile-card .solid-action { display: inline-flex; align-items: center; gap: 16px; margin-top: 30px; }

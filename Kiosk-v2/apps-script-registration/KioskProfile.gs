@@ -5,7 +5,6 @@ const KIOSK_PROFILE_ROLES_ = [
   "Graduate Student MS, PhD",
   "MAS Student",
   "Undergraduate Student (UG)",
-  "UG Student Employee",
   "Affiliate (Retirees, Volunteers, etc.)",
   "Visiting scholar or visitor",
   "Community member",

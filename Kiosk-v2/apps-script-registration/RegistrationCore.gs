@@ -5,7 +5,6 @@ const REGISTRATION_ALLOWED_ROLES_ = [
   "Graduate Student MS, PhD",
   "MAS Student",
   "Undergraduate Student (UG)",
-  "UG Student Employee",
   "Affiliate (Retirees, Volunteers, etc.)",
   "Visiting scholar or visitor",
   "Community member",
@@ -16,7 +15,6 @@ const REGISTRATION_STUDENT_ROLES_ = [
   "Graduate Student MS, PhD",
   "MAS Student",
   "Undergraduate Student (UG)",
-  "UG Student Employee",
 ];
 
 const REGISTRATION_ALLOWED_ID_TYPES_ = [

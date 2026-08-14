@@ -41,6 +41,11 @@ test("accepts visitor and community roles", () => {
   assert.equal(call('canonicalRole_("Community member", "")'), "Community member");
 });
 
+test("uses one consolidated undergraduate role", () => {
+  assert.equal(call('canonicalRole_("Undergraduate Student (UG)", "")'), "Undergraduate Student (UG)");
+  assert.equal(call('canonicalRole_("UG Student Employee", "")'), "");
+});
+
 test("accepts role-specific majors, graduate programs, and UCSD departments", () => {
   assert.equal(call('canonicalAffiliation_("Marine Biology", "")'), "Marine Biology");
   assert.equal(call('canonicalAffiliation_("Applied Ocean Science", "")'), "Applied Ocean Science");
