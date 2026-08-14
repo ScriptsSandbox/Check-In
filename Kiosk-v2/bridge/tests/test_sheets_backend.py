@@ -1,6 +1,12 @@
 from datetime import datetime
 
-from sheets_backend import GoogleSheetsProvider, SheetsCheckInBackend, normalize_person_id, users_matching_identifier
+from sheets_backend import (
+    GoogleSheetsProvider,
+    SheetsCheckInBackend,
+    normalize_person_id,
+    user_has_card_digest,
+    users_matching_identifier,
+)
 
 
 class FakeProvider:
@@ -42,11 +48,12 @@ class FakeProvider:
         if len(matches) != 1:
             raise ValueError("The account could not be identified uniquely.")
         digest = self.card_digest(card_uid)
-        if any(str(row.get("Card Digest", "")).lower() == digest for row in self.users):
+        if any(user_has_card_digest(row, digest) for row in self.users):
             raise ValueError("That card is already connected to an account.")
-        if matches[0].get("Card Digest"):
-            raise ValueError("That account already has a connected card.")
+        digests = list(matches[0].get("Card Digests") or [])
+        digests.append(digest)
         matches[0]["Card Digest"] = digest
+        matches[0]["Card Digests"] = tuple(dict.fromkeys(digests))
         return dict(matches[0])
 
     def update_profile(self, person_id, field, value):
@@ -70,13 +77,15 @@ def backend_for(provider):
 
 
 def member(card="CARD123", person_id="person_1", student_id="A12345678", email="maker@example.com", identifiers=None):
+    card_digest = FakeProvider.card_digest(card) if card else ""
     return {
         "Person ID": person_id,
         "Name": "Test Maker",
         "Student ID": student_id,
         "Identifiers": identifiers or [student_id],
         "Email Address": email,
-        "Card Digest": FakeProvider.card_digest(card) if card else "",
+        "Card Digest": card_digest,
+        "Card Digests": (card_digest,) if card_digest else (),
         "Profile": {"role": "", "affiliation": "", "anticipatedGraduation": ""},
     }
 
@@ -119,15 +128,21 @@ def test_activity_cache_avoids_full_sheet_read_after_append():
     assert len(sheet.appends) == 1
 
 
-def test_google_sheets_provider_appends_only_a_digest_and_last_four_for_new_card():
+def test_google_sheets_provider_appends_a_second_card_without_replacing_the_first():
     provider = GoogleSheetsProvider("credentials", "database", "waivers", "long-enough-test-secret")
     provider._visits_sheet = FakeVisitsSheet()
     provider._cards_sheet = FakeCardsSheet()
-    provider._users = [member(card="", person_id="person_2")]
+    existing = member(card="", person_id="person_2")
+    existing_digest = provider.card_digest("OLDCARD")
+    existing["Card Digest"] = existing_digest
+    existing["Card Digests"] = (existing_digest,)
+    provider._users = [existing]
     provider._cache_expires_at = float("inf")
     updated = provider.update_user_card("12345678", "ABCDEF12345678")
     row, option = provider._cards_sheet.appends[0]
     assert updated["Card Digest"] == provider.card_digest("ABCDEF12345678")
+    assert existing_digest in updated["Card Digests"]
+    assert provider.card_digest("ABCDEF12345678") in updated["Card Digests"]
     assert row[1] == "person_2"
     assert row[2] == provider.card_digest("ABCDEF12345678")
     assert row[3] == "5678"
@@ -269,13 +284,24 @@ def test_staff_assisted_card_link_requires_a_designated_staff_card():
     assert all("NEWCARD" not in str(value) for value in provider.appended_rows[0])
 
 
-def test_card_link_target_must_have_no_existing_card():
+def test_card_link_adds_a_second_card_and_keeps_the_first_active():
     target = member(card="OLDCARD", person_id="person_member", student_id="A12345678")
     staff = member(card="STAFFCARD", person_id="person_staff", student_id="A87654321")
     provider = FakeProvider(users=[target, staff])
-    result = backend_for(provider).link_card("A12345678", "NEWCARD", "STAFFCARD", {"A87654321"})
-    assert result.outcome == "card_link_error"
-    assert provider.calls["append"] == 0
+    backend = backend_for(provider)
+    result = backend.link_card("A12345678", "NEWCARD", "STAFFCARD", {"A87654321"})
+    assert result.outcome == "card_linked"
+    assert backend.check_in("OLDCARD").outcome == "waiver_required"
+    assert backend.check_in("NEWCARD").outcome == "waiver_required"
+    assert provider.calls["append"] == 1
+
+
+def test_prepare_card_link_allows_an_account_with_an_existing_card():
+    target = member(card="OLDCARD", person_id="person_member", student_id="999222")
+    provider = FakeProvider(users=[target])
+    result = backend_for(provider).prepare_card_link("999222")
+    assert result.outcome == "link_ready"
+    assert result.display_name == "Test Maker"
 
 
 def test_duplicate_member_card_is_rejected():

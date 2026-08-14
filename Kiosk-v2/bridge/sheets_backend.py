@@ -64,6 +64,17 @@ def normalized_user_identifiers(record: dict[str, Any]) -> set[str]:
     return {normalized for value in values if (normalized := normalize_person_id(value))}
 
 
+def normalized_card_digests(record: dict[str, Any]) -> set[str]:
+    values = record.get("Card Digests") or [record.get("Card Digest")]
+    if isinstance(values, str):
+        values = [values]
+    return {str(value).strip().lower() for value in values if str(value).strip()}
+
+
+def user_has_card_digest(record: dict[str, Any], digest: str) -> bool:
+    return str(digest).strip().lower() in normalized_card_digests(record)
+
+
 def users_matching_identifier(users: list[dict[str, Any]], identifier: Any) -> list[dict[str, Any]]:
     normalized = normalize_person_id(identifier)
     if not normalized:
@@ -190,6 +201,11 @@ class GoogleSheetsProvider:
             ]
             person_cards = cards_by_person.get(person_id, [])
             card = person_cards[-1] if person_cards else {}
+            card_digests = tuple(dict.fromkeys(
+                str(record.get("Card Digest", "")).strip().lower()
+                for record in person_cards
+                if str(record.get("Card Digest", "")).strip()
+            ))
             registration = next((record for record in reversed(registrations) if str(record.get("Person ID", "")).strip() == person_id), {})
             users.append({
                 "Person ID": person_id,
@@ -198,6 +214,7 @@ class GoogleSheetsProvider:
                 "Identifiers": tuple(dict.fromkeys(aliases)),
                 "Email Address": str(person.get("Primary Email", "") or (email_record or {}).get("Normalized Value", "")).strip(),
                 "Card Digest": str(card.get("Card Digest", "")).strip().lower(),
+                "Card Digests": card_digests,
                 "Role": str(person.get("Role", "")).strip(),
                 "Profile": {
                     "role": str(person.get("Role", "")).strip(),
@@ -249,11 +266,9 @@ class GoogleSheetsProvider:
             matches = users_matching_identifier(users, normalized_identifier)
             if len(matches) != 1:
                 raise ValueError("The account could not be identified uniquely.")
-            if any(str(record.get("Card Digest", "")).lower() == digest for record in users):
+            if any(user_has_card_digest(record, digest) for record in users):
                 raise ValueError("That card is already connected to an account.")
             record = matches[0]
-            if str(record.get("Card Digest", "")).strip():
-                raise ValueError("That account already has a connected card.")
             self._connect()
             self._cards_sheet.append_row([
                 "card_" + uuid4().hex,
@@ -266,7 +281,10 @@ class GoogleSheetsProvider:
                 "Kiosk v2 staff link",
                 "",
             ], value_input_option="USER_ENTERED")
+            card_digests = list(normalized_card_digests(record))
+            card_digests.append(digest)
             record["Card Digest"] = digest
+            record["Card Digests"] = tuple(dict.fromkeys(card_digests))
             self._cache_expires_at = time.monotonic() + self.cache_seconds
             return dict(record)
 
@@ -349,7 +367,7 @@ class SheetsCheckInBackend:
         timings: dict[str, int] = {}
         digest = self.provider.card_digest(uid)
         stage_started = time.monotonic()
-        user = next((record for record in self.provider.user_records() if str(record.get("Card Digest", "")).lower() == digest), None)
+        user = next((record for record in self.provider.user_records() if user_has_card_digest(record, digest)), None)
         timings["user_lookup"] = elapsed_ms(stage_started)
         if user is None:
             timings["total"] = elapsed_ms(total_started)
@@ -379,8 +397,6 @@ class SheetsCheckInBackend:
         if len(matches) > 1:
             return CheckInResult(outcome="card_link_error", message="More than one account uses that identifier. Please see an administrator.")
         target = matches[0]
-        if str(target.get("Card Digest", "")).strip():
-            return CheckInResult(outcome="card_link_error", message="That account already has a connected card.")
         return CheckInResult(outcome="link_ready", display_name=str(target.get("Name", "")).strip() or "Sandbox member", message="Ask designated staff to tap their own card.")
 
     def update_profile(self, person_id: str, field: str, value: str) -> CheckInResult:
@@ -403,7 +419,7 @@ class SheetsCheckInBackend:
         staff_digest = self.provider.card_digest(staff_card_uid)
         stage_started = time.monotonic()
         users = self.provider.user_records()
-        staff = next((record for record in users if str(record.get("Card Digest", "")).lower() == staff_digest), None)
+        staff = next((record for record in users if user_has_card_digest(record, staff_digest)), None)
         staff_ids = normalized_user_identifiers(staff) if staff else set()
         allowed_staff = {normalize_person_id(value) for value in designated_staff_ids}
         timings["staff_lookup"] = elapsed_ms(stage_started)

@@ -28,7 +28,7 @@ CARD_LINK_STAFF_IDS=A12345678,123456789
 CARD_LINK_SESSION_SECONDS=300
 ```
 
-`CARD_LINK_STAFF_IDS` contains PIDs, TSNs, or employee IDs, not card UIDs. Each designated staff account must already have a card in the user database. Restart the bridge after changing the allowlist. If the member already has a card, resolve the replacement manually rather than overwriting it at the kiosk.
+`CARD_LINK_STAFF_IDS` contains PIDs, TSNs, or employee IDs, not card UIDs. Each designated staff account must already have a card in the user database. Restart the bridge after changing the allowlist. A member may have multiple active cards; adding a new card does not disable their existing cards. A card already assigned to any account cannot be assigned again.
 
 ## Test without hardware
 

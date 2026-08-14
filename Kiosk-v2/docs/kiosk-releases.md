@@ -9,5 +9,5 @@ more than one revision is released on the same day.
 
 | Revision | Date | What changed |
 | --- | --- | --- |
+| 2026.08.14.2 | August 14, 2026 | Existing accounts can receive additional active cards without disabling their earlier cards; cards still cannot be shared between accounts. |
 | 2026.08.14.1 | August 14, 2026 | Profile questions now appear before the orange confirmation; profile prompts use a high-contrast card and improved field spacing; the Staff panel shows the active revision. |
-
