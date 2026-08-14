@@ -36,6 +36,7 @@ type Announcement = {
   heading: string;
   body: string;
   closingTime: string;
+  closingDate: string;
 };
 
 const REGISTRATION_URL = process.env.NEXT_PUBLIC_REGISTRATION_URL?.trim() || "";
@@ -80,7 +81,17 @@ const emptyAnnouncement: Announcement = {
   heading: "CHECK IN WITH STAFF",
   body: "Please check in with me upstairs before starting work.",
   closingTime: "",
+  closingDate: "",
 };
+
+const INACTIVITY_SECONDS = 30;
+
+function localDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
 function Arrow({ direction = "right" }: { direction?: "right" | "left" }) {
   return <span aria-hidden="true">{direction === "right" ? "→" : "←"}</span>;
@@ -116,6 +127,7 @@ export default function Home() {
   const [linkError, setLinkError] = useState("");
   const [staffCardDetected, setStaffCardDetected] = useState(false);
   const [countdown, setCountdown] = useState(8);
+  const [idleCountdown, setIdleCountdown] = useState(INACTIVITY_SECONDS);
   const [now, setNow] = useState<Date | null>(null);
   const [announcement, setAnnouncement] = useState<Announcement>(emptyAnnouncement);
   const [announcementDraft, setAnnouncementDraft] = useState<Announcement>(emptyAnnouncement);
@@ -143,6 +155,11 @@ export default function Home() {
     if (saved) {
       try {
         const parsed = { ...emptyAnnouncement, ...JSON.parse(saved) };
+        if (parsed.closingTime && parsed.closingDate !== localDateKey(new Date())) {
+          parsed.closingTime = "";
+          parsed.closingDate = "";
+          window.localStorage.setItem("sandbox-kiosk-announcement", JSON.stringify(parsed));
+        }
         setAnnouncement(parsed);
         setAnnouncementDraft(parsed);
       } catch {
@@ -276,16 +293,27 @@ export default function Home() {
     [now],
   );
 
-  const minutesUntilClose = useMemo(() => {
-    if (demoClosingMinutes !== null) return demoClosingMinutes;
-    if (!now || !announcement.closingTime) return null;
+  const closingStatus = useMemo(() => {
+    if (demoClosingMinutes !== null) {
+      return {
+        mode: demoClosingMinutes <= 0 ? "closed" as const : "closing-soon" as const,
+        minutes: Math.max(0, demoClosingMinutes),
+      };
+    }
+    if (!now || !announcement.closingTime || announcement.closingDate !== localDateKey(now)) {
+      return { mode: "open" as const, minutes: null };
+    }
     const [hours, minutes] = announcement.closingTime.split(":").map(Number);
-    if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+    if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return { mode: "open" as const, minutes: null };
     const closes = new Date(now);
     closes.setHours(hours, minutes, 0, 0);
     const difference = Math.ceil((closes.getTime() - now.getTime()) / 60_000);
-    return difference >= 0 && difference <= 30 ? difference : null;
-  }, [announcement.closingTime, demoClosingMinutes, now]);
+    if (difference <= 0) return { mode: "closed" as const, minutes: 0 };
+    if (difference <= 30) return { mode: "closing-soon" as const, minutes: difference };
+    return { mode: "open" as const, minutes: null };
+  }, [announcement.closingDate, announcement.closingTime, demoClosingMinutes, now]);
+
+  const minutesUntilClose = closingStatus.minutes;
 
   const closingLabel = minutesUntilClose === 0
     ? "We’re closing now"
@@ -305,6 +333,7 @@ export default function Home() {
       ...announcementDraft,
       heading: announcementDraft.heading.trim() || emptyAnnouncement.heading,
       body: announcementDraft.body.trim() || emptyAnnouncement.body,
+      closingDate: announcementDraft.closingTime ? localDateKey(new Date()) : "",
     };
     setAnnouncement(next);
     window.localStorage.setItem("sandbox-kiosk-announcement", JSON.stringify(next));
@@ -364,6 +393,38 @@ export default function Home() {
     window.addEventListener("keydown", returnHome);
     return () => window.removeEventListener("keydown", returnHome);
   }, [reset]);
+
+  const idleTimerActive = screen !== "home" && screen !== "reading" && screen !== "success" && !staffOpen;
+
+  useEffect(() => {
+    setIdleCountdown(INACTIVITY_SECONDS);
+    if (!idleTimerActive) return;
+    const interval = window.setInterval(() => {
+      setIdleCountdown((value) => {
+        if (value <= 1) {
+          window.clearInterval(interval);
+          if (screen === "link-authorize" || screen === "link-error") {
+            fetch("http://127.0.0.1:8765/card-link/cancel", { method: "POST" }).catch(() => undefined);
+          }
+          reset();
+          return INACTIVITY_SECONDS;
+        }
+        return value - 1;
+      });
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [idleTimerActive, reset, screen]);
+
+  useEffect(() => {
+    if (!idleTimerActive) return;
+    const stay = () => setIdleCountdown(INACTIVITY_SECONDS);
+    window.addEventListener("pointerdown", stay);
+    window.addEventListener("keydown", stay);
+    return () => {
+      window.removeEventListener("pointerdown", stay);
+      window.removeEventListener("keydown", stay);
+    };
+  }, [idleTimerActive]);
 
   async function submitPid(event: FormEvent) {
     event.preventDefault();
@@ -541,11 +602,11 @@ export default function Home() {
                   </article>
                 )}
                 {minutesUntilClose !== null && (
-                  <article className="arrival-alert closing-alert">
-                    <span className="alert-index" aria-hidden="true">{String(minutesUntilClose).padStart(2, "0")}</span>
+                  <article className={`arrival-alert closing-alert ${closingStatus.mode === "closed" ? "closed-alert" : ""}`}>
+                    <span className="alert-index" aria-hidden="true">{closingStatus.mode === "closed" ? "×" : String(minutesUntilClose).padStart(2, "0")}</span>
                     <div>
-                      <p>CLOSING SOON</p>
-                      <strong>{closingLabel}. Please plan your work accordingly.</strong>
+                      <p>{closingStatus.mode === "closed" ? "MAKERSPACE CLOSED" : "CLOSING SOON"}</p>
+                      <strong>{closingStatus.mode === "closed" ? "Please see staff before beginning or continuing work." : `${closingLabel}. Please plan your work accordingly.`}</strong>
                     </div>
                   </article>
                 )}
@@ -636,10 +697,13 @@ export default function Home() {
           <div className="waiver-copy">
             <p className="eyebrow warning">WAIVER REQUIRED</p>
             <h1>Sign the waiver<br />on your phone.</h1>
-            <p className="lede">We found your Sandbox account, but no signed waiver is on file. Scan the code, complete the DocuSign waiver, then return here and try again.</p>
+            <p className="lede">We found your Sandbox account, but no signed waiver is on file. Scan the code and complete the DocuSign waiver.</p>
+            <div className="waiver-delay-note" role="note">
+              <b>ALLOW UP TO 15 MINUTES</b>
+              <span>Your signed waiver may take a little while to appear here. You do not need to tap repeatedly—return later and tap once.</span>
+            </div>
             <div className="button-row">
-              <button className="solid-action" onClick={() => setScreen("home")}>Done</button>
-              <button className="outline-action" onClick={() => setScreen("pid")}>Use another ID</button>
+              <button className="solid-action" onClick={() => setScreen("home")}>Done — return to check-in</button>
             </div>
           </div>
           {WAIVER_URL && (
@@ -828,17 +892,23 @@ export default function Home() {
     </section>
 
       {screen === "success" && (
-        <section className="success-plane">
-          <div className="success-mark" aria-hidden="true">✓</div>
-          <p className="eyebrow">CHECK-IN COMPLETE</p>
-          <h1>Welcome back,<br />{welcomeName}.</h1>
-          <p className="lede">You’re checked in to the Scripps Sandbox.</p>
-          {minutesUntilClose !== null && (
-            <div className="success-closing-alert" role="alert">
-              <span>{String(minutesUntilClose).padStart(2, "0")}</span>
-              <p><b>CLOSING SOON</b>{closingLabel}. Please choose a project you can stop safely before then.</p>
-            </div>
-          )}
+        <section className={`success-plane success-${closingStatus.mode}`}>
+          {closingStatus.mode === "open" ? <>
+            <div className="success-mark" aria-hidden="true">✓</div>
+            <p className="eyebrow">CHECK-IN COMPLETE</p>
+            <h1>Welcome back,<br />{welcomeName}.</h1>
+            <p className="lede">You’re checked in to the Scripps Sandbox.</p>
+          </> : closingStatus.mode === "closing-soon" ? <>
+            <div className="closing-time-badge" aria-hidden="true"><b>{String(minutesUntilClose).padStart(2, "0")}</b><span>MIN</span></div>
+            <p className="eyebrow">CHECK-IN RECORDED · CLOSING SOON</p>
+            <h1>We close in<br />{minutesUntilClose} minutes.</h1>
+            <p className="lede">Welcome, {welcomeName}. Only begin work you can stop and clean up safely before closing.</p>
+          </> : <>
+            <div className="closed-stripe" aria-hidden="true">CLOSED</div>
+            <p className="eyebrow">CHECK-IN RECORDED · MAKERSPACE CLOSED</p>
+            <h1>Please see<br />a staff member.</h1>
+            <p className="lede">The door may still be open, but do not begin or continue work without staff approval.</p>
+          </>}
           <div className="visit-card">
             <span>TODAY</span>
             <b>{timeLabel}</b>
@@ -847,6 +917,16 @@ export default function Home() {
           <button className="solid-action navy" onClick={reset}>Done</button>
           <p className="reset-note">Returning home in {countdown} seconds</p>
         </section>
+      )}
+
+      {idleTimerActive && (
+        <aside className="idle-return" role="status" aria-live="polite">
+          <div className="idle-ring" style={{ "--idle-progress": `${(idleCountdown / INACTIVITY_SECONDS) * 360}deg` } as React.CSSProperties}>
+            <span>{idleCountdown}</span>
+          </div>
+          <div><small>RETURNING TO START</small><b>This page will close automatically.</b></div>
+          <button type="button" onClick={() => setIdleCountdown(INACTIVITY_SECONDS)}>Stay here</button>
+        </aside>
       )}
 
       {demoControlsEnabled && demoOpen && (
@@ -862,11 +942,13 @@ export default function Home() {
           <button onClick={() => { startDemoCheckIn(); setDemoOpen(false); }}>Tap recognized ID <Arrow /></button>
           <button onClick={() => { setProfile(emptyProfile()); setProfileSessionAvailable(false); setScreen("profile"); setDemoOpen(false); }}>Tap ID · missing info <Arrow /></button>
           <button onClick={() => { setScreen("unknown-card"); setDemoOpen(false); }}>Tap unknown ID <Arrow /></button>
+          <button onClick={() => { setScreen("waiver-required"); setDemoOpen(false); }}>Waiver required <Arrow /></button>
           <button onClick={() => { setScreen("reader-error"); setDemoOpen(false); }}>Card reader error <Arrow /></button>
           <button onClick={() => { setScreen("pid"); setDemoOpen(false); }}>Manual ID check-in <Arrow /></button>
           <button onClick={() => { setScreen("new-here"); setDemoOpen(false); }}>New user <Arrow /></button>
           <button onClick={openStaffEditor}>Staff announcement <Arrow /></button>
           <button onClick={() => { setDemoClosingMinutes(18); setScreen("home"); setDemoOpen(false); }}>Simulate closing in 18 min <Arrow /></button>
+          <button onClick={() => { setDemoClosingMinutes(0); setScreen("home"); setDemoOpen(false); }}>Simulate closed <Arrow /></button>
           {demoClosingMinutes !== null && <button onClick={() => setDemoClosingMinutes(null)}>End closing simulation</button>}
           <button className="reset" onClick={reset}>Reset prototype</button>
         </aside>
@@ -903,7 +985,7 @@ export default function Home() {
             <textarea id="announcement-body" maxLength={120} value={announcementDraft.body} onChange={(event) => setAnnouncementDraft({ ...announcementDraft, body: event.target.value })} />
             <label htmlFor="closing-time">TODAY’S CLOSING TIME <span>optional</span></label>
             <input id="closing-time" type="time" value={announcementDraft.closingTime} onChange={(event) => setAnnouncementDraft({ ...announcementDraft, closingTime: event.target.value })} />
-            <p className="field-note">Within 30 minutes of this time, a closing alert appears automatically on arrival and after check-in.</p>
+            <p className="field-note">Within 30 minutes, check-ins receive a full closing-soon screen. At closing, they are told to see staff. This setting expires at midnight.</p>
             <label className="message-switch">
               <input type="checkbox" checked={announcementDraft.active} onChange={(event) => setAnnouncementDraft({ ...announcementDraft, active: event.target.checked })} />
               <span>Show the staff message now</span>

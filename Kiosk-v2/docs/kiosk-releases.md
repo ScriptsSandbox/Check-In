@@ -9,6 +9,7 @@ more than one revision is released on the same day.
 
 | Revision | Date | What changed |
 | --- | --- | --- |
+| 2026.08.14.5 | August 14, 2026 | Waiver screens explain the processing delay; unattended visitor screens return home after 30 seconds; closing-soon and closed check-ins use unmistakable full-screen treatments; closing times expire at midnight. |
 | 2026.08.14.4 | August 14, 2026 | Card replacement now adds the card-history timestamp column when upgrading an older Cards sheet and preserves the sheet's existing column order. |
 | 2026.08.14.3 | August 14, 2026 | Linking a new card now disables the account's previous active card(s), records the replacement, and leaves only the new card active. |
 | 2026.08.14.2 | August 14, 2026 | Existing accounts can receive additional active cards without disabling their earlier cards; cards still cannot be shared between accounts. |
