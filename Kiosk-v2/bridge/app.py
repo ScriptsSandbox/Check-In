@@ -49,11 +49,18 @@ def build_checkin_backend() -> SheetsCheckInBackend | AppsScriptCheckInBackend |
     return SheetsCheckInBackend(GoogleSheetsProvider.from_environment())
 
 
+def build_card_update_backend() -> AppsScriptCheckInBackend | None:
+    if SIMULATION_ENABLED or not os.getenv("CARD_UPDATE_APPS_SCRIPT_URL", "").strip():
+        return None
+    return AppsScriptCheckInBackend.card_updates_from_environment()
+
+
 class BridgeState:
     def __init__(
         self,
         backend: SheetsCheckInBackend | AppsScriptCheckInBackend | None = None,
         designated_card_link_staff_ids: set[str] | None = None,
+        card_update_backend: AppsScriptCheckInBackend | None = None,
     ) -> None:
         self.reader_status = "simulation" if SIMULATION_ENABLED else "searching"
         self.reader_port: str | None = None
@@ -61,6 +68,7 @@ class BridgeState:
         self.clients: set[asyncio.Queue[dict[str, Any]]] = set()
         self.guard = DuplicateGuard(window_seconds=DUPLICATE_WINDOW_SECONDS)
         self.backend = backend
+        self.card_update_backend = card_update_backend
         self.backend_ready = backend is None
         self.pending_card_uid: str | None = None
         self.pending_card_expires_at = 0.0
@@ -126,7 +134,7 @@ class BridgeState:
             len(self.clients),
         )
 
-        replacing_card = self.backend is not None and self.card_update_is_active()
+        replacing_card = self.card_update_backend is not None and self.card_update_is_active()
         expired_card_link = (
             self.backend is not None
             and self.card_link_identifier is not None
@@ -140,7 +148,7 @@ class BridgeState:
         if replacing_card:
             try:
                 result = await asyncio.to_thread(
-                    self.backend.complete_card_update,
+                    self.card_update_backend.complete_card_update,
                     self.card_update_code,
                     uid,
                 )
@@ -231,7 +239,7 @@ class BridgeState:
         return True
 
 
-STATE = BridgeState(build_checkin_backend())
+STATE = BridgeState(build_checkin_backend(), card_update_backend=build_card_update_backend())
 
 
 def choose_serial_port() -> str | None:
@@ -411,12 +419,12 @@ async def start_card_update(request: CardUpdateStart) -> dict[str, Any]:
     code = request.code.strip().upper().replace("-", "").replace(" ", "")
     if len(code) != 10 or not code.isalnum():
         raise HTTPException(status_code=422, detail="Enter the 10-character handoff code")
-    if STATE.backend is None or not hasattr(STATE.backend, "prepare_card_update"):
+    if STATE.card_update_backend is None:
         raise HTTPException(status_code=409, detail="Card replacement is unavailable on this kiosk")
     STATE.clear_card_link()
     STATE.clear_card_update()
     try:
-        result = await asyncio.to_thread(STATE.backend.prepare_card_update, code)
+        result = await asyncio.to_thread(STATE.card_update_backend.prepare_card_update, code)
     except Exception:
         LOGGER.exception("Replacement-card backend failed while validating the handoff")
         raise HTTPException(status_code=503, detail="The handoff could not be checked")

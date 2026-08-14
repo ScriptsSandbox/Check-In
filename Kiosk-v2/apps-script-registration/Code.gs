@@ -36,7 +36,7 @@ const REGISTRATION_CONFIG_ = {
     },
     cardUpdates: {
       name: "Card Update Sessions",
-      headers: ["Session ID", "Code Digest", "Person ID", "Status", "New Identifier Type", "New Identifier Value", "New Identifier Normalized", "Disable Old Card", "Old Card Disabled At", "Requested By", "Requested At", "Expires At", "Completed At", "FabMan Status", "Notes"],
+      headers: ["Session ID", "Code Digest", "Person ID", "Status", "New Identifier Type", "New Identifier Value", "New Identifier Normalized", "Disable Old Card", "Old Card Disabled At", "Requested By", "Requested At", "Expires At", "Completed At", "FabMan Status", "Notes", "FabMan Key Type"],
       createIfMissing: true,
     },
   },
@@ -188,6 +188,12 @@ function openRegistrationDatabase_() {
       sheet.setFrozenRows(1);
     }
     if (!sheet) throw new Error("Registration database setup is incomplete.");
+    if (definition.createIfMissing) {
+      const width = Math.max(sheet.getLastColumn(), 1);
+      const present = sheet.getRange(1, 1, 1, width).getDisplayValues()[0];
+      const missing = definition.headers.filter(function (header) { return present.indexOf(header) === -1; });
+      if (missing.length) sheet.getRange(1, present.length + 1, 1, missing.length).setValues([missing]);
+    }
     const actual = sheet.getRange(1, 1, 1, definition.headers.length).getDisplayValues()[0];
     definition.headers.forEach(function (header, index) {
       if (actual[index] !== header) throw new Error("Registration database layout does not match the expected schema.");
@@ -417,7 +423,9 @@ function completeKioskCardUpdate_(request) {
       if (!PropertiesService.getScriptProperties().getProperty(REGISTRATION_CONFIG_.fabmanApiKeyProperty)) return { ok: false, outcome: "card_update_error", message: "FabMan card replacement is not configured on the kiosk service yet." };
       const removed = registrationFabmanFetch_("members/" + encodeURIComponent(memberId) + "/key", "delete");
       if (!removed.ok && removed.status !== 404) return { ok: false, outcome: "card_update_error", message: "FabMan could not retire the old key. No Sandbox card change was saved." };
-      const added = registrationFabmanFetch_("members/" + encodeURIComponent(memberId) + "/key", "post", { type: "nfca", token: rawToken, state: "active" });
+      const keyType = String(session.record["FabMan Key Type"] || "nfca").trim().toLowerCase();
+      const allowedKeyTypes = ["em4102", "nfca", "nfcb", "nfcf", "iso15693", "hid"];
+      const added = registrationFabmanFetch_("members/" + encodeURIComponent(memberId) + "/key", "post", { type: allowedKeyTypes.indexOf(keyType) === -1 ? "nfca" : keyType, token: rawToken, state: "active" });
       if (!added.ok) {
         updateCardSessionStatus_(database.cardUpdates, session.rowNumber, "Pending", "FabMan replacement failed; retry required", "The old FabMan key may now be disabled. Retry the replacement tap.");
         return { ok: false, outcome: "card_update_error", message: "FabMan did not accept the replacement card. The old FabMan key is disabled; please retry or see an administrator." };

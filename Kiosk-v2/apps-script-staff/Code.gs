@@ -12,7 +12,7 @@ const STAFF_CONFIG_ = {
     notes: { name: "Staff Notes", headers: ["Note ID", "Note", "Created By", "Created At", "Status", "Resolved By", "Resolved At"] },
     tools: { name: "Tools", headers: ["Tool Key", "Display Name", "Active", "Staff Can Approve", "Sort Order", "Category", "Legacy Header"], allowAdditionalHeaders: true },
     cards: { name: "Cards", headers: ["Card ID", "Person ID", "Card Digest", "Last Four", "Status", "Linked At", "Retired At", "Source System", "Source Row"] },
-    cardUpdates: { name: "Card Update Sessions", headers: ["Session ID", "Code Digest", "Person ID", "Status", "New Identifier Type", "New Identifier Value", "New Identifier Normalized", "Disable Old Card", "Old Card Disabled At", "Requested By", "Requested At", "Expires At", "Completed At", "FabMan Status", "Notes"] },
+    cardUpdates: { name: "Card Update Sessions", headers: ["Session ID", "Code Digest", "Person ID", "Status", "New Identifier Type", "New Identifier Value", "New Identifier Normalized", "Disable Old Card", "Old Card Disabled At", "Requested By", "Requested At", "Expires At", "Completed At", "FabMan Status", "Notes", "FabMan Key Type"], createIfMissing: true, allowAdditionalHeaders: true },
   },
 };
 
@@ -388,8 +388,14 @@ function staffStartIdentityUpdate(input) {
   const code = staffRandomCode_();
   let oldCardDisabledAt = "";
   let fabmanStatus = "Unchanged until replacement tap";
+  let fabmanKeyType = "nfca";
+  const activeLink = staffActiveFabmanLink_(db, personId);
+  if (activeLink) {
+    const existingKey = fabmanFetch_("members/" + encodeURIComponent(Number(activeLink["FabMan Member ID"])) + "/key");
+    if (existingKey.ok && existingKey.data && existingKey.data.type) fabmanKeyType = staffClean_(existingKey.data.type, 20);
+  }
   if (disableOldCard) {
-    const link = staffActiveFabmanLink_(db, personId);
+    const link = activeLink;
     if (link) {
       const deleted = fabmanFetch_("members/" + encodeURIComponent(Number(link["FabMan Member ID"])) + "/key", "delete");
       if (!deleted.ok && deleted.status !== 404) throw new Error("FabMan could not disable the old key. Nothing was changed; try again.");
@@ -405,7 +411,7 @@ function staffStartIdentityUpdate(input) {
   db.cardUpdates.appendRow([
     staffId_("cardupdate"), staffCodeDigest_(code), personId, "Pending", identifierType, staffSheetSafe_(identifierValue), identifierNormalized,
     disableOldCard, oldCardDisabledAt, access.email, now, expiresAt, "", fabmanStatus,
-    "Existing FabMan member link, packages, memberships, equipment training, and history must remain unchanged."
+    "Existing FabMan member link, packages, memberships, equipment training, and history must remain unchanged.", fabmanKeyType
   ]);
   staffAfterWrite_(personId);
   return {
@@ -974,12 +980,25 @@ function staffDatabaseKeys_(keys) {
   const db = { spreadsheet: spreadsheet };
   keys.forEach(function (key) {
     const definition = STAFF_CONFIG_.sheets[key];
-    const sheet = spreadsheet.getSheetByName(definition.name);
+    let sheet = spreadsheet.getSheetByName(definition.name);
+    if (!sheet && definition.createIfMissing) {
+      sheet = spreadsheet.insertSheet(definition.name);
+      sheet.appendRow(definition.headers);
+      sheet.setFrozenRows(1);
+    }
     if (!sheet) throw new Error("Run setupStaffApp to finish the staff app database.");
+    if (definition.createIfMissing) staffEnsureColumns_(sheet, definition.headers);
     staffAssertHeaders_(sheet, definition.headers, definition.allowAdditionalHeaders);
     db[key] = sheet;
   });
   return db;
+}
+
+function staffEnsureColumns_(sheet, required) {
+  const width = Math.max(sheet.getLastColumn(), 1);
+  const headers = sheet.getRange(1, 1, 1, width).getDisplayValues()[0];
+  const missing = required.filter(function (header) { return headers.indexOf(header) === -1; });
+  if (missing.length) sheet.getRange(1, headers.length + 1, 1, missing.length).setValues([missing]);
 }
 
 function staffEnsureToolColumns_(sheet) {

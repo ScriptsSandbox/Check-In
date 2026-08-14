@@ -30,7 +30,18 @@ CARD_LINK_STAFF_IDS=A12345678,123456789
 CARD_LINK_SESSION_SECONDS=300
 ```
 
-`CARD_LINK_STAFF_IDS` contains PIDs or employee IDs, not card UIDs. Each designated staff account must already have a card in the user database. Restart the bridge after changing the allowlist. If the member already has a card, resolve the replacement manually rather than overwriting it at the kiosk.
+`CARD_LINK_STAFF_IDS` contains PIDs or employee IDs, not card UIDs. Each designated staff account must already have a card in the user database. Restart the bridge after changing the allowlist.
+
+## Administrator replacement handoff
+
+Card replacements start from the administrator-only user card in the staff app. The staff app creates a 15-minute handoff code; the kiosk validates that code and treats the next reader tap as the replacement card instead of a check-in. Normal check-ins continue to use the direct Sheets backend. Configure the separate Apps Script handoff client in the bridge environment:
+
+```sh
+CARD_UPDATE_APPS_SCRIPT_URL=https://script.google.com/macros/s/DEPLOYMENT_ID/exec
+CARD_UPDATE_API_KEY_FILE=/home/sandbox/.config/sandbox-kiosk/card-update-api-key
+```
+
+The raw UID is sent only during that authorized replacement request, over HTTPS, so the service can update the key on the existing FabMan member. It is not logged or stored in Sheets. Normal check-ins and unknown-card links continue to send keyed digests only.
 
 ## Test without hardware
 

@@ -57,6 +57,15 @@ class AppsScriptCheckInBackend:
             timeout_seconds=float(os.getenv("KIOSK_APPS_SCRIPT_TIMEOUT_SECONDS", "20")),
         )
 
+    @classmethod
+    def card_updates_from_environment(cls) -> "AppsScriptCheckInBackend":
+        return cls(
+            url=_required_value("CARD_UPDATE_APPS_SCRIPT_URL"),
+            api_key=_required_file_secret("CARD_UPDATE_API_KEY_FILE"),
+            card_hmac_secret=required_secret(),
+            timeout_seconds=float(os.getenv("CARD_UPDATE_APPS_SCRIPT_TIMEOUT_SECONDS", "20")),
+        )
+
     def card_digest(self, card_uid: str) -> str:
         return hmac.new(
             self.card_hmac_secret.encode("utf-8"),

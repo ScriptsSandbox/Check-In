@@ -139,7 +139,7 @@ def test_unknown_card_is_kept_only_for_a_short_staff_link_session() -> None:
 def test_card_update_session_consumes_the_next_tap_without_checking_in() -> None:
     async def scenario() -> None:
         backend = CardUpdateBackend()
-        state = BridgeState(backend)
+        state = BridgeState(None, card_update_backend=backend)
         queue: asyncio.Queue[dict[str, object]] = asyncio.Queue(maxsize=20)
         state.clients.add(queue)
         state.card_update_code = "ABCD234567"
