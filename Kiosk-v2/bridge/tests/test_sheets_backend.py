@@ -50,10 +50,10 @@ class FakeProvider:
         digest = self.card_digest(card_uid)
         if any(user_has_card_digest(row, digest) for row in self.users):
             raise ValueError("That card is already connected to an account.")
-        digests = list(matches[0].get("Card Digests") or [])
-        digests.append(digest)
+        replaced_count = len(matches[0].get("Card Digests") or [])
         matches[0]["Card Digest"] = digest
-        matches[0]["Card Digests"] = tuple(dict.fromkeys(digests))
+        matches[0]["Card Digests"] = (digest,)
+        matches[0]["Replaced Card Count"] = replaced_count
         return dict(matches[0])
 
     def update_profile(self, person_id, field, value):
@@ -110,11 +110,24 @@ class FakeVisitsSheet:
 
 
 class FakeCardsSheet:
-    def __init__(self):
+    HEADERS = ["Card ID", "Person ID", "Card Digest", "Last Four", "Status", "Linked At", "Disabled At", "Source", "Notes"]
+
+    def __init__(self, rows=None):
         self.appends = []
+        self.rows = [list(self.HEADERS), *(list(row) for row in (rows or []))]
+
+    def row_values(self, row_number):
+        return list(self.rows[row_number - 1])
+
+    def get_all_values(self):
+        return [list(row) for row in self.rows]
 
     def append_row(self, row, value_input_option=None):
         self.appends.append((list(row), value_input_option))
+        self.rows.append(list(row))
+
+    def update_cell(self, row_number, column_number, value):
+        self.rows[row_number - 1][column_number - 1] = value
 
 
 def test_activity_cache_avoids_full_sheet_read_after_append():
@@ -128,21 +141,26 @@ def test_activity_cache_avoids_full_sheet_read_after_append():
     assert len(sheet.appends) == 1
 
 
-def test_google_sheets_provider_appends_a_second_card_without_replacing_the_first():
+def test_google_sheets_provider_replaces_the_previous_active_card():
     provider = GoogleSheetsProvider("credentials", "database", "waivers", "long-enough-test-secret")
     provider._visits_sheet = FakeVisitsSheet()
-    provider._cards_sheet = FakeCardsSheet()
     existing = member(card="", person_id="person_2")
     existing_digest = provider.card_digest("OLDCARD")
     existing["Card Digest"] = existing_digest
     existing["Card Digests"] = (existing_digest,)
+    provider._cards_sheet = FakeCardsSheet([[
+        "card_old", "person_2", existing_digest, "1234", "Active",
+        "2026-08-13T09:00:00", "", "Registration", "",
+    ]])
     provider._users = [existing]
     provider._cache_expires_at = float("inf")
     updated = provider.update_user_card("12345678", "ABCDEF12345678")
     row, option = provider._cards_sheet.appends[0]
     assert updated["Card Digest"] == provider.card_digest("ABCDEF12345678")
-    assert existing_digest in updated["Card Digests"]
-    assert provider.card_digest("ABCDEF12345678") in updated["Card Digests"]
+    assert updated["Card Digests"] == (provider.card_digest("ABCDEF12345678"),)
+    assert updated["Replaced Card Count"] == 1
+    assert provider._cards_sheet.rows[1][4] == "Replaced"
+    assert provider._cards_sheet.rows[1][6]
     assert row[1] == "person_2"
     assert row[2] == provider.card_digest("ABCDEF12345678")
     assert row[3] == "5678"
@@ -284,16 +302,18 @@ def test_staff_assisted_card_link_requires_a_designated_staff_card():
     assert all("NEWCARD" not in str(value) for value in provider.appended_rows[0])
 
 
-def test_card_link_adds_a_second_card_and_keeps_the_first_active():
+def test_card_link_replaces_the_existing_card_and_disables_the_first():
     target = member(card="OLDCARD", person_id="person_member", student_id="A12345678")
     staff = member(card="STAFFCARD", person_id="person_staff", student_id="A87654321")
     provider = FakeProvider(users=[target, staff])
     backend = backend_for(provider)
     result = backend.link_card("A12345678", "NEWCARD", "STAFFCARD", {"A87654321"})
     assert result.outcome == "card_linked"
-    assert backend.check_in("OLDCARD").outcome == "waiver_required"
+    assert backend.check_in("OLDCARD").outcome == "unknown_card"
     assert backend.check_in("NEWCARD").outcome == "waiver_required"
     assert provider.calls["append"] == 1
+    assert provider.appended_rows[0][3] == "Card Replaced"
+    assert "Disabled 1 previous active card" in provider.appended_rows[0][6]
 
 
 def test_prepare_card_link_allows_an_account_with_an_existing_card():

@@ -270,21 +270,36 @@ class GoogleSheetsProvider:
                 raise ValueError("That card is already connected to an account.")
             record = matches[0]
             self._connect()
+            headers = self._cards_sheet.row_values(1)
+            person_column = headers.index("Person ID")
+            status_column = headers.index("Status")
+            disabled_at_column = headers.index("Disabled At")
+            rows = self._cards_sheet.get_all_values()
+            replaced_rows = [
+                row_number
+                for row_number, row in enumerate(rows[1:], start=2)
+                if len(row) > max(person_column, status_column)
+                and str(row[person_column]).strip() == str(record["Person ID"]).strip()
+                and str(row[status_column]).strip().lower() == "active"
+            ]
+            changed_at = datetime.now().isoformat(timespec="seconds")
             self._cards_sheet.append_row([
                 "card_" + uuid4().hex,
                 record["Person ID"],
                 digest,
                 normalized_uid[-4:],
                 "Active",
-                datetime.now().isoformat(timespec="seconds"),
+                changed_at,
                 "",
-                "Kiosk v2 staff link",
-                "",
+                "Kiosk v2 staff replacement",
+                f"Replaced {len(replaced_rows)} previous active card(s)",
             ], value_input_option="USER_ENTERED")
-            card_digests = list(normalized_card_digests(record))
-            card_digests.append(digest)
+            for row_number in replaced_rows:
+                self._cards_sheet.update_cell(row_number, status_column + 1, "Replaced")
+                self._cards_sheet.update_cell(row_number, disabled_at_column + 1, changed_at)
             record["Card Digest"] = digest
-            record["Card Digests"] = tuple(dict.fromkeys(card_digests))
+            record["Card Digests"] = (digest,)
+            record["Replaced Card Count"] = len(replaced_rows)
             self._cache_expires_at = time.monotonic() + self.cache_seconds
             return dict(record)
 
@@ -436,14 +451,15 @@ class SheetsCheckInBackend:
         timings["card_update"] = elapsed_ms(stage_started)
         display_name = str(target.get("Name", "")).strip() or "Sandbox member"
         staff_name = str(staff.get("Name", "")).strip() or "Designated staff"
+        replaced_count = int(target.get("Replaced Card Count", 0) or 0)
         self.provider.append_activity([
             "visit_" + uuid4().hex,
             target.get("Person ID", ""),
             self.local_datetime().isoformat(timespec="seconds"),
-            "Card Linked",
+            "Card Replaced" if replaced_count else "Card Linked",
             staff_name,
             "",
-            "",
+            f"Disabled {replaced_count} previous active card(s)." if replaced_count else "",
             "Kiosk v2",
             "",
         ])

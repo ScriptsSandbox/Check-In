@@ -665,7 +665,7 @@ export default function Home() {
             <button className="back" onClick={() => setScreen("unknown-card")}><Arrow direction="left" /> Back</button>
             <p className="eyebrow">STAFF-ASSISTED CARD LINK</p>
             <h1>Confirm the<br />member’s account.</h1>
-            <p className="lede compact">Staff: inspect the member’s physical ID, then enter their PID, TSN, or employee ID.</p>
+            <p className="lede compact">Staff: inspect the member’s physical ID, then enter their PID, TSN, or employee ID. Their new card will replace any card currently connected to the account.</p>
             <form onSubmit={startCardLink}>
               <label htmlFor="link-identifier">PID, TSN, OR EMPLOYEE ID</label>
               <input
@@ -688,8 +688,8 @@ export default function Home() {
             <button className="back" onClick={cancelCardLink}><Arrow direction="left" /> Cancel</button>
             <p className="eyebrow">DESIGNATED STAFF AUTHORIZATION</p>
             <h1>{staffCardDetected ? <>Checking staff<br />authorization…</> : <>Staff: tap your<br />own ID card.</>}</h1>
-            <p className="lede">Connecting the waiting card to <b>{linkTargetName}</b>. Only a designated staff card can approve this change.</p>
-            <p className="field-note">Do not tap the member’s card again until authorization is complete.</p>
+            <p className="lede">Replacing the card for <b>{linkTargetName}</b>. Only a designated staff card can approve this change.</p>
+            <p className="field-note">Approval disables the account’s previous card. Do not tap the member’s new card again until authorization is complete.</p>
           </div>
         )}
 
@@ -709,7 +709,7 @@ export default function Home() {
           <div className="status-content screen-content">
             <p className="eyebrow">CARD CONNECTED</p>
             <h1>{welcomeName},<br />you’re ready.</h1>
-            <p className="lede">Tap the newly connected card again to check in. A waiver is still required before entry.</p>
+            <p className="lede">The previous card is disabled. Tap the new card again to check in. A waiver is still required before entry.</p>
             <button className="solid-action" onClick={reset}>Return to check-in <Arrow /></button>
           </div>
         )}
