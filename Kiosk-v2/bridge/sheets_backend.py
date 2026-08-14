@@ -331,10 +331,8 @@ class GoogleSheetsProvider:
                 raise ValueError("That active Sandbox account could not be found.")
             profile = dict(user.get("Profile") or {})
             current = str(profile.get(field, "")).strip()
-            if current:
-                if current == value:
-                    return profile
-                raise ValueError("That profile field is already filled in. Ask Sandbox staff if it needs to change.")
+            if current == value:
+                return profile
 
             sheet_name, header = field_headers[field]
             sheet = self._people_sheet if sheet_name == "people" else self._registrations_sheet
@@ -362,6 +360,16 @@ class GoogleSheetsProvider:
                 updated_at = headers.index("Updated At")
                 sheet.update_cell(row_number, updated_at + 1, datetime.now().isoformat(timespec="seconds"))
                 user["Role"] = value
+                if current and current != value:
+                    registration_headers = self._registrations_sheet.row_values(1)
+                    registration_rows = self._registrations_sheet.get_all_values()
+                    registration_person_column = registration_headers.index("Person ID")
+                    registration_row = next((index + 1 for index in range(len(registration_rows) - 1, 0, -1) if str(registration_rows[index][registration_person_column]).strip() == person_id), 0)
+                    if registration_row:
+                        for dependent_header in ("Program / Department", "Anticipated Graduation"):
+                            self._registrations_sheet.update_cell(registration_row, registration_headers.index(dependent_header) + 1, "")
+                    profile["affiliation"] = ""
+                    profile["anticipatedGraduation"] = ""
             profile[field] = value
             user["Profile"] = profile
             self._cache_expires_at = time.monotonic() + self.cache_seconds

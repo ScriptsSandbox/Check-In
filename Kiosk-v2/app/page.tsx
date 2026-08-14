@@ -8,6 +8,7 @@ import {
   emptyProfile,
   nextProfileQuestion,
   normalizedProfileAnswer,
+  profileQuestionForField,
   type ProfileField,
   type ProfileSnapshot,
 } from "@/lib/profile-enrichment";
@@ -122,6 +123,7 @@ export default function Home() {
   const [profileOther, setProfileOther] = useState("");
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError, setProfileError] = useState("");
+  const [profileEditingField, setProfileEditingField] = useState<ProfileField | null>(null);
   const [linkIdentifier, setLinkIdentifier] = useState("");
   const [linkTargetName, setLinkTargetName] = useState("Sandbox member");
   const [linkError, setLinkError] = useState("");
@@ -142,8 +144,12 @@ export default function Home() {
   const cardDetectedAtRef = useRef<number | null>(null);
   const idleDeadlineRef = useRef<number | null>(null);
   const profileQuestion = useMemo(
-    () => profileSessionAvailable ? nextProfileQuestion(profile) : null,
-    [profile, profileSessionAvailable],
+    () => profileSessionAvailable
+      ? profileEditingField
+        ? profileQuestionForField(profileEditingField, profile.role)
+        : nextProfileQuestion(profile)
+      : null,
+    [profile, profileEditingField, profileSessionAvailable],
   );
 
   useEffect(() => {
@@ -367,6 +373,10 @@ export default function Home() {
   }
 
   const reset = useCallback(() => {
+    const previousScreen = screenRef.current;
+    if (!["home", "reading", "success"].includes(previousScreen)) {
+      fetch("http://127.0.0.1:8765/scanner/allow-repeat", { method: "POST" }).catch(() => undefined);
+    }
     cardDetectedAtRef.current = null;
     setScannerResult(null);
     setWelcomeName("Sandbox member");
@@ -380,6 +390,7 @@ export default function Home() {
     setProfileOther("");
     setProfileSaving(false);
     setProfileError("");
+    setProfileEditingField(null);
     setLinkIdentifier("");
     setLinkTargetName("Sandbox member");
     setLinkError("");
@@ -509,6 +520,10 @@ export default function Home() {
       let updatedProfile: ProfileSnapshot;
       if (demoControlsEnabled && !profileSessionAvailable) {
         updatedProfile = { ...profile, [field]: value };
+        if (field === "role" && profile.role && profile.role !== value) {
+          updatedProfile.affiliation = "";
+          updatedProfile.anticipatedGraduation = "";
+        }
       } else {
         const response = await fetch("http://127.0.0.1:8765/profile", {
           method: "POST",
@@ -527,6 +542,7 @@ export default function Home() {
         updatedProfile = { ...profile, ...(result.profile || {}), [field]: value };
       }
       setProfile(updatedProfile);
+      setProfileEditingField(null);
       setProfileAnswer("");
       setProfileOther("");
       if (!nextProfileQuestion(updatedProfile)) {
@@ -543,6 +559,30 @@ export default function Home() {
   function skipProfileQuestions() {
     setCountdown(8);
     setScreen("success");
+  }
+
+  function editProfileField(field: ProfileField) {
+    setProfileEditingField(field);
+    setProfileError("");
+    const currentValue = profile[field];
+    if (field === "affiliation" && currentValue.startsWith("Other – ")) {
+      setProfileAnswer("Other");
+      setProfileOther(currentValue.slice("Other – ".length));
+    } else {
+      setProfileAnswer(field === "role" ? "" : currentValue);
+      setProfileOther("");
+    }
+  }
+
+  function profileBack() {
+    if (profileQuestion?.field === "anticipatedGraduation") {
+      editProfileField("affiliation");
+    } else if (profileQuestion?.field === "affiliation") {
+      editProfileField("role");
+    } else {
+      setProfileEditingField(null);
+      setScreen("profile");
+    }
   }
 
   const showBrand = screen !== "success";
@@ -647,7 +687,7 @@ export default function Home() {
 
         {screen === "pid" && (
           <div className="form-content screen-content">
-            <button className="back" onClick={() => setScreen("home")}><Arrow direction="left" /> Back</button>
+            <button className="back" onClick={reset}><Arrow direction="left" /> Back</button>
             <p className="eyebrow">CHECK IN WITHOUT A CARD</p>
             <h1>Enter your ID.</h1>
             <p className="lede compact">Use your student PID, nine-digit TSN, or UC San Diego employee ID.</p>
@@ -691,7 +731,7 @@ export default function Home() {
             <button className="solid-action" onClick={() => setScreen("link-card")}>Ask staff to connect this card <Arrow /></button>
             <button className="solid-action" onClick={() => setScreen("pid")}>Use my UCSD ID or employee ID <Arrow /></button>
             <button className="outline-action" onClick={() => setScreen("new-here")}>I’m new here</button>
-            <button className="quiet-action" onClick={() => setScreen("home")}>Try the card again</button>
+            <button className="quiet-action" onClick={reset}>Try the card again</button>
           </div>
           </div>
         )}
@@ -707,7 +747,7 @@ export default function Home() {
               <span>Your signed waiver may take a little while to appear here. You do not need to tap repeatedly—return later and tap once.</span>
             </div>
             <div className="button-row">
-              <button className="solid-action" onClick={() => setScreen("home")}>Done — return to check-in</button>
+              <button className="solid-action" onClick={reset}>Done — return to check-in</button>
             </div>
           </div>
           {WAIVER_URL && (
@@ -724,7 +764,7 @@ export default function Home() {
             <p className="eyebrow warning">CHECK-IN NOT RECORDED</p>
             <h1>Please check in<br />with staff.</h1>
             <p className="lede">The card reader worked, but the attendance log did not. Staff can let you through while the kiosk reconnects.</p>
-            <button className="solid-action" onClick={() => setScreen("home")}>Try again</button>
+            <button className="solid-action" onClick={reset}>Try again</button>
           </div>
         )}
 
@@ -788,7 +828,7 @@ export default function Home() {
             <h1>The reader didn’t<br />catch your card.</h1>
             <p className="lede">Hold it flat against the reader for a full second.</p>
             <div className="button-row">
-              <button className="solid-action" onClick={() => setScreen("home")}>Try again</button>
+              <button className="solid-action" onClick={reset}>Try again</button>
               <button className="outline-action" onClick={() => setScreen("pid")}>Use another ID</button>
             </div>
           </div>
@@ -804,6 +844,7 @@ export default function Home() {
               <p className="lede compact">Before the confirmation screen, please answer a few short questions. We’ll only ask for information that’s missing.</p>
               <button className="solid-action" onClick={() => setScreen("profile-detail")}>Answer the first question <Arrow /></button>
               <button className="quiet-action align-left" onClick={skipProfileQuestions}>Skip for now</button>
+              <button className="quiet-action align-left" onClick={reset}>Start over and tap your ID again</button>
             </div>
           </div>
         )}
@@ -812,7 +853,7 @@ export default function Home() {
           <div className="profile-shell screen-content">
             <div className="profile-card profile-question-card">
               <span className="profile-card-tab" aria-hidden="true">ADDING TO YOUR PROFILE</span>
-              <button className="back" onClick={() => setScreen("profile")}><Arrow direction="left" /> Back</button>
+              <button className="back" onClick={profileBack}><Arrow direction="left" /> {profileQuestion?.field === "role" ? "Back" : "Change previous answer"}</button>
               {profileQuestion ? <>
                 <p className="eyebrow">{profileQuestion.eyebrow}</p>
                 <h1>{profileQuestion.heading}</h1>
@@ -820,7 +861,7 @@ export default function Home() {
                 {profileQuestion.field === "role" ? (
                   <div className="choice-grid profile-role-grid">
                     {PROFILE_ROLES.map((item) => (
-                      <button key={item} disabled={profileSaving} onClick={() => saveProfileAnswer("role", item)}>
+                      <button className={profile.role === item ? "selected" : ""} key={item} disabled={profileSaving} onClick={() => saveProfileAnswer("role", item)}>
                         {item}<Arrow />
                       </button>
                     ))}
@@ -859,13 +900,14 @@ export default function Home() {
                 )}
               </> : null}
               <button className="quiet-action align-left" onClick={skipProfileQuestions}>Skip for now</button>
+              <button className="quiet-action align-left" onClick={reset}>Start over and tap your ID again</button>
             </div>
           </div>
         )}
 
         {screen === "new-here" && (
         <div className="onboarding-content screen-content">
-          <button className="back" onClick={() => setScreen("home")}><Arrow direction="left" /> Back</button>
+          <button className="back" onClick={reset}><Arrow direction="left" /> Back</button>
           <p className="eyebrow">WELCOME TO THE SANDBOX</p>
           <h1>Start on<br />your phone.</h1>
           {REGISTRATION_URL ? (
@@ -913,6 +955,17 @@ export default function Home() {
             <h1>Please see<br />a staff member.</h1>
             <p className="lede">The door may still be open, but do not begin or continue work without staff approval.</p>
           </>}
+          {closingStatus.mode !== "open" && (
+            <article className={`success-closing-alert ${closingStatus.mode === "closed" ? "closed-alert" : ""}`} role="alert">
+              <span aria-hidden="true">{closingStatus.mode === "closed" ? "×" : String(minutesUntilClose).padStart(2, "0")}</span>
+              <p>
+                <b>{closingStatus.mode === "closed" ? "MAKERSPACE CLOSED" : "CLOSING SOON"}</b>
+                {closingStatus.mode === "closed"
+                  ? "Please see staff before beginning or continuing work."
+                  : `${closingLabel}. Please plan your work and cleanup accordingly.`}
+              </p>
+            </article>
+          )}
           <div className="visit-card">
             <span>TODAY</span>
             <b>{timeLabel}</b>

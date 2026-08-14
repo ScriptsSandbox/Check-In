@@ -61,8 +61,9 @@ class FakeProvider:
         if not user:
             raise ValueError("That active Sandbox account could not be found.")
         profile = dict(user.get("Profile") or {})
-        if profile.get(field) and profile[field] != value:
-            raise ValueError("That profile field is already filled in.")
+        if field == "role" and profile.get("role") and profile["role"] != value:
+            profile["affiliation"] = ""
+            profile["anticipatedGraduation"] = ""
         profile[field] = value
         user["Profile"] = profile
         return profile
@@ -223,14 +224,15 @@ def test_known_card_with_waiver_appends_normalized_visit_shape():
     assert "CARD123" not in row
 
 
-def test_profile_answers_fill_blanks_without_overwriting_existing_values():
+def test_profile_answers_can_be_corrected_during_the_active_session():
     provider = FakeProvider(users=[member()])
     backend = backend_for(provider)
     first = backend.update_profile("person_1", "role", "Undergraduate Student (UG)")
     assert first.outcome == "profile_updated"
     assert first.profile["role"] == "Undergraduate Student (UG)"
-    rejected = backend.update_profile("person_1", "role", "Staff")
-    assert rejected.outcome == "profile_error"
+    corrected = backend.update_profile("person_1", "role", "Staff")
+    assert corrected.outcome == "profile_updated"
+    assert corrected.profile == {"role": "Staff", "affiliation": "", "anticipatedGraduation": ""}
 
 
 def test_unknown_card_does_not_read_waivers_or_activity_or_write():

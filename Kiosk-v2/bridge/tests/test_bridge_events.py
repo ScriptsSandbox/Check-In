@@ -27,6 +27,21 @@ class FailingBackend:
         raise RuntimeError("temporary Sheets failure")
 
 
+class CountingProfileBackend:
+    def __init__(self) -> None:
+        self.check_in_calls = 0
+
+    def check_in(self, uid: str) -> CheckInResult:
+        self.check_in_calls += 1
+        return CheckInResult(
+            outcome="success",
+            display_name="Test member",
+            visit_count=4,
+            person_id="person_1",
+            profile={"role": "", "affiliation": "", "anticipatedGraduation": ""},
+        )
+
+
 class CardLinkBackend:
     def __init__(self) -> None:
         self.link_calls = []
@@ -97,6 +112,30 @@ def test_backend_failure_is_display_safe_and_allows_immediate_retry() -> None:
         assert "temporary Sheets failure" not in str(failed)
 
         assert await state.publish("0123456789ABCD") is True
+
+    asyncio.run(scenario())
+
+
+def test_intentional_repeat_resumes_profile_without_second_check_in() -> None:
+    async def scenario() -> None:
+        backend = CountingProfileBackend()
+        state = BridgeState(backend)
+        queue: asyncio.Queue[dict[str, object]] = asyncio.Queue(maxsize=20)
+        state.clients.add(queue)
+
+        assert await state.publish("0123456789ABCD") is True
+        await queue.get()
+        first = await queue.get()
+        assert first["outcome"] == "success"
+        assert backend.check_in_calls == 1
+
+        assert state.allow_intentional_repeat() is True
+        assert await state.publish("0123456789ABCD") is True
+        await queue.get()
+        resumed = await queue.get()
+        assert resumed["outcome"] == "success"
+        assert "already recorded" in str(resumed["message"])
+        assert backend.check_in_calls == 1
 
     asyncio.run(scenario())
 

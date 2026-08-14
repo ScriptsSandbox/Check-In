@@ -38,6 +38,12 @@ class DuplicateGuardTests(unittest.TestCase):
         guard.forget("04A1B2C3")
         self.assertTrue(guard.accept("04A1B2C3", now=11))
 
+    def test_clear_allows_an_intentional_repeat(self) -> None:
+        guard = DuplicateGuard(window_seconds=15)
+        self.assertTrue(guard.accept("04A1B2C3", now=10))
+        guard.clear()
+        self.assertTrue(guard.accept("04A1B2C3", now=11))
+
 
 if __name__ == "__main__":
     unittest.main()

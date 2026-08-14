@@ -40,3 +40,8 @@ class DuplicateGuard:
         if uid == self._last_uid:
             self._last_uid = None
             self._last_seen = 0.0
+
+    def clear(self) -> None:
+        """Allow the next card read after an intentional return to the start."""
+        self._last_uid = None
+        self._last_seen = 0.0

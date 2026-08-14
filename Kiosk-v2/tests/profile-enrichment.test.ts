@@ -5,8 +5,15 @@ import {
   affiliationOptions,
   emptyProfile,
   nextProfileQuestion,
+  profileQuestionForField,
   normalizedProfileAnswer,
 } from "../lib/profile-enrichment.ts";
+
+test("can reopen an earlier profile question for correction", () => {
+  const question = profileQuestionForField("role", "UG Student Employee");
+  assert.equal(question.field, "role");
+  assert.match(question.prompt, /change it/i);
+});
 
 test("asks only the next missing profile question", () => {
   const profile = emptyProfile();

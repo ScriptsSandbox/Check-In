@@ -78,31 +78,41 @@ export function emptyProfile(): ProfileSnapshot {
 
 export function nextProfileQuestion(profile: ProfileSnapshot): ProfileQuestion | null {
   if (!profile.role.trim()) {
-    return {
-      field: "role",
-      eyebrow: "COMPLETE YOUR PROFILE",
-      heading: "What best describes you?",
-      prompt: "Choose your role. This helps us understand who the Sandbox serves.",
-    };
+    return profileQuestionForField("role", profile.role);
   }
   if (!profile.affiliation.trim()) {
-    const student = profile.role.includes("Student");
-    return {
-      field: "affiliation",
-      eyebrow: "ONE MORE QUESTION",
-      heading: student ? "What do you study?" : "Where do you work?",
-      prompt: affiliationLabel(profile.role),
-    };
+    return profileQuestionForField("affiliation", profile.role);
   }
   if (UNDERGRADUATE_ROLES.has(profile.role) && !profile.anticipatedGraduation.trim()) {
-    return {
-      field: "anticipatedGraduation",
-      eyebrow: "LAST QUESTION",
-      heading: "When do you expect to graduate?",
-      prompt: "Choose your anticipated graduation month and year.",
-    };
+    return profileQuestionForField("anticipatedGraduation", profile.role);
   }
   return null;
+}
+
+export function profileQuestionForField(field: ProfileField, role: string): ProfileQuestion {
+  if (field === "role") {
+    return {
+      field,
+      eyebrow: "COMPLETE YOUR PROFILE",
+      heading: "What best describes you?",
+      prompt: "Choose your role. You can go back and change it before finishing.",
+    };
+  }
+  if (field === "affiliation") {
+    const student = role.includes("Student");
+    return {
+      field,
+      eyebrow: "ONE MORE QUESTION",
+      heading: student ? "What do you study?" : "Where do you work?",
+      prompt: affiliationLabel(role),
+    };
+  }
+  return {
+    field,
+    eyebrow: "LAST QUESTION",
+    heading: "When do you expect to graduate?",
+    prompt: "Choose your anticipated graduation month and year.",
+  };
 }
 
 export function affiliationLabel(role: string): string {

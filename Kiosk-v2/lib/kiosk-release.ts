@@ -1,5 +1,5 @@
 export const KIOSK_RELEASE = {
-  revision: "2026.08.14.6",
+  revision: "2026.08.14.7",
   date: "August 14, 2026",
-  summary: "Single-pass idle timer and corrected countdown alignment",
+  summary: "Visible closing alerts and correctable profile questions",
 } as const;

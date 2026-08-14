@@ -66,15 +66,19 @@ function updateKioskProfile_(request) {
     const current = kioskProfileForPerson_(database, personId);
     if (!current) return { ok: false, outcome: "profile_error", message: "That active Sandbox account could not be found." };
     const currentValue = field === "role" ? current.role : field === "affiliation" ? current.affiliation : current.anticipatedGraduation;
-    if (currentValue) {
-      if (currentValue === value) return { ok: true, outcome: "profile_updated", personId: personId, profile: current, message: "Your profile is already up to date." };
-      return { ok: false, outcome: "profile_error", message: "That profile field is already filled in. Ask Sandbox staff if it needs to change." };
-    }
+    if (currentValue === value) return { ok: true, outcome: "profile_updated", personId: personId, profile: current, message: "Your profile is already up to date." };
 
     if (field === "role") {
       const row = kioskProfileRow_(database.people, personId);
       database.people.getRange(row, kioskProfileColumn_(database.people, "Role")).setValue(sheetSafe_(value));
       database.people.getRange(row, kioskProfileColumn_(database.people, "Updated At")).setValue(new Date());
+      if (current.role && current.role !== value) {
+        const registrationRow = kioskProfileRow_(database.registrations, personId);
+        if (registrationRow) {
+          database.registrations.getRange(registrationRow, kioskProfileColumn_(database.registrations, "Program / Department")).clearContent();
+          database.registrations.getRange(registrationRow, kioskProfileColumn_(database.registrations, "Anticipated Graduation")).clearContent();
+        }
+      }
     } else {
       let row = kioskProfileRow_(database.registrations, personId);
       if (!row) {

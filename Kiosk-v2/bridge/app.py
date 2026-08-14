@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from datetime import datetime, timezone
 import logging
 import os
@@ -67,6 +68,10 @@ class BridgeState:
         self.card_link_identifier: str | None = None
         self.profile_person_id: str | None = None
         self.profile_expires_at = 0.0
+        self.last_success_uid: str | None = None
+        self.last_success_result: CheckInResult | None = None
+        self.last_success_at = 0.0
+        self.resume_uid_once: str | None = None
         self.designated_card_link_staff_ids = (
             DESIGNATED_CARD_LINK_STAFF_IDS
             if designated_card_link_staff_ids is None
@@ -103,6 +108,18 @@ class BridgeState:
             return False
         return True
 
+    def allow_intentional_repeat(self) -> bool:
+        """Permit one fresh read, resuming a recent successful profile without logging twice."""
+        self.guard.clear()
+        can_resume = (
+            self.last_success_uid is not None
+            and self.last_success_result is not None
+            and self.profile_session_is_active()
+            and time.monotonic() - self.last_success_at < PROFILE_SESSION_SECONDS
+        )
+        self.resume_uid_once = self.last_success_uid if can_resume else None
+        return can_resume
+
     def broadcast(self, event: dict[str, Any]) -> None:
         for client in tuple(self.clients):
             if client.full():
@@ -133,6 +150,12 @@ class BridgeState:
             len(self.clients),
         )
 
+        resume_profile = (
+            uid == self.resume_uid_once
+            and self.last_success_result is not None
+            and self.profile_session_is_active()
+        )
+        self.resume_uid_once = None
         expired_card_link = (
             self.backend is not None
             and self.card_link_identifier is not None
@@ -143,7 +166,12 @@ class BridgeState:
             and self.card_link_identifier is not None
             and self.card_link_is_active()
         )
-        if expired_card_link:
+        if resume_profile:
+            result = replace(
+                self.last_success_result,
+                message="Your check-in was already recorded. Continue your profile update.",
+            )
+        elif expired_card_link:
             result = CheckInResult(
                 outcome="card_link_error",
                 message="The card-link session expired. Scan the member card again.",
@@ -195,6 +223,11 @@ class BridgeState:
             self.guard.forget(uid)
         elif self.backend is not None:
             self.backend_ready = True
+
+        if result.outcome == "success" and not resume_profile:
+            self.last_success_uid = uid
+            self.last_success_result = result
+            self.last_success_at = time.monotonic()
 
         processing_ms = round(
             (asyncio.get_running_loop().time() - started_at) * 1000
@@ -399,6 +432,11 @@ async def cancel_card_link() -> dict[str, bool]:
     return {"ok": True}
 
 
+@app.post("/scanner/allow-repeat")
+async def allow_repeat() -> dict[str, bool]:
+    return {"ok": True, "will_resume_profile": STATE.allow_intentional_repeat()}
+
+
 @app.post("/check-in/identifier")
 async def check_in_with_identifier(read: IdentifierCheckIn) -> dict[str, Any]:
     identifier = read.identifier.strip()
@@ -479,6 +517,8 @@ async def update_profile(answer: ProfileAnswer) -> dict[str, Any]:
     if result.outcome != "profile_updated":
         raise HTTPException(status_code=409, detail=result.message or "That answer could not be saved")
     STATE.profile_expires_at = time.monotonic() + PROFILE_SESSION_SECONDS
+    if STATE.last_success_result and STATE.last_success_result.person_id == STATE.profile_person_id:
+        STATE.last_success_result = replace(STATE.last_success_result, profile=result.profile)
     return {
         "ok": True,
         "outcome": result.outcome,
