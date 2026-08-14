@@ -11,10 +11,12 @@ const appSource = fs.readFileSync(path.join(root, "Code.gs"), "utf8");
 const headers = {
   People: ["Person ID", "Status", "Display Name", "Role", "Primary Email", "Secondary Emails", "Created At", "Updated At", "Source System", "Source Rows"],
   Identifiers: ["Identifier ID", "Person ID", "Type", "Value", "Normalized Value", "Primary", "Verified", "Active", "Created At", "Source System", "Source Rows"],
-  Registrations: ["Registration ID", "Person ID", "Status", "Submitted At", "Reviewed By", "Reviewed At", "Program / Department", "Identifier Type", "DocuSign Status", "Consent Version", "Source"],
+  Registrations: ["Registration ID", "Person ID", "Status", "Submitted At", "Reviewed By", "Reviewed At", "Program / Department", "Identifier Type", "DocuSign Status", "Consent Version", "Anticipated Graduation", "Source"],
   Cards: ["Card ID", "Person ID", "Card Digest", "Last Four", "Status", "Linked At", "Retired At", "Source System", "Source Row"],
   Visits: ["Visit ID", "Person ID", "Check In At", "Event Type", "Authorizing Entity", "Flags", "Notes", "Source System", "Source Row"],
   "Staff Access": ["Staff ID", "Name", "Email", "Role", "Active", "Card Linking Allowed", "Notes"],
+  "FabMan Links": ["Link ID", "Person ID", "FabMan Member ID", "Status", "Match Method", "Confirmed By", "Confirmed At", "Notes"],
+  "Card Update Sessions": ["Session ID", "Code Digest", "Person ID", "Status", "New Identifier Type", "New Identifier Value", "New Identifier Normalized", "Disable Old Card", "Old Card Disabled At", "Requested By", "Requested At", "Expires At", "Completed At", "FabMan Status", "Notes", "FabMan Key Type"],
 };
 
 function makeHarness(existingIdentifiers = []) {
@@ -24,6 +26,7 @@ function makeHarness(existingIdentifiers = []) {
     sheets[name] = {
       getName: () => name,
       getLastRow: () => 1 + (name === "Identifiers" ? existingIdentifiers.length : 0) + appended[name].length,
+      getLastColumn: () => headers[name].length,
       getRange(row, column, rowCount) {
         if (row === 1) return { getDisplayValues: () => [headers[name]] };
         if (name === "Identifiers" && row === 2 && column === 5 && rowCount === existingIdentifiers.length) {
@@ -92,6 +95,8 @@ test("creates normalized person, identifiers, and registration rows", () => {
   assert.equal(harness.appended.Identifiers[0][headers.Identifiers.indexOf("Normalized Value")], "A12345678");
   assert.equal(harness.appended.Registrations[0][headers.Registrations.indexOf("Status")], "Unreviewed");
   assert.equal(harness.appended.Registrations[0][headers.Registrations.indexOf("DocuSign Status")], "Awaiting verification");
+  assert.equal(harness.appended.Registrations[0][headers.Registrations.indexOf("Anticipated Graduation")], "");
+  assert.equal(harness.appended.Registrations[0][headers.Registrations.indexOf("Source")], "Online registration");
   assert.equal(harness.wasReleased(), true);
 });
 

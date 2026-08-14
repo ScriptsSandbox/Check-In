@@ -16,7 +16,7 @@ const REGISTRATION_CONFIG_ = {
     },
     registrations: {
       name: "Registrations",
-      headers: ["Registration ID", "Person ID", "Status", "Submitted At", "Reviewed By", "Reviewed At", "Program / Department", "Identifier Type", "DocuSign Status", "Consent Version", "Source"],
+      headers: ["Registration ID", "Person ID", "Status", "Submitted At", "Reviewed By", "Reviewed At", "Program / Department", "Identifier Type", "DocuSign Status", "Consent Version", "Anticipated Graduation", "Source"],
     },
     cards: {
       name: "Cards",
@@ -156,6 +156,7 @@ function submitRegistration(payload) {
       sheetSafe_(validated.value.identifierType),
       "Awaiting verification",
       REGISTRATION_CONFIG_.consentVersion,
+      "",
       source,
     ], appended);
 
