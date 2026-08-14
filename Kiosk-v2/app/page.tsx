@@ -140,6 +140,7 @@ export default function Home() {
   const demoControlsEnabled = process.env.NEXT_PUBLIC_KIOSK_DEMO === "true";
   const screenRef = useRef<Screen>("home");
   const cardDetectedAtRef = useRef<number | null>(null);
+  const idleDeadlineRef = useRef<number | null>(null);
   const profileQuestion = useMemo(
     () => profileSessionAvailable ? nextProfileQuestion(profile) : null,
     [profile, profileSessionAvailable],
@@ -396,35 +397,38 @@ export default function Home() {
 
   const idleTimerActive = screen !== "home" && screen !== "reading" && screen !== "success" && !staffOpen;
 
-  useEffect(() => {
+  const extendIdleTimer = useCallback(() => {
+    idleDeadlineRef.current = Date.now() + INACTIVITY_SECONDS * 1000;
     setIdleCountdown(INACTIVITY_SECONDS);
-    if (!idleTimerActive) return;
-    const interval = window.setInterval(() => {
-      setIdleCountdown((value) => {
-        if (value <= 1) {
-          window.clearInterval(interval);
-          if (screen === "link-authorize" || screen === "link-error") {
-            fetch("http://127.0.0.1:8765/card-link/cancel", { method: "POST" }).catch(() => undefined);
-          }
-          reset();
-          return INACTIVITY_SECONDS;
-        }
-        return value - 1;
-      });
-    }, 1000);
-    return () => window.clearInterval(interval);
-  }, [idleTimerActive, reset, screen]);
+  }, []);
 
   useEffect(() => {
+    idleDeadlineRef.current = null;
+    setIdleCountdown(INACTIVITY_SECONDS);
     if (!idleTimerActive) return;
-    const stay = () => setIdleCountdown(INACTIVITY_SECONDS);
-    window.addEventListener("pointerdown", stay);
-    window.addEventListener("keydown", stay);
-    return () => {
-      window.removeEventListener("pointerdown", stay);
-      window.removeEventListener("keydown", stay);
+
+    idleDeadlineRef.current = Date.now() + INACTIVITY_SECONDS * 1000;
+    let expired = false;
+    const tick = () => {
+      const deadline = idleDeadlineRef.current;
+      if (deadline === null || expired) return;
+      const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+      setIdleCountdown(remaining);
+      if (remaining === 0) {
+        expired = true;
+        window.clearInterval(interval);
+        if (screen === "link-authorize" || screen === "link-error") {
+          fetch("http://127.0.0.1:8765/card-link/cancel", { method: "POST" }).catch(() => undefined);
+        }
+        reset();
+      }
     };
-  }, [idleTimerActive]);
+    const interval = window.setInterval(tick, 250);
+    return () => {
+      expired = true;
+      window.clearInterval(interval);
+    };
+  }, [idleTimerActive, reset, screen]);
 
   async function submitPid(event: FormEvent) {
     event.preventDefault();
@@ -925,7 +929,7 @@ export default function Home() {
             <span>{idleCountdown}</span>
           </div>
           <div><small>RETURNING TO START</small><b>This page will close automatically.</b></div>
-          <button type="button" onClick={() => setIdleCountdown(INACTIVITY_SECONDS)}>Stay here</button>
+          <button type="button" onClick={extendIdleTimer}>Stay here</button>
         </aside>
       )}
 

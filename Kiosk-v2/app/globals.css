@@ -755,9 +755,9 @@ footer img { width: clamp(150px, 14vw, 250px); height: 70px; object-fit: contain
   box-shadow: 7px 7px 0 var(--orange);
   transform: translateX(-50%);
 }
-.idle-ring { --idle-progress: 360deg; display: grid; width: 48px; height: 48px; place-items: center; border-radius: 50%; background: conic-gradient(var(--orange) var(--idle-progress), #d9d5cb 0); }
-.idle-ring::before { grid-area: 1 / 1; width: 36px; height: 36px; border-radius: 50%; background: var(--cream); content: ""; }
-.idle-ring span { position: relative; z-index: 1; font: 750 15px/1 "Jost"; }
+.idle-ring { --idle-progress: 360deg; position: relative; width: 48px; height: 48px; flex: 0 0 48px; border-radius: 50%; background: conic-gradient(var(--orange) var(--idle-progress), #d9d5cb 0); }
+.idle-ring::before { position: absolute; inset: 6px; border-radius: 50%; background: var(--cream); content: ""; }
+.idle-ring span { position: absolute; inset: 0; z-index: 1; display: grid; place-items: center; color: var(--navy); font: 750 15px/1 "Jost"; }
 .idle-return small, .idle-return b { display: block; }
 .idle-return small { margin-bottom: 3px; font: 800 10px/1 "Jost"; letter-spacing: .13em; }
 .idle-return b { font: 600 15px/1.2 "Jost"; }
