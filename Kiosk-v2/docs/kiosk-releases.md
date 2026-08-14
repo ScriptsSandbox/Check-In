@@ -9,6 +9,7 @@ more than one revision is released on the same day.
 
 | Revision | Date | What changed |
 | --- | --- | --- |
+| 2026.08.14.11 | August 14, 2026 | Graduate students now choose one concise graduate-program answer. Applied Ocean Science records SIO, ECE, or MAE in that answer, and common interdisciplinary programs are represented without adding another screen. |
 | 2026.08.14.10 | August 14, 2026 | Master's and doctoral students are recorded as separate roles; the profile grid no longer shows a dark empty cell; staff can edit a member's role, affiliation, and graduation details from the Staff Desk. |
 | 2026.08.14.9 | August 14, 2026 | Profile dialogs are smaller, previous-question navigation consistently says Back, and UG Student Employee is consolidated into Undergraduate Student (UG) on the kiosk and registration form. |
 | 2026.08.14.8 | August 14, 2026 | Visitor pages remain quiet for 30 seconds, then show the return notice and countdown only during the final 15 seconds of the 45-second timeout. |

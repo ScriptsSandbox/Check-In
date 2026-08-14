@@ -48,7 +48,8 @@ test("does not ask non-undergraduates for graduation", () => {
 test("offers role-appropriate choices", () => {
   assert.ok(affiliationOptions("Undergraduate Student (UG)").includes("Marine Biology"));
   assert.ok(affiliationOptions("Graduate Student (MS)").includes("Electrical & Computer Engineering"));
-  assert.ok(affiliationOptions("Graduate Student (PhD)").includes("Electrical & Computer Engineering"));
+  assert.ok(affiliationOptions("Graduate Student (PhD)").includes("Applied Ocean Science (AOS) — ECE"));
+  assert.ok(affiliationOptions("Graduate Student (PhD)").includes("Bioinformatics and Systems Biology"));
   assert.ok(affiliationOptions("Staff").includes("IOD-Biology"));
 });
 

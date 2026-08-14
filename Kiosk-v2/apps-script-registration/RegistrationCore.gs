@@ -45,13 +45,23 @@ const REGISTRATION_ALLOWED_AFFILIATIONS_ = [
 
   // Scripps graduate curricular groups and MAS programs
   "Applied Ocean Science",
+  "Applied Ocean Science (AOS) — SIO",
+  "Applied Ocean Science (AOS) — ECE",
+  "Applied Ocean Science (AOS) — MAE",
   "Climate Sciences",
+  "Climate Sciences (Scripps)",
   "Physical Oceanography",
+  "Physical Oceanography (Scripps)",
   "Geophysics",
+  "Geophysics (Scripps)",
   "Geosciences",
+  "Geosciences (Scripps)",
   "Marine Chemistry and Geochemistry",
+  "Marine Chemistry and Geochemistry (Scripps)",
   "Biological Oceanography",
+  "Biological Oceanography (Scripps)",
   "Marine Biology",
+  "Marine Biology (Scripps)",
   "Oceanic and Atmospheric Sciences",
   "Marine Biodiversity & Conservation",
   "Climate Science & Policy",
@@ -66,6 +76,10 @@ const REGISTRATION_ALLOWED_AFFILIATIONS_ = [
   "Computer Science & Engineering",
   "Computer Science",
   "Bioengineering",
+  "Bioinformatics and Systems Biology",
+  "Biomedical Sciences",
+  "Neurosciences",
+  "Materials Science and Engineering",
   "Chemical & NanoEngineering",
   "Chemical Engineering",
   "NanoEngineering",
@@ -82,6 +96,7 @@ const REGISTRATION_ALLOWED_AFFILIATIONS_ = [
   "Chemistry or Biochemistry",
   "Physics",
   "Mathematics",
+  "Mathematics & Statistics",
   "Data Science",
   "Cognitive Science",
   "Public Health",
@@ -93,6 +108,7 @@ const REGISTRATION_ALLOWED_AFFILIATIONS_ = [
   "Business or Economics",
   "Central administration or campus services",
   "Other UCSD department or program",
+  "Other UC San Diego graduate program",
   "Undeclared",
 
   // Visitors and external/community members
@@ -144,6 +160,7 @@ function canonicalAffiliation_(value, otherValue) {
   const affiliation = cleanText_(value, 120);
   if (REGISTRATION_ALLOWED_AFFILIATIONS_.indexOf(affiliation) === -1) return "";
   const needsDetail = [
+    "Other UC San Diego graduate program",
     "External university or institution",
     "Government laboratory or agency",
     "Nonprofit organization",

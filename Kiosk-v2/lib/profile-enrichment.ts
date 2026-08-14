@@ -44,10 +44,21 @@ export const SCRIPPS_UNITS = [
   "Sea Grant", "SIO Academic Department", "SOMTS",
 ];
 
-export const SCRIPPS_GRADUATE_PROGRAMS = [
-  "Applied Ocean Science", "Climate Sciences", "Physical Oceanography", "Geophysics",
-  "Geosciences", "Marine Chemistry and Geochemistry", "Biological Oceanography",
-  "Marine Biology",
+export const GRADUATE_PROGRAMS = [
+  "Applied Ocean Science (AOS) — SIO",
+  "Applied Ocean Science (AOS) — ECE",
+  "Applied Ocean Science (AOS) — MAE",
+  "Climate Sciences (Scripps)", "Physical Oceanography (Scripps)",
+  "Geophysics (Scripps)", "Geosciences (Scripps)",
+  "Marine Chemistry and Geochemistry (Scripps)",
+  "Biological Oceanography (Scripps)", "Marine Biology (Scripps)",
+  "Bioinformatics and Systems Biology", "Biomedical Sciences", "Neurosciences",
+  "Electrical & Computer Engineering", "Mechanical & Aerospace Engineering",
+  "Computer Science & Engineering", "Bioengineering", "Chemical Engineering",
+  "NanoEngineering", "Structural Engineering", "Materials Science and Engineering",
+  "Biological Sciences", "Chemistry & Biochemistry", "Physics",
+  "Mathematics & Statistics", "Data Science", "Cognitive Science", "Public Health",
+  "Other UC San Diego graduate program", "External university or institution",
 ];
 
 export const UCSD_DEPARTMENTS = [
@@ -123,7 +134,7 @@ export function profileQuestionForField(field: ProfileField, role: string): Prof
 
 export function affiliationLabel(role: string): string {
   if (UNDERGRADUATE_ROLES.has(role)) return "Choose your major.";
-  if (GRADUATE_ROLES.has(role)) return "Choose your graduate program or department.";
+  if (GRADUATE_ROLES.has(role)) return "Choose your graduate program.";
   if (role === "MAS Student") return "Choose your MAS program.";
   if (["Academic", "Staff", "Postdoc"].includes(role)) return "Choose your department, division, or unit.";
   return "Choose your organization or affiliation.";
@@ -132,7 +143,7 @@ export function affiliationLabel(role: string): string {
 export function affiliationOptions(role: string): string[] {
   if (UNDERGRADUATE_ROLES.has(role)) return [...UNDERGRADUATE_MAJORS, "Other"];
   if (GRADUATE_ROLES.has(role)) {
-    return [...SCRIPPS_GRADUATE_PROGRAMS, ...UCSD_DEPARTMENTS, "External university or institution", "Other"];
+    return [...GRADUATE_PROGRAMS, "Other"];
   }
   if (role === "MAS Student") return ["Marine Biodiversity & Conservation", "Climate Science & Policy", "Other"];
   if (["Academic", "Staff", "Postdoc"].includes(role)) return [...SCRIPPS_UNITS, ...UCSD_DEPARTMENTS, "Other"];

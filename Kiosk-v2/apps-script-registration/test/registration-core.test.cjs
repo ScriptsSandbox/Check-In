@@ -55,6 +55,9 @@ test("uses one consolidated undergraduate role", () => {
 test("accepts role-specific majors, graduate programs, and UCSD departments", () => {
   assert.equal(call('canonicalAffiliation_("Marine Biology", "")'), "Marine Biology");
   assert.equal(call('canonicalAffiliation_("Applied Ocean Science", "")'), "Applied Ocean Science");
+  assert.equal(call('canonicalAffiliation_("Applied Ocean Science (AOS) — ECE", "")'), "Applied Ocean Science (AOS) — ECE");
+  assert.equal(call('canonicalAffiliation_("Bioinformatics and Systems Biology", "")'), "Bioinformatics and Systems Biology");
+  assert.equal(call('canonicalAffiliation_("Other UC San Diego graduate program", "Robotics")'), "Other UC San Diego graduate program – Robotics");
   assert.equal(call('canonicalAffiliation_("Mechanical & Aerospace Engineering", "")'), "Mechanical & Aerospace Engineering");
   assert.equal(call('canonicalAffiliation_("Electrical & Computer Engineering", "")'), "Electrical & Computer Engineering");
   assert.equal(call('canonicalAffiliation_("San Diego State University", "")'), "San Diego State University");
