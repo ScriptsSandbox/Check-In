@@ -1,5 +1,5 @@
 export const KIOSK_RELEASE = {
-  revision: "2026.08.14.3",
+  revision: "2026.08.14.4",
   date: "August 14, 2026",
-  summary: "New cards replace and disable previous cards",
+  summary: "Card replacement supports the production sheet layout",
 } as const;

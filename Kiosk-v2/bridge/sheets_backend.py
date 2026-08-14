@@ -271,6 +271,9 @@ class GoogleSheetsProvider:
             record = matches[0]
             self._connect()
             headers = self._cards_sheet.row_values(1)
+            if "Disabled At" not in headers:
+                self._cards_sheet.update_cell(1, len(headers) + 1, "Disabled At")
+                headers.append("Disabled At")
             person_column = headers.index("Person ID")
             status_column = headers.index("Status")
             disabled_at_column = headers.index("Disabled At")
@@ -283,17 +286,21 @@ class GoogleSheetsProvider:
                 and str(row[status_column]).strip().lower() == "active"
             ]
             changed_at = datetime.now().isoformat(timespec="seconds")
-            self._cards_sheet.append_row([
-                "card_" + uuid4().hex,
-                record["Person ID"],
-                digest,
-                normalized_uid[-4:],
-                "Active",
-                changed_at,
-                "",
-                "Kiosk v2 staff replacement",
-                f"Replaced {len(replaced_rows)} previous active card(s)",
-            ], value_input_option="USER_ENTERED")
+            card_values = {
+                "Card ID": "card_" + uuid4().hex,
+                "Person ID": record["Person ID"],
+                "Card Digest": digest,
+                "Last Four": normalized_uid[-4:],
+                "Status": "Active",
+                "Linked At": changed_at,
+                "Disabled At": "",
+                "Source": "Kiosk v2 staff replacement",
+                "Notes": f"Replaced {len(replaced_rows)} previous active card(s)",
+            }
+            self._cards_sheet.append_row(
+                [card_values.get(header, "") for header in headers],
+                value_input_option="USER_ENTERED",
+            )
             for row_number in replaced_rows:
                 self._cards_sheet.update_cell(row_number, status_column + 1, "Replaced")
                 self._cards_sheet.update_cell(row_number, disabled_at_column + 1, changed_at)

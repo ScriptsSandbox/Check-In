@@ -112,9 +112,9 @@ class FakeVisitsSheet:
 class FakeCardsSheet:
     HEADERS = ["Card ID", "Person ID", "Card Digest", "Last Four", "Status", "Linked At", "Disabled At", "Source", "Notes"]
 
-    def __init__(self, rows=None):
+    def __init__(self, rows=None, headers=None):
         self.appends = []
-        self.rows = [list(self.HEADERS), *(list(row) for row in (rows or []))]
+        self.rows = [list(headers or self.HEADERS), *(list(row) for row in (rows or []))]
 
     def row_values(self, row_number):
         return list(self.rows[row_number - 1])
@@ -127,6 +127,8 @@ class FakeCardsSheet:
         self.rows.append(list(row))
 
     def update_cell(self, row_number, column_number, value):
+        while len(self.rows[row_number - 1]) < column_number:
+            self.rows[row_number - 1].append("")
         self.rows[row_number - 1][column_number - 1] = value
 
 
@@ -166,6 +168,33 @@ def test_google_sheets_provider_replaces_the_previous_active_card():
     assert row[3] == "5678"
     assert "ABCDEF12345678" not in row
     assert option == "USER_ENTERED"
+
+
+def test_google_sheets_provider_upgrades_legacy_cards_sheet_before_replacement():
+    legacy_headers = ["Card ID", "Person ID", "Card Digest", "Last Four", "Status", "Linked At", "Source", "Notes"]
+    provider = GoogleSheetsProvider("credentials", "database", "waivers", "long-enough-test-secret")
+    existing = member(card="", person_id="person_2")
+    existing_digest = provider.card_digest("OLDCARD")
+    existing["Card Digest"] = existing_digest
+    existing["Card Digests"] = (existing_digest,)
+    provider._cards_sheet = FakeCardsSheet([[
+        "card_old", "person_2", existing_digest, "1234", "Active",
+        "2026-08-13T09:00:00", "Registration", "",
+    ]], headers=legacy_headers)
+    provider._visits_sheet = FakeVisitsSheet()
+    provider._users = [existing]
+    provider._cache_expires_at = float("inf")
+
+    updated = provider.update_user_card("12345678", "ABCDEF12345678")
+
+    headers = provider._cards_sheet.rows[0]
+    appended, _ = provider._cards_sheet.appends[0]
+    assert headers[-1] == "Disabled At"
+    assert provider._cards_sheet.rows[1][headers.index("Status")] == "Replaced"
+    assert provider._cards_sheet.rows[1][headers.index("Disabled At")]
+    assert appended[headers.index("Source")] == "Kiosk v2 staff replacement"
+    assert appended[headers.index("Notes")] == "Replaced 1 previous active card(s)"
+    assert updated["Replaced Card Count"] == 1
 
 
 def test_warm_up_loads_all_read_heavy_sources():
