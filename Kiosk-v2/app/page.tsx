@@ -85,7 +85,8 @@ const emptyAnnouncement: Announcement = {
   closingDate: "",
 };
 
-const INACTIVITY_SECONDS = 30;
+const INACTIVITY_SECONDS = 45;
+const INACTIVITY_NOTICE_SECONDS = 15;
 
 function localDateKey(date: Date) {
   const year = date.getFullYear();
@@ -976,9 +977,9 @@ export default function Home() {
         </section>
       )}
 
-      {idleTimerActive && (
+      {idleTimerActive && idleCountdown <= INACTIVITY_NOTICE_SECONDS && (
         <aside className="idle-return" role="status" aria-live="polite">
-          <div className="idle-ring" style={{ "--idle-progress": `${(idleCountdown / INACTIVITY_SECONDS) * 360}deg` } as React.CSSProperties}>
+          <div className="idle-ring" style={{ "--idle-progress": `${(idleCountdown / INACTIVITY_NOTICE_SECONDS) * 360}deg` } as React.CSSProperties}>
             <span>{idleCountdown}</span>
           </div>
           <div><small>RETURNING TO START</small><b>This page will close automatically.</b></div>

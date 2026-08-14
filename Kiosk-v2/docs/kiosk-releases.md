@@ -9,6 +9,7 @@ more than one revision is released on the same day.
 
 | Revision | Date | What changed |
 | --- | --- | --- |
+| 2026.08.14.8 | August 14, 2026 | Visitor pages remain quiet for 30 seconds, then show the return notice and countdown only during the final 15 seconds of the 45-second timeout. |
 | 2026.08.14.7 | August 14, 2026 | Closing-soon and closed check-ins repeat the prominent status rectangle; profile questions can go back to correct earlier answers; an intentional restart can resume profile questions without recording another visit. |
 | 2026.08.14.6 | August 14, 2026 | The inactivity notice uses one strict 30-second countdown, only “Stay here” restarts it, and the progress ring and number are centered correctly. |
 | 2026.08.14.5 | August 14, 2026 | Waiver screens explain the processing delay; unattended visitor screens return home after 30 seconds; closing-soon and closed check-ins use unmistakable full-screen treatments; closing times expire at midnight. |
