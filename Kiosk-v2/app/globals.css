@@ -810,6 +810,10 @@ button:focus-visible { outline: 3px solid var(--orange); outline-offset: 4px; }
 }
 
 .waiver-required-content { width: min(100%, 840px); display: grid; grid-template-columns: minmax(0, 1fr) 318px; align-items: center; gap: clamp(32px, 5vw, 72px); }
+.group-link-content { width: min(100%, 820px); }
+.group-link-callout { display: grid; gap: 6px; max-width: 620px; margin: 28px 0; padding: 18px 20px; border-left: 8px solid var(--orange); background: var(--cream); color: var(--navy); box-shadow: 8px 8px 0 rgba(16,43,78,.5); }
+.group-link-callout b { font: 850 13px/1 "Jost"; letter-spacing: .14em; }
+.group-link-callout span { font-size: 18px; }
 .waiver-required-content .button-row { margin-top: 28px; }
 .waiver-delay-note { display: grid; gap: 6px; margin-top: 24px; padding: 16px 18px; border-left: 7px solid var(--orange); background: var(--cream); color: var(--navy); }
 .waiver-delay-note b { font: 850 14px/1 "Jost"; letter-spacing: .13em; }

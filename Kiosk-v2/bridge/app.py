@@ -66,6 +66,7 @@ class BridgeState:
         self.pending_card_uid: str | None = None
         self.pending_card_expires_at = 0.0
         self.card_link_identifier: str | None = None
+        self.group_link_request: dict[str, Any] | None = None
         self.profile_person_id: str | None = None
         self.profile_expires_at = 0.0
         self.last_success_uid: str | None = None
@@ -166,7 +167,18 @@ class BridgeState:
             and self.card_link_identifier is not None
             and self.card_link_is_active()
         )
-        if resume_profile:
+        group_link_request = self.group_link_request if self.card_link_identifier is None else None
+        if group_link_request:
+            try:
+                result = await asyncio.to_thread(self.backend.complete_group_link, group_link_request, uid)
+            except Exception:
+                LOGGER.exception("Group-onboarding card connection failed")
+                result = CheckInResult(outcome="group_link_error", message="The card could not be connected. Ask staff to try again.")
+            if result.outcome == "group_link_error":
+                self.guard.forget(uid)
+            else:
+                self.group_link_request = None
+        elif resume_profile:
             result = replace(
                 self.last_success_result,
                 message="Your check-in was already recorded. Continue your profile update.",
@@ -386,6 +398,10 @@ class CardLinkStart(BaseModel):
     identifier: str
 
 
+class GroupLinkCancel(BaseModel):
+    request_id: str
+
+
 class ProfileAnswer(BaseModel):
     field: str
     value: str
@@ -429,6 +445,45 @@ async def start_card_link(request: CardLinkStart) -> dict[str, Any]:
 @app.post("/card-link/cancel")
 async def cancel_card_link() -> dict[str, bool]:
     STATE.clear_card_link()
+    return {"ok": True}
+
+
+@app.get("/group-link/status")
+async def group_link_status() -> dict[str, Any]:
+    if not isinstance(STATE.backend, SheetsCheckInBackend):
+        return {"ok": True, "active": False}
+    try:
+        request = await asyncio.to_thread(STATE.backend.pending_group_link_request)
+    except Exception:
+        LOGGER.exception("Group-onboarding status check failed")
+        raise HTTPException(status_code=503, detail="The group-onboarding queue could not be checked")
+    if not request:
+        STATE.group_link_request = None
+        return {"ok": True, "active": False}
+    STATE.group_link_request = request
+    return {
+        "ok": True,
+        "active": True,
+        "request_id": request.get("request_id"),
+        "display_name": request.get("display_name"),
+        "expires_at": request.get("expires_at"),
+    }
+
+
+@app.post("/group-link/cancel")
+async def cancel_group_link(request: GroupLinkCancel) -> dict[str, bool]:
+    if not isinstance(STATE.backend, SheetsCheckInBackend):
+        raise HTTPException(status_code=409, detail="Group onboarding is unavailable")
+    request_id = request.request_id.strip()
+    if not request_id:
+        raise HTTPException(status_code=422, detail="A request ID is required")
+    try:
+        await asyncio.to_thread(STATE.backend.cancel_group_link_request, request_id)
+    except Exception:
+        LOGGER.exception("Group-onboarding cancellation failed")
+        raise HTTPException(status_code=503, detail="The request could not be cancelled")
+    if STATE.group_link_request and STATE.group_link_request.get("request_id") == request_id:
+        STATE.group_link_request = None
     return {"ok": True}
 
 

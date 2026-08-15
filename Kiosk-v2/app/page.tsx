@@ -27,6 +27,8 @@ type Screen =
   | "link-authorize"
   | "link-error"
   | "card-linked"
+  | "group-link"
+  | "group-link-error"
   | "reader-error"
   | "profile"
   | "profile-detail"
@@ -54,7 +56,15 @@ type ScannerOutcome =
   | "backend_error"
   | "card_linked"
   | "staff_unauthorized"
-  | "card_link_error";
+  | "card_link_error"
+  | "group_card_linked"
+  | "group_link_error";
+
+type GroupLinkRequest = {
+  request_id: string;
+  display_name: string;
+  expires_at: string;
+};
 
 type ScannerDetectedEvent = {
   type: "card_detected";
@@ -140,10 +150,13 @@ export default function Home() {
   const [scannerResult, setScannerResult] = useState<ScannerResultEvent | null>(null);
   const [welcomeName, setWelcomeName] = useState("Sandbox member");
   const [visitCount, setVisitCount] = useState<number | null>(null);
+  const [groupLinkRequest, setGroupLinkRequest] = useState<GroupLinkRequest | null>(null);
+  const [groupJustLinked, setGroupJustLinked] = useState(false);
   const demoControlsEnabled = process.env.NEXT_PUBLIC_KIOSK_DEMO === "true";
   const screenRef = useRef<Screen>("home");
   const cardDetectedAtRef = useRef<number | null>(null);
   const idleDeadlineRef = useRef<number | null>(null);
+  const groupLinkRequestRef = useRef<GroupLinkRequest | null>(null);
   const profileQuestion = useMemo(
     () => profileSessionAvailable
       ? profileEditingField
@@ -156,6 +169,10 @@ export default function Home() {
   useEffect(() => {
     screenRef.current = screen;
   }, [screen]);
+
+  useEffect(() => {
+    groupLinkRequestRef.current = groupLinkRequest;
+  }, [groupLinkRequest]);
 
   useEffect(() => {
     setNow(new Date());
@@ -200,7 +217,7 @@ export default function Home() {
       socket.addEventListener("message", (message) => {
         try {
           const event = JSON.parse(message.data) as ScannerEvent;
-          if (event.type === "card_detected" && screenRef.current === "home") {
+          if (event.type === "card_detected" && (screenRef.current === "home" || screenRef.current === "group-link")) {
             cardDetectedAtRef.current = performance.now();
             setScannerResult(null);
             setCheckInMethod("card");
@@ -248,6 +265,32 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    const isLocalKiosk = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+    if (!isLocalKiosk || scannerStatus !== "connected") return;
+    let stopped = false;
+    async function pollGroupLink() {
+      try {
+        const response = await fetch("http://127.0.0.1:8765/group-link/status", { cache: "no-store" });
+        if (!response.ok || stopped) return;
+        const result = await response.json() as { active?: boolean; request_id?: string; display_name?: string; expires_at?: string };
+        if (result.active && result.request_id) {
+          const request = { request_id: result.request_id, display_name: result.display_name || "Sandbox member", expires_at: result.expires_at || "" };
+          setGroupLinkRequest(request);
+          if (screenRef.current === "home") setScreen("group-link");
+        } else {
+          setGroupLinkRequest(null);
+          if (screenRef.current === "group-link") setScreen("home");
+        }
+      } catch {
+        // Normal check-in remains available if the optional staff queue cannot be reached.
+      }
+    }
+    pollGroupLink();
+    const interval = window.setInterval(pollGroupLink, 2500);
+    return () => { stopped = true; window.clearInterval(interval); };
+  }, [scannerStatus]);
+
+  useEffect(() => {
     if (screen !== "reading" || !scannerResult) return;
     const detectedAt = cardDetectedAtRef.current ?? performance.now();
     const minimumFeedbackMs = 500;
@@ -267,6 +310,16 @@ export default function Home() {
         setProfileSessionAvailable(Boolean(scannerResult.person_id));
         setCountdown(8);
         setScreen(hasQuestion ? "profile" : "success");
+      } else if (scannerResult.outcome === "group_card_linked") {
+        setWelcomeName(scannerResult.display_name || "Sandbox member");
+        setVisitCount(scannerResult.visit_count);
+        setGroupLinkRequest(null);
+        setGroupJustLinked(true);
+        setCountdown(8);
+        setScreen("success");
+      } else if (scannerResult.outcome === "group_link_error") {
+        setLinkError(scannerResult.message || "The card could not be connected. Ask staff to try again.");
+        setScreen("group-link-error");
       } else if (scannerResult.outcome === "unknown_card") {
         setScreen("unknown-card");
       } else if (scannerResult.outcome === "unknown_identifier") {
@@ -375,6 +428,14 @@ export default function Home() {
 
   const reset = useCallback(() => {
     const previousScreen = screenRef.current;
+    const pendingGroupLink = groupLinkRequestRef.current;
+    if ((previousScreen === "group-link" || previousScreen === "group-link-error") && pendingGroupLink) {
+      fetch("http://127.0.0.1:8765/group-link/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ request_id: pendingGroupLink.request_id }),
+      }).catch(() => undefined);
+    }
     if (!["home", "reading", "success"].includes(previousScreen)) {
       fetch("http://127.0.0.1:8765/scanner/allow-repeat", { method: "POST" }).catch(() => undefined);
     }
@@ -396,6 +457,8 @@ export default function Home() {
     setLinkTargetName("Sandbox member");
     setLinkError("");
     setStaffCardDetected(false);
+    setGroupLinkRequest(null);
+    setGroupJustLinked(false);
     setDemoOpen(false);
   }, []);
 
@@ -686,6 +749,25 @@ export default function Home() {
           </div>
         )}
 
+        {screen === "group-link" && groupLinkRequest && (
+          <div className="status-content screen-content group-link-content">
+            <p className="eyebrow">STAFF DESK READY</p>
+            <h1>{groupLinkRequest.display_name.split(/\s+/)[0]}, tap your<br />ID card now.</h1>
+            <p className="lede">Hold your card near the blue hand below. This will connect your card and check you in.</p>
+            <div className="group-link-callout"><b>CHECK THE NAME ABOVE</b><span>If this is not you, choose Cancel and ask staff for help.</span></div>
+            <button className="outline-action" onClick={reset}>Not {groupLinkRequest.display_name.split(/\s+/)[0]}? Cancel</button>
+          </div>
+        )}
+
+        {screen === "group-link-error" && (
+          <div className="status-content screen-content">
+            <p className="eyebrow warning">CARD NOT CONNECTED</p>
+            <h1>Please ask staff<br />to try again.</h1>
+            <p className="lede">{linkError}</p>
+            <button className="solid-action" onClick={reset}>Return to start</button>
+          </div>
+        )}
+
         {screen === "pid" && (
           <div className="form-content screen-content">
             <button className="back" onClick={reset}><Arrow direction="left" /> Back</button>
@@ -942,9 +1024,9 @@ export default function Home() {
         <section className={`success-plane success-${closingStatus.mode}`}>
           {closingStatus.mode === "open" ? <>
             <div className="success-mark" aria-hidden="true">✓</div>
-            <p className="eyebrow">CHECK-IN COMPLETE</p>
-            <h1>Welcome back,<br />{welcomeName}.</h1>
-            <p className="lede">You’re checked in to the Scripps Sandbox.</p>
+            <p className="eyebrow">{groupJustLinked ? "CARD CONNECTED · CHECK-IN COMPLETE" : "CHECK-IN COMPLETE"}</p>
+            <h1>{groupJustLinked ? <>You’re all set,<br />{welcomeName}.</> : <>Welcome back,<br />{welcomeName}.</>}</h1>
+            <p className="lede">{groupJustLinked ? "Your ID card is connected and today’s visit has been recorded." : "You’re checked in to the Scripps Sandbox."}</p>
           </> : closingStatus.mode === "closing-soon" ? <>
             <div className="closing-time-badge" aria-hidden="true"><b>{String(minutesUntilClose).padStart(2, "0")}</b><span>MIN</span></div>
             <p className="eyebrow">CHECK-IN RECORDED · CLOSING SOON</p>

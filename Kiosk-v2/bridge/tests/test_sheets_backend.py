@@ -19,6 +19,8 @@ class FakeProvider:
         ]]
         self.appended_rows = []
         self.calls = {"users": 0, "waivers": 0, "activity": 0, "append": 0, "card_update": 0}
+        self.group_request = None
+        self.group_updates = []
 
     @staticmethod
     def card_digest(card_uid):
@@ -55,6 +57,27 @@ class FakeProvider:
         matches[0]["Card Digests"] = (digest,)
         matches[0]["Replaced Card Count"] = replaced_count
         return dict(matches[0])
+
+    def update_user_card_by_person(self, person_id, card_uid):
+        target = next((row for row in self.users if row.get("Person ID") == person_id), None)
+        if not target:
+            raise ValueError("That active Sandbox account could not be found.")
+        if target.get("Card Digests"):
+            raise ValueError("This account already has an active card. Use the replacement-card workflow instead.")
+        digest = self.card_digest(card_uid)
+        if any(user_has_card_digest(row, digest) for row in self.users):
+            raise ValueError("That card is already connected to an account.")
+        target["Card Digest"] = digest
+        target["Card Digests"] = (digest,)
+        return dict(target)
+
+    def pending_group_link_request(self):
+        return dict(self.group_request) if self.group_request else None
+
+    def mark_group_link_request(self, request_id, status, message):
+        self.group_updates.append((request_id, status, message))
+        if status.lower() != "pending":
+            self.group_request = None
 
     def update_profile(self, person_id, field, value):
         user = next((row for row in self.users if row.get("Person ID") == person_id), None)
@@ -363,3 +386,32 @@ def test_duplicate_member_card_is_rejected():
     result = backend_for(provider).link_card("A12345678", "NEWCARD", "STAFFCARD", {"A87654321"})
     assert result.outcome == "card_link_error"
     assert provider.calls["append"] == 0
+
+
+def test_group_onboarding_connects_first_card_and_checks_member_in():
+    target = member(card="", person_id="person_member", student_id="A12345678")
+    provider = FakeProvider(users=[target], waivers=[signed_waiver()])
+    provider.group_request = {
+        "request_id": "link_1", "person_id": "person_member", "display_name": "Test Maker",
+        "requested_by": "staff@example.edu", "expires_at": "2026-08-14T15:00:00",
+    }
+    result = backend_for(provider).complete_group_link(provider.group_request, "NEWCARD")
+    assert result.outcome == "group_card_linked"
+    assert result.display_name == "Test Maker"
+    assert [row[3] for row in provider.appended_rows] == ["Card Linked", "User Checkin"]
+    assert provider.group_updates[-1][1] == "Completed"
+    assert user_has_card_digest(provider.users[0], provider.card_digest("NEWCARD"))
+
+
+def test_group_onboarding_refuses_an_account_with_an_active_card():
+    target = member(card="OLDCARD", person_id="person_member", student_id="A12345678")
+    provider = FakeProvider(users=[target], waivers=[signed_waiver()])
+    provider.group_request = {
+        "request_id": "link_1", "person_id": "person_member", "display_name": "Test Maker",
+        "requested_by": "staff@example.edu", "expires_at": "2026-08-14T15:00:00",
+    }
+    result = backend_for(provider).complete_group_link(provider.group_request, "NEWCARD")
+    assert result.outcome == "group_link_error"
+    assert "already has an active card" in result.message
+    assert provider.appended_rows == []
+    assert provider.group_updates[-1][1] == "Rejected"

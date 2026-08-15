@@ -5,11 +5,13 @@ const STAFF_CONFIG_ = {
     identifiers: { name: "Identifiers", headers: ["Identifier ID", "Person ID", "Type", "Value", "Normalized Value", "Primary", "Verified", "Active", "Created At", "Source System", "Source Rows"] },
     certifications: { name: "Tool Certifications", headers: ["Certification ID", "Person ID", "Tool Key", "Status", "Granted At", "Removed At", "Source System", "Source Rows", "Notes"] },
     registrations: { name: "Registrations", headers: ["Registration ID", "Person ID", "Status", "Submitted At", "Reviewed By", "Reviewed At", "Program / Department", "Identifier Type", "DocuSign Status", "Consent Version", "Anticipated Graduation", "Source"], allowAdditionalHeaders: true },
+    cards: { name: "Cards", headers: ["Card ID", "Person ID", "Card Digest", "Last Four", "Status", "Linked At", "Disabled At", "Source", "Notes"], allowAdditionalHeaders: true },
     visits: { name: "Visits", headers: ["Visit ID", "Person ID", "Check In At", "Event Type", "Authorizing Entity", "Flags", "Notes", "Source System", "Source Row"] },
     staffAccess: { name: "Staff Access", headers: ["Staff ID", "Name", "Email", "Role", "Active", "Card Linking Allowed", "Notes"] },
     training: { name: "Tool Training", headers: ["Training ID", "Person ID", "Tool", "Status", "Approved By", "Approved At", "FabMan Status", "Notes"] },
     fabmanLinks: { name: "FabMan Links", headers: ["Link ID", "Person ID", "FabMan Member ID", "Status", "Match Method", "Confirmed By", "Confirmed At", "Notes"] },
     notes: { name: "Staff Notes", headers: ["Note ID", "Note", "Created By", "Created At", "Status", "Resolved By", "Resolved At"] },
+    kioskLinks: { name: "Kiosk Link Requests", headers: ["Request ID", "Person ID", "Display Name", "Requested By", "Requested At", "Expires At", "Status", "Completed At", "Message"], createIfMissing: true },
   },
 };
 
@@ -36,7 +38,7 @@ function setupStaffApp() {
   const actorEmail = String(Session.getActiveUser().getEmail() || "").trim().toLowerCase();
   if (!actorEmail) throw new Error("Sign in before initializing the staff app.");
   const spreadsheet = staffSpreadsheet_();
-  ["training", "notes", "fabmanLinks"].forEach(function (key) {
+  ["training", "notes", "fabmanLinks", "kioskLinks"].forEach(function (key) {
     const definition = STAFF_CONFIG_.sheets[key];
     let sheet = spreadsheet.getSheetByName(definition.name);
     if (!sheet) sheet = spreadsheet.insertSheet(definition.name);
@@ -45,6 +47,120 @@ function setupStaffApp() {
     sheet.setFrozenRows(1);
   });
   return { ok: true, actor: actorEmail };
+}
+
+function staffGroupOnboarding() {
+  const access = staffRequireAccess_();
+  if (!access.cardLinkingAllowed && access.role !== "administrator") throw new Error("Card Linking permission is required for group onboarding.");
+  const db = staffDatabase_();
+  const now = new Date();
+  const registrationByPerson = {};
+  staffRecords_(db.registrations).forEach(function (record) {
+    const personId = String(record["Person ID"] || "").trim();
+    if (!personId) return;
+    const existing = registrationByPerson[personId];
+    const candidateTime = new Date(record["Submitted At"] || 0).getTime() || 0;
+    const existingTime = existing ? (new Date(existing["Submitted At"] || 0).getTime() || 0) : -1;
+    if (!existing || candidateTime >= existingTime) registrationByPerson[personId] = record;
+  });
+  const activeCards = {};
+  staffRecords_(db.cards).forEach(function (record) {
+    if (String(record.Status || "").trim().toLowerCase() === "active") activeCards[String(record["Person ID"] || "").trim()] = true;
+  });
+  const identifierByPerson = {};
+  staffRecords_(db.identifiers).forEach(function (record) {
+    const personId = String(record["Person ID"] || "").trim();
+    if (!identifierByPerson[personId] && staffTrue_(record.Active) && String(record.Type || "").toLowerCase() !== "email") identifierByPerson[personId] = record;
+  });
+  const candidates = staffRecords_(db.people).filter(function (person) {
+    const personId = String(person["Person ID"] || "").trim();
+    const registration = registrationByPerson[personId];
+    const waiverStatus = registration ? staffClean_(registration["DocuSign Status"], 120).toLowerCase() : "";
+    return String(person.Status || "").trim().toLowerCase() === "active"
+      && Boolean(registration)
+      && /(signed|complete|completed|matched|verified|approved)/.test(waiverStatus)
+      && !activeCards[personId];
+  }).map(function (person) {
+    const personId = String(person["Person ID"] || "").trim();
+    const registration = registrationByPerson[personId];
+    const identifier = identifierByPerson[personId] || {};
+    return {
+      personId: personId,
+      name: staffPrivateName_(person["Display Name"]),
+      role: staffClean_(person.Role, 80),
+      affiliation: staffClean_(registration["Program / Department"], 120),
+      identifierHint: staffIdentifierHint_(identifier.Value),
+      submittedAt: staffIsoDate_(registration["Submitted At"]),
+    };
+  }).sort(function (a, b) { return String(b.submittedAt).localeCompare(String(a.submittedAt)); });
+  const requests = staffRecords_(db.kioskLinks);
+  let pending = null;
+  for (let index = requests.length - 1; index >= 0; index -= 1) {
+    const request = requests[index];
+    if (String(request.Status || "").toLowerCase() !== "pending") continue;
+    const expiresAt = new Date(request["Expires At"] || 0);
+    if (!isNaN(expiresAt.getTime()) && expiresAt.getTime() <= now.getTime()) continue;
+    pending = {
+      requestId: request["Request ID"], personId: request["Person ID"], name: staffPrivateName_(request["Display Name"]),
+      requestedAt: staffIsoDate_(request["Requested At"]), expiresAt: staffIsoDate_(request["Expires At"]), status: "Pending",
+    };
+    break;
+  }
+  return { ok: true, actor: access, candidates: candidates, pending: pending, refreshedAt: now.toISOString() };
+}
+
+function staffStartCardConnection(personId) {
+  const access = staffRequireAccess_();
+  if (!access.cardLinkingAllowed && access.role !== "administrator") throw new Error("Card Linking permission is required for group onboarding.");
+  const db = staffDatabase_();
+  const person = staffFindPerson_(db.people, staffClean_(personId, 120));
+  const hasActiveCard = staffRecords_(db.cards).some(function (record) {
+    return record["Person ID"] === personId && String(record.Status || "").trim().toLowerCase() === "active";
+  });
+  if (hasActiveCard) throw new Error("This account already has an active card. Use the replacement-card workflow instead.");
+  const registrations = staffRecords_(db.registrations).filter(function (record) { return record["Person ID"] === personId; });
+  const registration = registrations.length ? registrations[registrations.length - 1] : null;
+  const waiverStatus = registration ? staffClean_(registration["DocuSign Status"], 120).toLowerCase() : "";
+  if (!registration || !/(signed|complete|completed|matched|verified|approved)/.test(waiverStatus)) throw new Error("This account is not ready: registration and a verified waiver are required.");
+  staffCancelPendingKioskLinks_(db.kioskLinks, "Replaced by a newer staff request");
+  const requestedAt = new Date();
+  const expiresAt = new Date(requestedAt.getTime() + 45 * 1000);
+  const requestId = staffId_("link");
+  db.kioskLinks.appendRow([requestId, personId, staffSheetSafe_(person["Display Name"]), access.email, requestedAt, expiresAt, "Pending", "", "Waiting for member card"]);
+  staffAfterWrite_(personId);
+  return { ok: true, requestId: requestId, personId: personId, name: staffPrivateName_(person["Display Name"]), expiresAt: expiresAt.toISOString() };
+}
+
+function staffCancelCardConnection(requestId) {
+  staffRequireAccess_();
+  const sheet = staffDatabase_().kioskLinks;
+  const values = sheet.getDataRange().getDisplayValues();
+  const idColumn = values[0].indexOf("Request ID");
+  const statusColumn = values[0].indexOf("Status");
+  const completedColumn = values[0].indexOf("Completed At");
+  const messageColumn = values[0].indexOf("Message");
+  const rowIndex = values.findIndex(function (row, index) { return index > 0 && row[idColumn] === requestId; });
+  if (rowIndex < 1) throw new Error("That kiosk request could not be found.");
+  const row = rowIndex + 1;
+  sheet.getRange(row, statusColumn + 1).setValue("Cancelled");
+  sheet.getRange(row, completedColumn + 1).setValue(new Date());
+  sheet.getRange(row, messageColumn + 1).setValue("Cancelled by staff");
+  staffAfterWrite_();
+  return { ok: true };
+}
+
+function staffCancelPendingKioskLinks_(sheet, reason) {
+  if (sheet.getLastRow() < 2) return;
+  const values = sheet.getDataRange().getDisplayValues();
+  const statusColumn = values[0].indexOf("Status");
+  const completedColumn = values[0].indexOf("Completed At");
+  const messageColumn = values[0].indexOf("Message");
+  values.slice(1).forEach(function (row, index) {
+    if (String(row[statusColumn] || "").toLowerCase() !== "pending") return;
+    sheet.getRange(index + 2, statusColumn + 1).setValue("Cancelled");
+    sheet.getRange(index + 2, completedColumn + 1).setValue(new Date());
+    sheet.getRange(index + 2, messageColumn + 1).setValue(reason);
+  });
 }
 
 function staffDashboard() {
@@ -739,7 +855,12 @@ function staffDatabase_(accessOnly) {
   const db = { spreadsheet: spreadsheet };
   keys.forEach(function (key) {
     const definition = STAFF_CONFIG_.sheets[key];
-    const sheet = spreadsheet.getSheetByName(definition.name);
+    let sheet = spreadsheet.getSheetByName(definition.name);
+    if (!sheet && definition.createIfMissing) {
+      sheet = spreadsheet.insertSheet(definition.name);
+      sheet.appendRow(definition.headers);
+      sheet.setFrozenRows(1);
+    }
     if (!sheet) throw new Error("Run setupStaffApp to finish the staff app database.");
     staffAssertHeaders_(sheet, definition.headers, definition.allowAdditionalHeaders);
     db[key] = sheet;

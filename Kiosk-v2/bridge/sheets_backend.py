@@ -40,6 +40,9 @@ class SheetsProvider(Protocol):
     def activity_rows(self) -> list[list[Any]]: ...
     def append_activity(self, row: list[Any]) -> None: ...
     def update_user_card(self, identifier: str, card_uid: str) -> dict[str, Any]: ...
+    def update_user_card_by_person(self, person_id: str, card_uid: str) -> dict[str, Any]: ...
+    def pending_group_link_request(self) -> dict[str, Any] | None: ...
+    def mark_group_link_request(self, request_id: str, status: str, message: str) -> None: ...
     def update_profile(self, person_id: str, field: str, value: str) -> dict[str, str]: ...
     def card_digest(self, card_uid: str) -> str: ...
 
@@ -55,6 +58,22 @@ def normalize_email(value: Any) -> str:
 
 def normalize_card_uid(value: Any) -> str:
     return str(value or "").strip().upper()
+
+
+def _sheet_datetime(value: Any) -> datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).replace(tzinfo=None)
+    except ValueError:
+        pass
+    for pattern in ("%m/%d/%Y %H:%M:%S", "%m/%d/%Y %I:%M:%S %p", "%m/%d/%Y %H:%M"):
+        try:
+            return datetime.strptime(text, pattern)
+        except ValueError:
+            continue
+    return None
 
 
 def normalized_user_identifiers(record: dict[str, Any]) -> set[str]:
@@ -116,6 +135,7 @@ class GoogleSheetsProvider:
         self.activity_cache_seconds = activity_cache_seconds
         self._lock = Lock()
         self._people_sheet: Any = None
+        self._database: Any = None
         self._identifiers_sheet: Any = None
         self._cards_sheet: Any = None
         self._registrations_sheet: Any = None
@@ -156,6 +176,7 @@ class GoogleSheetsProvider:
 
         client = gspread.service_account(filename=self.credentials_path)
         database = client.open_by_key(self.database_id)
+        self._database = database
         self._people_sheet = database.worksheet("People")
         self._identifiers_sheet = database.worksheet("Identifiers")
         self._cards_sheet = database.worksheet("Cards")
@@ -310,6 +331,81 @@ class GoogleSheetsProvider:
             self._cache_expires_at = time.monotonic() + self.cache_seconds
             return dict(record)
 
+    def update_user_card_by_person(self, person_id: str, card_uid: str) -> dict[str, Any]:
+        digest = self.card_digest(card_uid)
+        normalized_uid = normalize_card_uid(card_uid)
+        with self._lock:
+            self._refresh_people_if_needed()
+            users = self._users or []
+            record = next((user for user in users if str(user.get("Person ID", "")).strip() == str(person_id).strip()), None)
+            if record is None:
+                raise ValueError("That active Sandbox account could not be found.")
+            if normalized_card_digests(record):
+                raise ValueError("This account already has an active card. Use the replacement-card workflow instead.")
+            if any(user_has_card_digest(user, digest) for user in users):
+                raise ValueError("That card is already connected to an account.")
+            self._connect()
+            headers = self._cards_sheet.row_values(1)
+            changed_at = datetime.now().isoformat(timespec="seconds")
+            card_values = {
+                "Card ID": "card_" + uuid4().hex,
+                "Person ID": record["Person ID"],
+                "Card Digest": digest,
+                "Last Four": normalized_uid[-4:],
+                "Status": "Active",
+                "Linked At": changed_at,
+                "Disabled At": "",
+                "Source": "Kiosk v2 group onboarding",
+                "Notes": "First card connected from Staff Desk queue",
+            }
+            self._cards_sheet.append_row([card_values.get(header, "") for header in headers], value_input_option="USER_ENTERED")
+            record["Card Digest"] = digest
+            record["Card Digests"] = (digest,)
+            self._cache_expires_at = time.monotonic() + self.cache_seconds
+            return dict(record)
+
+    def pending_group_link_request(self) -> dict[str, Any] | None:
+        with self._lock:
+            self._connect()
+            try:
+                sheet = self._database.worksheet("Kiosk Link Requests")
+            except Exception:
+                return None
+            records = sheet.get_all_records(numericise_ignore=["all"])
+            now = datetime.now()
+            for record in reversed(records):
+                if str(record.get("Status", "")).strip().lower() != "pending":
+                    continue
+                expires_at = _sheet_datetime(record.get("Expires At"))
+                if expires_at is not None and expires_at <= now:
+                    continue
+                return {
+                    "request_id": str(record.get("Request ID", "")).strip(),
+                    "person_id": str(record.get("Person ID", "")).strip(),
+                    "display_name": str(record.get("Display Name", "")).strip(),
+                    "requested_by": str(record.get("Requested By", "")).strip(),
+                    "expires_at": expires_at.isoformat(timespec="seconds") if expires_at else "",
+                }
+            return None
+
+    def mark_group_link_request(self, request_id: str, status: str, message: str) -> None:
+        with self._lock:
+            self._connect()
+            sheet = self._database.worksheet("Kiosk Link Requests")
+            headers = sheet.row_values(1)
+            rows = sheet.get_all_values()
+            id_column = headers.index("Request ID")
+            row_number = next((index + 1 for index in range(len(rows) - 1, 0, -1) if len(rows[index]) > id_column and str(rows[index][id_column]).strip() == request_id), 0)
+            if not row_number:
+                raise ValueError("That kiosk request could not be found.")
+            updates = {
+                "Status": status,
+                "Completed At": datetime.now().isoformat(timespec="seconds") if status.lower() != "pending" else "",
+                "Message": message,
+            }
+            for header, value in updates.items():
+                sheet.update_cell(row_number, headers.index(header) + 1, value)
+
     def update_profile(self, person_id: str, field: str, value: str) -> dict[str, str]:
         field_headers = {
             "role": ("people", "Role"),
@@ -441,6 +537,52 @@ class SheetsCheckInBackend:
             message="Profile updated.",
         )
 
+    def pending_group_link_request(self) -> dict[str, Any] | None:
+        return self.provider.pending_group_link_request()
+
+    def cancel_group_link_request(self, request_id: str) -> None:
+        self.provider.mark_group_link_request(request_id, "Cancelled", "Cancelled at the kiosk")
+
+    def complete_group_link(self, request: dict[str, Any], card_uid: str) -> CheckInResult:
+        request_id = str(request.get("request_id", "")).strip()
+        person_id = str(request.get("person_id", "")).strip()
+        requested_by = str(request.get("requested_by", "")).strip() or "Authorized staff"
+        current = self.provider.pending_group_link_request()
+        if not request_id or not current or current.get("request_id") != request_id or current.get("person_id") != person_id:
+            return CheckInResult(outcome="group_link_error", message="That card-connection request expired. Ask staff to select the account again.")
+        target = next((user for user in self.provider.user_records() if str(user.get("Person ID", "")).strip() == person_id), None)
+        if target is None:
+            return CheckInResult(outcome="group_link_error", message="That active Sandbox account could not be found.")
+        if normalized_card_digests(target):
+            self.provider.mark_group_link_request(request_id, "Rejected", "Account already has an active card")
+            return CheckInResult(outcome="group_link_error", message="This account already has an active card. Ask staff to use the replacement-card workflow.")
+        if not self._waiver_found(target):
+            self.provider.mark_group_link_request(request_id, "Rejected", "Waiver no longer verified")
+            return CheckInResult(outcome="group_link_error", message="A signed waiver could not be verified. Please see staff.")
+        try:
+            linked = self.provider.update_user_card_by_person(person_id, card_uid)
+        except ValueError as error:
+            return CheckInResult(outcome="group_link_error", message=str(error))
+        linked_at = self.local_datetime().isoformat(timespec="seconds")
+        self.provider.append_activity([
+            "visit_" + uuid4().hex, person_id, linked_at, "Card Linked", requested_by, "Group onboarding",
+            "First card connected from Staff Desk queue", "Kiosk v2", "",
+        ])
+        check_in = self._check_in_user(linked, time.monotonic(), {})
+        if check_in.outcome != "success":
+            self.provider.mark_group_link_request(request_id, "Error", check_in.message or "Check-in failed after card connection")
+            return CheckInResult(outcome="group_link_error", display_name=check_in.display_name, message=check_in.message)
+        self.provider.mark_group_link_request(request_id, "Completed", "Card connected and check-in recorded")
+        return CheckInResult(
+            outcome="group_card_linked",
+            display_name=check_in.display_name,
+            message="Card connected and check-in recorded.",
+            visit_count=check_in.visit_count,
+            person_id=check_in.person_id,
+            profile=check_in.profile,
+            timings_ms=check_in.timings_ms,
+        )
+
     def link_card(self, identifier: str, card_uid: str, staff_card_uid: str, designated_staff_ids: set[str]) -> CheckInResult:
         total_started = time.monotonic()
         timings: dict[str, int] = {}
@@ -480,6 +622,15 @@ class SheetsCheckInBackend:
         ])
         timings["total"] = elapsed_ms(total_started)
         return CheckInResult(outcome="card_linked", display_name=display_name, message="Card connected. The member can now check in.", timings_ms=timings)
+
+    def _waiver_found(self, user: dict[str, Any]) -> bool:
+        user_ids = normalized_user_identifiers(user)
+        user_email = normalize_email(user.get("Email Address"))
+        return any(
+            (normalize_person_id(waiver.get("A_Number")) in user_ids)
+            or (bool(user_email) and normalize_email(waiver.get("Email")) == user_email)
+            for waiver in self.provider.waiver_records()
+        )
 
     def _check_in_user(self, user: dict[str, Any], total_started: float, timings: dict[str, int]) -> CheckInResult:
         user_ids = normalized_user_identifiers(user)
