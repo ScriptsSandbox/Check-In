@@ -9,6 +9,7 @@ more than one revision is released on the same day.
 
 | Revision | Date | What changed |
 | --- | --- | --- |
+| 2026.08.17.2 | August 17, 2026 | The Scripps-owned waiver transition now stays in UC San Diego Google services: DocuSign completion events write to the protected production spreadsheet, and both Staff Desk and kiosk read that tab directly. |
 | 2026.08.17.1 | August 17, 2026 | Existing legacy waivers remain sufficient while completed waivers from the new Scripps-owned DocuSign form are accepted as a second source. New-source failures cannot invalidate a legacy match. |
 | 2026.08.14.12 | August 14, 2026 | Staff can open a newest-first queue of registered, waiver-verified members without active cards, select a member, and have the kiosk prompt that person by name to tap. The first card is connected and the visit is checked in together, with expiry, cancellation, revalidation, and an audit trail. |
 | 2026.08.14.11 | August 14, 2026 | Graduate students now choose one concise graduate-program answer. Applied Ocean Science records SIO, ECE, or MAE in that answer, and common interdisciplinary programs are represented without adding another screen. |

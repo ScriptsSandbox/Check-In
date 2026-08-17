@@ -14,7 +14,7 @@ When the kiosk UI is served from `localhost`, it automatically connects to `ws:/
 
 The Sheets backend warms its user, waiver, and activity caches at startup. The user and waiver cache defaults to five minutes; the activity cache defaults to one hour and is updated after every successful append. Override these with `SHEETS_CACHE_SECONDS` and `SHEETS_ACTIVITY_CACHE_SECONDS` when needed.
 
-Waiver acceptance is additive during the Scripps transition. The existing `Waiver Signatures SIO` sheet is checked first and remains sufficient indefinitely. When `SCRIPPS_WAIVER_STATUS_URL` and `SCRIPPS_WAIVER_API_KEY_FILE` are configured, a miss in the legacy sheet is followed by a lookup against completed Scripps DocuSign Web Form records. A failure in the new service never invalidates a legacy match.
+Waiver acceptance is additive during the Scripps transition. The existing `Waiver Signatures SIO` sheet is checked first and remains sufficient indefinitely. A miss in the legacy sheet is followed by a local lookup in the production database's `Scripps Waivers` tab. The tab name defaults to `Scripps Waivers` and can be overridden with `SCRIPPS_WAIVER_TAB_NAME`; if the tab is absent, legacy checks continue normally and new-only records fail closed.
 
 ## Designated-staff card linking
 

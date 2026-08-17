@@ -1,4 +1,5 @@
 from datetime import datetime
+import time
 
 from sheets_backend import (
     GoogleSheetsProvider,
@@ -7,6 +8,19 @@ from sheets_backend import (
     user_has_card_digest,
     users_matching_identifier,
 )
+
+
+def test_google_provider_matches_completed_scripps_waiver_from_production_tab():
+    provider = GoogleSheetsProvider("unused.json", "database-id", "Waiver Signatures SIO", "secret")
+    provider._users = []
+    provider._cache_expires_at = time.monotonic() + 60
+    provider._scripps_waivers = [
+        {"Status": "completed", "Participant Email": "member@ucsd.edu", "Participant ID": "A12345678", "Normalized Identifier": "12345678"},
+        {"Status": "voided", "Participant Email": "voided@ucsd.edu", "Participant ID": "A87654321", "Normalized Identifier": "87654321"},
+    ]
+    assert provider.additional_waiver_found({"Identifiers": ["A12345678"], "Email Address": ""})
+    assert provider.additional_waiver_found({"Identifiers": [], "Email Address": "MEMBER@UCSD.EDU"})
+    assert not provider.additional_waiver_found({"Identifiers": ["A87654321"], "Email Address": "voided@ucsd.edu"})
 
 
 class FakeProvider:

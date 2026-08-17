@@ -1,7 +1,5 @@
 const STAFF_CONFIG_ = {
   spreadsheetProperty: "USER_DATABASE_SPREADSHEET_ID",
-  scrippsWaiverStatusUrlProperty: "SCRIPPS_WAIVER_STATUS_URL",
-  scrippsWaiverApiKeyProperty: "SCRIPPS_WAIVER_API_KEY",
   sheets: {
     people: { name: "People", headers: ["Person ID", "Status", "Display Name", "Role", "Primary Email", "Secondary Emails", "Created At", "Updated At", "Source System", "Source Rows"] },
     identifiers: { name: "Identifiers", headers: ["Identifier ID", "Person ID", "Type", "Value", "Normalized Value", "Primary", "Verified", "Active", "Created At", "Source System", "Source Rows"] },
@@ -14,6 +12,7 @@ const STAFF_CONFIG_ = {
     fabmanLinks: { name: "FabMan Links", headers: ["Link ID", "Person ID", "FabMan Member ID", "Status", "Match Method", "Confirmed By", "Confirmed At", "Notes"] },
     notes: { name: "Staff Notes", headers: ["Note ID", "Note", "Created By", "Created At", "Status", "Resolved By", "Resolved At"] },
     kioskLinks: { name: "Kiosk Link Requests", headers: ["Request ID", "Person ID", "Display Name", "Requested By", "Requested At", "Expires At", "Status", "Completed At", "Message"], createIfMissing: true },
+    scrippsWaivers: { name: "Scripps Waivers", headers: ["Received At", "Envelope ID", "Status", "Completed At", "Participant Name", "Participant Email", "Participant ID", "Normalized Identifier", "Template ID", "Source"], createIfMissing: true },
   },
 };
 
@@ -172,29 +171,8 @@ function staffStartCardConnection(personId) {
 }
 
 function staffScrippsWaiverMatches_(queries) {
-  const matches = {};
-  if (!queries || !queries.length) return matches;
-  const properties = PropertiesService.getScriptProperties();
-  const url = String(properties.getProperty(STAFF_CONFIG_.scrippsWaiverStatusUrlProperty) || "").trim();
-  const apiKey = String(properties.getProperty(STAFF_CONFIG_.scrippsWaiverApiKeyProperty) || "").trim();
-  if (!url || !apiKey) return matches;
-  try {
-    const response = UrlFetchApp.fetch(url, {
-      method: "post",
-      contentType: "application/json",
-      headers: { Authorization: "Bearer " + apiKey },
-      payload: JSON.stringify({ queries: queries }),
-      muteHttpExceptions: true,
-    });
-    if (response.getResponseCode() !== 200) return matches;
-    const parsed = JSON.parse(response.getContentText());
-    (parsed.matches || []).forEach(function (result) {
-      if (result && result.matched && result.requestId) matches[String(result.requestId)] = true;
-    });
-  } catch (error) {
-    console.warn("Scripps waiver lookup unavailable: " + String(error && error.message || error));
-  }
-  return matches;
+  if (!queries || !queries.length) return {};
+  return staffScrippsWaiverMatchesFromRecords_(queries, staffRecords_(staffDatabase_().scrippsWaivers));
 }
 
 function staffCancelCardConnection(requestId) {

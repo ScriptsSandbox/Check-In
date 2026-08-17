@@ -24,7 +24,7 @@ The kiosk still requires a matching waiver record before check-in succeeds. Afte
 
 1. Create a standalone Apps Script project in the UCSD-managed account.
 2. Add `RegistrationCore.gs`, `Code.gs`, `Index.html`, and the manifest.
-3. In **Project Settings → Script properties**, add `USER_DATABASE_SPREADSHEET_ID` with the target user-database spreadsheet ID and `WAIVER_POWERFORM_URL` with the approved DocuSign PowerForm URL. Neither value belongs in source control.
+3. In **Project Settings → Script properties**, add `USER_DATABASE_SPREADSHEET_ID` with the target user-database spreadsheet ID and `WAIVER_POWERFORM_URL` with the approved DocuSign PowerForm URL. For the Scripps-owned waiver callback, also add a long random `DOCUSIGN_CONNECT_TOKEN` and the exact `DOCUSIGN_WAIVER_TEMPLATE_ID`. None of these values belongs in source control.
 4. Confirm the normalized tables include the columns asserted by `setupRegistrationSheet`, including `Registrations` → `Anticipated Graduation`, then run the function as the owner.
 5. Run `registrationStatus` and confirm the returned spreadsheet and tab names.
 6. Deploy as a web app that executes as the deploying UCSD account. If UCSD policy permits, allow anonymous access; otherwise stop and use the allowed domain setting rather than moving the app to a personal account.
@@ -32,6 +32,12 @@ The kiosk still requires a matching waiver record before check-in succeeds. Afte
 8. Test one authorized real registration, verify the user database row, complete DocuSign, and verify kiosk check-in.
 9. Set `NEXT_PUBLIC_REGISTRATION_URL` to the deployed Apps Script web-app URL, rebuild the kiosk, and verify its QR code and link on a phone.
 10. Only then replace the public website's registration link.
+
+The same web-app deployment accepts completed DocuSign Connect JSON at
+`WEB_APP_URL?waiver_key=DOCUSIGN_CONNECT_TOKEN`. It writes duplicate-safe rows
+to the `Scripps Waivers` tab in the production spreadsheet. Restrict DocuSign
+delivery to completed events for the Sandbox template and never publish the
+callback URL.
 
 For a non-production permission and schema test, set `USER_DATABASE_SPREADSHEET_ID` to an approved test-copy ID, run `setupRegistrationSheet`, and submit only fictional records. Replace the property with the production ID only after the test succeeds.
 

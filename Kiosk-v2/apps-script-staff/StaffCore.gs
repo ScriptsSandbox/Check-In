@@ -64,6 +64,32 @@ function staffIdentifierHint_(value) {
   return cleaned.length >= 4 ? "ID ending " + cleaned.slice(-4) : "";
 }
 
+function staffNormalizeWaiverIdentifier_(value) {
+  const normalized = staffClean_(value, 120).toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (/^A\d{8}$/.test(normalized)) return normalized.slice(1);
+  if (/^0+\d+$/.test(normalized)) return normalized.replace(/^0+(?=\d)/, "");
+  return normalized;
+}
+
+function staffScrippsWaiverMatchesFromRecords_(queries, records) {
+  const matches = {};
+  const completed = (records || []).filter(function (record) {
+    return staffClean_(record.Status, 40).toLowerCase() === "completed";
+  });
+  (queries || []).forEach(function (query) {
+    const identifiers = (query.identifiers || []).map(staffNormalizeWaiverIdentifier_).filter(Boolean);
+    const email = staffClean_(query.email, 254).toLowerCase();
+    const matched = completed.some(function (record) {
+      const recordIdentifier = staffNormalizeWaiverIdentifier_(record["Normalized Identifier"] || record["Participant ID"]);
+      const recordEmail = staffClean_(record["Participant Email"], 254).toLowerCase();
+      return (Boolean(recordIdentifier) && identifiers.indexOf(recordIdentifier) !== -1)
+        || (Boolean(email) && recordEmail === email);
+    });
+    if (matched && query.requestId) matches[String(query.requestId)] = true;
+  });
+  return matches;
+}
+
 function staffToolLabel_(toolKey) {
   const cleaned = staffClean_(toolKey, 80).toLowerCase();
   if (cleaned === "epilog_laser_cutter") return "Laser cutter";
@@ -166,6 +192,8 @@ if (typeof module !== "undefined") module.exports = {
   staffPreferredName_: staffPreferredName_,
   staffPrivateName_: staffPrivateName_,
   staffIdentifierHint_: staffIdentifierHint_,
+  staffNormalizeWaiverIdentifier_: staffNormalizeWaiverIdentifier_,
+  staffScrippsWaiverMatchesFromRecords_: staffScrippsWaiverMatchesFromRecords_,
   staffToolLabel_: staffToolLabel_,
   staffRoleLabel_: staffRoleLabel_,
   staffAttentionFlags_: staffAttentionFlags_,

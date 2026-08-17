@@ -130,3 +130,41 @@ test("does not append when an active email already exists", () => {
   assert.equal(result.ok, false);
   assert.equal(harness.people.appended.length, 0);
 });
+
+test("extracts a completed DocuSign waiver and normalizes the UCSD ID", () => {
+  const harness = makeHarness();
+  harness.context.webhookPayload = {
+    event: "envelope-completed",
+    data: {
+      envelopeId: "envelope-123",
+      templateId: "template-456",
+      envelopeSummary: {
+        status: "completed",
+        recipients: {
+          signers: [{
+            tabs: {
+              textTabs: [
+                { tabLabel: "participant_name", value: "Ada Lovelace" },
+                { tabLabel: "participant_email", value: "ADA@UCSD.EDU" },
+                { tabLabel: "ucsd_id", value: "A12345678" },
+              ],
+            },
+          }],
+        },
+      },
+    },
+  };
+  const result = vm.runInContext("extractCompletedDocuSignWaiver_(webhookPayload)", harness.context);
+  assert.equal(result.envelopeId, "envelope-123");
+  assert.equal(result.templateId, "template-456");
+  assert.equal(result.participantName, "Ada Lovelace");
+  assert.equal(result.participantEmail, "ada@ucsd.edu");
+  assert.equal(result.normalizedIdentifier, "12345678");
+});
+
+test("ignores DocuSign events that are not completed", () => {
+  const harness = makeHarness();
+  harness.context.webhookPayload = { event: "envelope-sent", data: { envelopeId: "envelope-123", status: "sent" } };
+  const result = vm.runInContext("extractCompletedDocuSignWaiver_(webhookPayload)", harness.context);
+  assert.equal(result, null);
+});

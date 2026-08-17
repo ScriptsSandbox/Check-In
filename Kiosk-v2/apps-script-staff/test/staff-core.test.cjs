@@ -23,6 +23,19 @@ test("identifier hints reveal only the final four characters", () => {
   assert.equal(core.staffIdentifierHint_("23"), "");
 });
 
+test("new Scripps waivers match completed records by normalized ID or email", () => {
+  const records = [
+    { Status: "completed", "Participant Email": "member@ucsd.edu", "Participant ID": "A12345678", "Normalized Identifier": "12345678" },
+    { Status: "voided", "Participant Email": "voided@ucsd.edu", "Participant ID": "A87654321", "Normalized Identifier": "87654321" },
+  ];
+  const matches = core.staffScrippsWaiverMatchesFromRecords_([
+    { requestId: "by-id", identifiers: ["A12345678"], email: "" },
+    { requestId: "by-email", identifiers: [], email: "MEMBER@UCSD.EDU" },
+    { requestId: "voided", identifiers: ["A87654321"], email: "voided@ucsd.edu" },
+  ], records);
+  assert.deepEqual({ ...matches }, { "by-id": true, "by-email": true });
+});
+
 test("legacy tool keys become readable approval labels", () => {
   assert.equal(core.staffToolLabel_("epilog_laser_cutter"), "Laser cutter");
   assert.equal(core.staffToolLabel_("wood_shop"), "Wood Shop");

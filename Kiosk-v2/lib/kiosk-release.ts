@@ -1,5 +1,5 @@
 export const KIOSK_RELEASE = {
-  revision: "2026.08.17.1",
+  revision: "2026.08.17.2",
   date: "August 17, 2026",
-  summary: "Legacy and Scripps DocuSign waivers accepted together",
+  summary: "Google-only Scripps waiver records plus legacy acceptance",
 } as const;

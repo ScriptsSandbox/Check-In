@@ -11,7 +11,7 @@ Responsive staff-only web app backed by the same normalized Google spreadsheet a
 5. Run `setupStaffApp()` once to create `Tool Training` and `Staff Notes`.
 6. Deploy as a web app executing as the deploying account, restricted to UC San Diego users.
 
-During the DocuSign transition, optionally set `SCRIPPS_WAIVER_STATUS_URL` and `SCRIPPS_WAIVER_API_KEY` as Script Properties. The staff card-connection queue will then accept either the existing registration waiver status or a verified completion from the Scripps DocuSign Web Form. If the new service is unavailable, legacy verified waivers remain sufficient and the queue fails closed for new-only records.
+During the DocuSign transition, the staff card-connection queue accepts either the existing registration waiver status or a completed record in the production spreadsheet's `Scripps Waivers` tab. `setupStaffApp()` creates that tab when needed. No external waiver-status service or additional Staff Desk secret is required.
 
 The app also enforces the active `Staff Access` allowlist on every server call. Roles are `staff`, `trainer`, and `administrator`; only trainers and administrators can record laser training.
 
