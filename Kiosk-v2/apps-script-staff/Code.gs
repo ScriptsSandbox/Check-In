@@ -1,5 +1,6 @@
 const STAFF_CONFIG_ = {
   spreadsheetProperty: "USER_DATABASE_SPREADSHEET_ID",
+  legacyWaiverSpreadsheetId: "1KtaxQ13qnXknGVgUpQIKOnPhdSOulPYboHy0GwTtHfY",
   sheets: {
     people: { name: "People", headers: ["Person ID", "Status", "Display Name", "Role", "Primary Email", "Secondary Emails", "Created At", "Updated At", "Source System", "Source Rows"] },
     identifiers: { name: "Identifiers", headers: ["Identifier ID", "Person ID", "Type", "Value", "Normalized Value", "Primary", "Verified", "Active", "Created At", "Source System", "Source Rows"] },
@@ -17,6 +18,7 @@ const STAFF_CONFIG_ = {
 };
 
 var STAFF_SPREADSHEET_MEMO_ = null;
+var STAFF_LEGACY_WAIVER_SHEET_MEMO_ = null;
 var STAFF_RECORDS_MEMO_ = {};
 const STAFF_CACHE_SECONDS_ = { dashboard: 8, person: 30, search: 30, fabman: 45 };
 
@@ -79,7 +81,7 @@ function staffGroupOnboarding() {
     if (normalized && identifiersByPerson[personId].indexOf(normalized) === -1) identifiersByPerson[personId].push(normalized);
   });
   const people = staffRecords_(db.people);
-  const scrippsWaiverByPerson = staffScrippsWaiverMatches_(people.filter(function (person) {
+  const waiverByPerson = staffWaiverMatches_(people.filter(function (person) {
     const personId = String(person["Person ID"] || "").trim();
     return String(person.Status || "").trim().toLowerCase() === "active" && !activeCards[personId];
   }).map(function (person) {
@@ -109,7 +111,7 @@ function staffGroupOnboarding() {
       submittedAt: registration ? staffIsoDate_(registration["Submitted At"]) : "",
       accountCreatedAt: staffIsoDate_(person["Created At"]),
     };
-    if (registration && (/(signed|complete|completed|matched|verified|approved)/.test(waiverStatus) || scrippsWaiverByPerson[personId])) {
+    if (registration && (/(signed|complete|completed|matched|verified|approved)/.test(waiverStatus) || waiverByPerson[personId])) {
       candidates.push(record);
       return;
     }
@@ -154,13 +156,13 @@ function staffStartCardConnection(personId) {
   const identifiers = staffRecords_(db.identifiers).filter(function (record) {
     return record["Person ID"] === personId && staffTrue_(record.Active) && String(record.Type || "").toLowerCase() !== "email";
   }).map(function (record) { return staffClean_(record["Normalized Value"] || record.Value, 80); }).filter(Boolean);
-  const scrippsMatch = staffScrippsWaiverMatches_([{
+  const waiverMatch = staffWaiverMatches_([{
     requestId: personId,
     identifiers: identifiers,
     email: staffClean_(person["Primary Email"], 254).toLowerCase(),
     name: staffClean_(person["Display Name"], 160),
   }])[personId];
-  if (!registration || (!/(signed|complete|completed|matched|verified|approved)/.test(waiverStatus) && !scrippsMatch)) throw new Error("This account is not ready: registration and a verified waiver are required.");
+  if (!registration || (!/(signed|complete|completed|matched|verified|approved)/.test(waiverStatus) && !waiverMatch)) throw new Error("This account is not ready: registration and a verified waiver are required.");
   staffCancelPendingKioskLinks_(db.kioskLinks, "Replaced by a newer staff request");
   const requestedAt = new Date();
   const expiresAt = new Date(requestedAt.getTime() + 45 * 1000);
@@ -173,6 +175,18 @@ function staffStartCardConnection(personId) {
 function staffScrippsWaiverMatches_(queries) {
   if (!queries || !queries.length) return {};
   return staffScrippsWaiverMatchesFromRecords_(queries, staffRecords_(staffDatabase_().scrippsWaivers));
+}
+
+function staffLegacyWaiverMatches_(queries) {
+  if (!queries || !queries.length) return {};
+  return staffLegacyWaiverMatchesFromRecords_(queries, staffLegacyWaiverRecords_());
+}
+
+function staffWaiverMatches_(queries) {
+  const matches = staffScrippsWaiverMatches_(queries);
+  const legacyMatches = staffLegacyWaiverMatches_(queries);
+  Object.keys(legacyMatches).forEach(function (requestId) { matches[requestId] = true; });
+  return matches;
 }
 
 function staffCancelCardConnection(requestId) {
@@ -891,6 +905,20 @@ function staffSpreadsheet_() {
   if (!id) throw new Error("Staff app database is not configured.");
   STAFF_SPREADSHEET_MEMO_ = SpreadsheetApp.openById(id);
   return STAFF_SPREADSHEET_MEMO_;
+}
+
+function staffLegacyWaiverSheet_() {
+  if (STAFF_LEGACY_WAIVER_SHEET_MEMO_) return STAFF_LEGACY_WAIVER_SHEET_MEMO_;
+  STAFF_LEGACY_WAIVER_SHEET_MEMO_ = SpreadsheetApp.openById(STAFF_CONFIG_.legacyWaiverSpreadsheetId).getSheets()[0];
+  return STAFF_LEGACY_WAIVER_SHEET_MEMO_;
+}
+
+function staffLegacyWaiverRecords_() {
+  const cached = staffCacheGetJson_("legacy-waivers");
+  if (cached) return cached;
+  const records = staffRecords_(staffLegacyWaiverSheet_());
+  staffCachePutJson_("legacy-waivers", records, 60);
+  return records;
 }
 
 function staffDatabase_(accessOnly) {

@@ -7,6 +7,7 @@ Responsive staff-only web app backed by the same normalized Google spreadsheet a
 1. Create a standalone Apps Script project owned by the UCSD Sandbox account.
 2. Copy `appsscript.json`, `StaffCore.gs`, `Code.gs`, and `Index.html` into it.
 3. Set script property `USER_DATABASE_SPREADSHEET_ID` to the normalized database ID.
+4. The Staff Desk accepts an exact ID or email match from the existing `Waiver Signatures SIO` spreadsheet as well as completed records in the production `Scripps Waivers` tab.
 4. In the `Staff Access` tab, make the deploying account active with role `administrator`.
 5. Run `setupStaffApp()` once to create `Tool Training` and `Staff Notes`.
 6. Deploy as a web app executing as the deploying account, restricted to UC San Diego users.

@@ -4,6 +4,7 @@ const test = require("node:test");
 const vm = require("node:vm");
 
 const code = fs.readFileSync(require.resolve("../StaffCore.gs"), "utf8");
+const indexHtml = fs.readFileSync(require.resolve("../Index.html"), "utf8");
 const sandbox = { module: { exports: {} } };
 vm.runInNewContext(code, sandbox);
 const core = sandbox.module.exports;
@@ -34,6 +35,25 @@ test("new Scripps waivers match completed records by normalized ID or email", ()
     { requestId: "voided", identifiers: ["A87654321"], email: "voided@ucsd.edu" },
   ], records);
   assert.deepEqual({ ...matches }, { "by-id": true, "by-email": true });
+});
+
+test("legacy waivers match by exact normalized ID or email", () => {
+  const records = [
+    { Name: "Raymmah Grandy Garcia", Email: "rag002@ucsd.edu", Date_Signed: "2026-08-17", A_Number: "A53258193" },
+    { Name: "Maria G Diaz Gonzalez", Email: "mdiazgonzalez@ucsd.edu", Date_Signed: "2026-03-09", A_Number: "A69044638" },
+  ];
+  const matches = core.staffLegacyWaiverMatchesFromRecords_([
+    { requestId: "raymmah", identifiers: ["53258193"], email: "" },
+    { requestId: "maria", identifiers: [], email: "MDIAZGONZALEZ@UCSD.EDU" },
+    { requestId: "wrong", identifiers: ["A69044639"], email: "other@ucsd.edu" },
+  ], records);
+  assert.deepEqual({ ...matches }, { raymmah: true, maria: true });
+});
+
+test("Mark left immediately exposes a disabled processing state", () => {
+  assert.match(indexHtml, /left\.disabled=true/);
+  assert.match(indexHtml, /left\.setAttribute\("aria-busy","true"\)/);
+  assert.match(indexHtml, /left\.textContent="Marking left…"/);
 });
 
 test("legacy tool keys become readable approval labels", () => {

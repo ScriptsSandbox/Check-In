@@ -90,6 +90,22 @@ function staffScrippsWaiverMatchesFromRecords_(queries, records) {
   return matches;
 }
 
+function staffLegacyWaiverMatchesFromRecords_(queries, records) {
+  const matches = {};
+  (queries || []).forEach(function (query) {
+    const identifiers = (query.identifiers || []).map(staffNormalizeWaiverIdentifier_).filter(Boolean);
+    const email = staffClean_(query.email, 254).toLowerCase();
+    const matched = (records || []).some(function (record) {
+      const recordIdentifier = staffNormalizeWaiverIdentifier_(record.A_Number);
+      const recordEmail = staffClean_(record.Email, 254).toLowerCase();
+      return (Boolean(recordIdentifier) && identifiers.indexOf(recordIdentifier) !== -1)
+        || (Boolean(email) && recordEmail === email);
+    });
+    if (matched && query.requestId) matches[String(query.requestId)] = true;
+  });
+  return matches;
+}
+
 function staffToolLabel_(toolKey) {
   const cleaned = staffClean_(toolKey, 80).toLowerCase();
   if (cleaned === "epilog_laser_cutter") return "Laser cutter";
@@ -194,6 +210,7 @@ if (typeof module !== "undefined") module.exports = {
   staffIdentifierHint_: staffIdentifierHint_,
   staffNormalizeWaiverIdentifier_: staffNormalizeWaiverIdentifier_,
   staffScrippsWaiverMatchesFromRecords_: staffScrippsWaiverMatchesFromRecords_,
+  staffLegacyWaiverMatchesFromRecords_: staffLegacyWaiverMatchesFromRecords_,
   staffToolLabel_: staffToolLabel_,
   staffRoleLabel_: staffRoleLabel_,
   staffAttentionFlags_: staffAttentionFlags_,
