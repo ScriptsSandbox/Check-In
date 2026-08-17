@@ -5,7 +5,7 @@ const STAFF_CONFIG_ = {
     identifiers: { name: "Identifiers", headers: ["Identifier ID", "Person ID", "Type", "Value", "Normalized Value", "Primary", "Verified", "Active", "Created At", "Source System", "Source Rows"] },
     certifications: { name: "Tool Certifications", headers: ["Certification ID", "Person ID", "Tool Key", "Status", "Granted At", "Removed At", "Source System", "Source Rows", "Notes"] },
     registrations: { name: "Registrations", headers: ["Registration ID", "Person ID", "Status", "Submitted At", "Reviewed By", "Reviewed At", "Program / Department", "Identifier Type", "DocuSign Status", "Consent Version", "Anticipated Graduation", "Source"], allowAdditionalHeaders: true },
-    cards: { name: "Cards", headers: ["Card ID", "Person ID", "Card Digest", "Last Four", "Status", "Linked At", "Disabled At", "Source", "Notes"], allowAdditionalHeaders: true },
+    cards: { name: "Cards", headers: ["Person ID", "Status"], allowAdditionalHeaders: true },
     visits: { name: "Visits", headers: ["Visit ID", "Person ID", "Check In At", "Event Type", "Authorizing Entity", "Flags", "Notes", "Source System", "Source Row"] },
     staffAccess: { name: "Staff Access", headers: ["Staff ID", "Name", "Email", "Role", "Active", "Card Linking Allowed", "Notes"] },
     training: { name: "Tool Training", headers: ["Training ID", "Person ID", "Tool", "Status", "Approved By", "Approved At", "FabMan Status", "Notes"] },
