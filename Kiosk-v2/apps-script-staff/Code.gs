@@ -72,27 +72,38 @@ function staffGroupOnboarding() {
     const personId = String(record["Person ID"] || "").trim();
     if (!identifierByPerson[personId] && staffTrue_(record.Active) && String(record.Type || "").toLowerCase() !== "email") identifierByPerson[personId] = record;
   });
-  const candidates = staffRecords_(db.people).filter(function (person) {
+  const candidates = [];
+  const blocked = [];
+  staffRecords_(db.people).forEach(function (person) {
     const personId = String(person["Person ID"] || "").trim();
-    const registration = registrationByPerson[personId];
-    const waiverStatus = registration ? staffClean_(registration["DocuSign Status"], 120).toLowerCase() : "";
-    return String(person.Status || "").trim().toLowerCase() === "active"
-      && Boolean(registration)
-      && /(signed|complete|completed|matched|verified|approved)/.test(waiverStatus)
-      && !activeCards[personId];
-  }).map(function (person) {
-    const personId = String(person["Person ID"] || "").trim();
+    if (String(person.Status || "").trim().toLowerCase() !== "active" || activeCards[personId]) return;
     const registration = registrationByPerson[personId];
     const identifier = identifierByPerson[personId] || {};
-    return {
+    const waiverStatusDisplay = registration ? staffClean_(registration["DocuSign Status"], 120) : "";
+    const waiverStatus = waiverStatusDisplay.toLowerCase();
+    const record = {
       personId: personId,
       name: staffPrivateName_(person["Display Name"]),
       role: staffClean_(person.Role, 80),
-      affiliation: staffClean_(registration["Program / Department"], 120),
+      affiliation: registration ? staffClean_(registration["Program / Department"], 120) : "",
       identifierHint: staffIdentifierHint_(identifier.Value),
-      submittedAt: staffIsoDate_(registration["Submitted At"]),
+      submittedAt: registration ? staffIsoDate_(registration["Submitted At"]) : "",
+      accountCreatedAt: staffIsoDate_(person["Created At"]),
     };
-  }).sort(function (a, b) { return String(b.submittedAt).localeCompare(String(a.submittedAt)); });
+    if (registration && /(signed|complete|completed|matched|verified|approved)/.test(waiverStatus)) {
+      candidates.push(record);
+      return;
+    }
+    record.blockers = !registration
+      ? ["Registration not found — ask them to complete the online registration."]
+      : !waiverStatusDisplay
+        ? ["Signed waiver not found — DocuSign can take up to 15 minutes to sync."]
+        : ["Waiver is not verified yet (" + waiverStatusDisplay + ") — allow up to 15 minutes after signing."];
+    blocked.push(record);
+  });
+  const onboardingTime_ = function (record) { return String(record.submittedAt || record.accountCreatedAt || ""); };
+  candidates.sort(function (a, b) { return onboardingTime_(b).localeCompare(onboardingTime_(a)); });
+  blocked.sort(function (a, b) { return onboardingTime_(b).localeCompare(onboardingTime_(a)); });
   const requests = staffRecords_(db.kioskLinks);
   let pending = null;
   for (let index = requests.length - 1; index >= 0; index -= 1) {
@@ -106,7 +117,7 @@ function staffGroupOnboarding() {
     };
     break;
   }
-  return { ok: true, actor: access, candidates: candidates, pending: pending, refreshedAt: now.toISOString() };
+  return { ok: true, actor: access, candidates: candidates, blocked: blocked, pending: pending, refreshedAt: now.toISOString() };
 }
 
 function staffStartCardConnection(personId) {
