@@ -1,5 +1,7 @@
 const STAFF_CONFIG_ = {
   spreadsheetProperty: "USER_DATABASE_SPREADSHEET_ID",
+  scrippsWaiverStatusUrlProperty: "SCRIPPS_WAIVER_STATUS_URL",
+  scrippsWaiverApiKeyProperty: "SCRIPPS_WAIVER_API_KEY",
   sheets: {
     people: { name: "People", headers: ["Person ID", "Status", "Display Name", "Role", "Primary Email", "Secondary Emails", "Created At", "Updated At", "Source System", "Source Rows"] },
     identifiers: { name: "Identifiers", headers: ["Identifier ID", "Person ID", "Type", "Value", "Normalized Value", "Primary", "Verified", "Active", "Created At", "Source System", "Source Rows"] },
@@ -68,13 +70,31 @@ function staffGroupOnboarding() {
     if (String(record.Status || "").trim().toLowerCase() === "active") activeCards[String(record["Person ID"] || "").trim()] = true;
   });
   const identifierByPerson = {};
+  const identifiersByPerson = {};
   staffRecords_(db.identifiers).forEach(function (record) {
     const personId = String(record["Person ID"] || "").trim();
-    if (!identifierByPerson[personId] && staffTrue_(record.Active) && String(record.Type || "").toLowerCase() !== "email") identifierByPerson[personId] = record;
+    if (!staffTrue_(record.Active) || String(record.Type || "").toLowerCase() === "email") return;
+    if (!identifierByPerson[personId]) identifierByPerson[personId] = record;
+    if (!identifiersByPerson[personId]) identifiersByPerson[personId] = [];
+    const normalized = staffClean_(record["Normalized Value"] || record.Value, 80);
+    if (normalized && identifiersByPerson[personId].indexOf(normalized) === -1) identifiersByPerson[personId].push(normalized);
   });
+  const people = staffRecords_(db.people);
+  const scrippsWaiverByPerson = staffScrippsWaiverMatches_(people.filter(function (person) {
+    const personId = String(person["Person ID"] || "").trim();
+    return String(person.Status || "").trim().toLowerCase() === "active" && !activeCards[personId];
+  }).map(function (person) {
+    const personId = String(person["Person ID"] || "").trim();
+    return {
+      requestId: personId,
+      identifiers: identifiersByPerson[personId] || [],
+      email: staffClean_(person["Primary Email"], 254).toLowerCase(),
+      name: staffClean_(person["Display Name"], 160),
+    };
+  }));
   const candidates = [];
   const blocked = [];
-  staffRecords_(db.people).forEach(function (person) {
+  people.forEach(function (person) {
     const personId = String(person["Person ID"] || "").trim();
     if (String(person.Status || "").trim().toLowerCase() !== "active" || activeCards[personId]) return;
     const registration = registrationByPerson[personId];
@@ -90,7 +110,7 @@ function staffGroupOnboarding() {
       submittedAt: registration ? staffIsoDate_(registration["Submitted At"]) : "",
       accountCreatedAt: staffIsoDate_(person["Created At"]),
     };
-    if (registration && /(signed|complete|completed|matched|verified|approved)/.test(waiverStatus)) {
+    if (registration && (/(signed|complete|completed|matched|verified|approved)/.test(waiverStatus) || scrippsWaiverByPerson[personId])) {
       candidates.push(record);
       return;
     }
@@ -132,7 +152,16 @@ function staffStartCardConnection(personId) {
   const registrations = staffRecords_(db.registrations).filter(function (record) { return record["Person ID"] === personId; });
   const registration = registrations.length ? registrations[registrations.length - 1] : null;
   const waiverStatus = registration ? staffClean_(registration["DocuSign Status"], 120).toLowerCase() : "";
-  if (!registration || !/(signed|complete|completed|matched|verified|approved)/.test(waiverStatus)) throw new Error("This account is not ready: registration and a verified waiver are required.");
+  const identifiers = staffRecords_(db.identifiers).filter(function (record) {
+    return record["Person ID"] === personId && staffTrue_(record.Active) && String(record.Type || "").toLowerCase() !== "email";
+  }).map(function (record) { return staffClean_(record["Normalized Value"] || record.Value, 80); }).filter(Boolean);
+  const scrippsMatch = staffScrippsWaiverMatches_([{
+    requestId: personId,
+    identifiers: identifiers,
+    email: staffClean_(person["Primary Email"], 254).toLowerCase(),
+    name: staffClean_(person["Display Name"], 160),
+  }])[personId];
+  if (!registration || (!/(signed|complete|completed|matched|verified|approved)/.test(waiverStatus) && !scrippsMatch)) throw new Error("This account is not ready: registration and a verified waiver are required.");
   staffCancelPendingKioskLinks_(db.kioskLinks, "Replaced by a newer staff request");
   const requestedAt = new Date();
   const expiresAt = new Date(requestedAt.getTime() + 45 * 1000);
@@ -140,6 +169,32 @@ function staffStartCardConnection(personId) {
   db.kioskLinks.appendRow([requestId, personId, staffSheetSafe_(person["Display Name"]), access.email, requestedAt, expiresAt, "Pending", "", "Waiting for member card"]);
   staffAfterWrite_(personId);
   return { ok: true, requestId: requestId, personId: personId, name: staffPrivateName_(person["Display Name"]), expiresAt: expiresAt.toISOString() };
+}
+
+function staffScrippsWaiverMatches_(queries) {
+  const matches = {};
+  if (!queries || !queries.length) return matches;
+  const properties = PropertiesService.getScriptProperties();
+  const url = String(properties.getProperty(STAFF_CONFIG_.scrippsWaiverStatusUrlProperty) || "").trim();
+  const apiKey = String(properties.getProperty(STAFF_CONFIG_.scrippsWaiverApiKeyProperty) || "").trim();
+  if (!url || !apiKey) return matches;
+  try {
+    const response = UrlFetchApp.fetch(url, {
+      method: "post",
+      contentType: "application/json",
+      headers: { Authorization: "Bearer " + apiKey },
+      payload: JSON.stringify({ queries: queries }),
+      muteHttpExceptions: true,
+    });
+    if (response.getResponseCode() !== 200) return matches;
+    const parsed = JSON.parse(response.getContentText());
+    (parsed.matches || []).forEach(function (result) {
+      if (result && result.matched && result.requestId) matches[String(result.requestId)] = true;
+    });
+  } catch (error) {
+    console.warn("Scripps waiver lookup unavailable: " + String(error && error.message || error));
+  }
+  return matches;
 }
 
 function staffCancelCardConnection(requestId) {

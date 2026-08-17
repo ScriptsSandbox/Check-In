@@ -14,6 +14,8 @@ When the kiosk UI is served from `localhost`, it automatically connects to `ws:/
 
 The Sheets backend warms its user, waiver, and activity caches at startup. The user and waiver cache defaults to five minutes; the activity cache defaults to one hour and is updated after every successful append. Override these with `SHEETS_CACHE_SECONDS` and `SHEETS_ACTIVITY_CACHE_SECONDS` when needed.
 
+Waiver acceptance is additive during the Scripps transition. The existing `Waiver Signatures SIO` sheet is checked first and remains sufficient indefinitely. When `SCRIPPS_WAIVER_STATUS_URL` and `SCRIPPS_WAIVER_API_KEY_FILE` are configured, a miss in the legacy sheet is followed by a lookup against completed Scripps DocuSign Web Form records. A failure in the new service never invalidates a legacy match.
+
 ## Designated-staff card linking
 
 When an unrecognized member card is scanned, the bridge keeps its UID in memory for five minutes. A staff member verifies the member's physical ID, enters the matching PID, TSN, or employee ID in the kiosk, and approves the link by tapping their own already-linked card. The member's UID is never sent to the browser. Successful links update `Card UUID` in the user database and append a `Card Linked` audit row to the activity sheet.

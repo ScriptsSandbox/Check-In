@@ -17,6 +17,8 @@ from pathlib import Path
 from threading import Lock
 import time
 from typing import Any, Callable, Protocol
+import json
+from urllib.request import Request, urlopen
 from uuid import uuid4
 
 
@@ -126,6 +128,8 @@ class GoogleSheetsProvider:
         card_hmac_secret: str,
         cache_seconds: int = 300,
         activity_cache_seconds: int = 3600,
+        scripps_waiver_status_url: str = "",
+        scripps_waiver_api_key: str = "",
     ) -> None:
         self.credentials_path = credentials_path
         self.database_id = database_id
@@ -133,6 +137,8 @@ class GoogleSheetsProvider:
         self.card_hmac_secret = card_hmac_secret
         self.cache_seconds = cache_seconds
         self.activity_cache_seconds = activity_cache_seconds
+        self.scripps_waiver_status_url = scripps_waiver_status_url
+        self.scripps_waiver_api_key = scripps_waiver_api_key
         self._lock = Lock()
         self._people_sheet: Any = None
         self._database: Any = None
@@ -153,6 +159,8 @@ class GoogleSheetsProvider:
         database_id = os.getenv("SHEETS_DATABASE_ID", "").strip()
         if not credentials_path or not database_id:
             raise RuntimeError("SHEETS_CREDENTIALS_PATH and SHEETS_DATABASE_ID are required")
+        api_key_file = os.getenv("SCRIPPS_WAIVER_API_KEY_FILE", "").strip()
+        api_key = Path(api_key_file).read_text(encoding="utf-8").strip() if api_key_file else ""
         return cls(
             credentials_path=credentials_path,
             database_id=database_id,
@@ -160,7 +168,35 @@ class GoogleSheetsProvider:
             card_hmac_secret=required_secret(),
             cache_seconds=int(os.getenv("SHEETS_CACHE_SECONDS", "300")),
             activity_cache_seconds=int(os.getenv("SHEETS_ACTIVITY_CACHE_SECONDS", "3600")),
+            scripps_waiver_status_url=os.getenv("SCRIPPS_WAIVER_STATUS_URL", "").strip(),
+            scripps_waiver_api_key=api_key,
         )
+
+    def additional_waiver_found(self, user: dict[str, Any]) -> bool:
+        if not self.scripps_waiver_status_url or not self.scripps_waiver_api_key:
+            return False
+        payload = json.dumps({
+            "identifiers": sorted(normalized_user_identifiers(user)),
+            "email": normalize_email(user.get("Email Address")),
+            "name": str(user.get("Name", "")).strip(),
+        }).encode("utf-8")
+        request = Request(
+            self.scripps_waiver_status_url,
+            data=payload,
+            headers={
+                "Authorization": "Bearer " + self.scripps_waiver_api_key,
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=8) as response:
+                result = json.loads(response.read().decode("utf-8"))
+        except Exception:
+            LOGGER.exception("Scripps waiver status lookup failed")
+            return False
+        matches = result.get("matches") if isinstance(result, dict) else None
+        return bool(isinstance(matches, list) and matches and matches[0].get("matched"))
 
     def card_digest(self, card_uid: str) -> str:
         return hmac.new(
@@ -626,18 +662,19 @@ class SheetsCheckInBackend:
     def _waiver_found(self, user: dict[str, Any]) -> bool:
         user_ids = normalized_user_identifiers(user)
         user_email = normalize_email(user.get("Email Address"))
-        return any(
+        legacy_found = any(
             (normalize_person_id(waiver.get("A_Number")) in user_ids)
             or (bool(user_email) and normalize_email(waiver.get("Email")) == user_email)
             for waiver in self.provider.waiver_records()
         )
+        if legacy_found:
+            return True
+        additional_checker = getattr(self.provider, "additional_waiver_found", None)
+        return bool(additional_checker and additional_checker(user))
 
     def _check_in_user(self, user: dict[str, Any], total_started: float, timings: dict[str, int]) -> CheckInResult:
-        user_ids = normalized_user_identifiers(user)
-        user_email = normalize_email(user.get("Email Address"))
         stage_started = time.monotonic()
-        waivers = self.provider.waiver_records()
-        waiver_found = any((normalize_person_id(waiver.get("A_Number")) in user_ids) or (bool(user_email) and normalize_email(waiver.get("Email")) == user_email) for waiver in waivers)
+        waiver_found = self._waiver_found(user)
         timings["waiver_lookup"] = elapsed_ms(stage_started)
         if not waiver_found:
             timings["total"] = elapsed_ms(total_started)

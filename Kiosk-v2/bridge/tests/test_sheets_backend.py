@@ -21,6 +21,7 @@ class FakeProvider:
         self.calls = {"users": 0, "waivers": 0, "activity": 0, "append": 0, "card_update": 0}
         self.group_request = None
         self.group_updates = []
+        self.additional_waiver = False
 
     @staticmethod
     def card_digest(card_uid):
@@ -33,6 +34,10 @@ class FakeProvider:
     def waiver_records(self):
         self.calls["waivers"] += 1
         return [dict(row) for row in self.waivers]
+
+    def additional_waiver_found(self, user):
+        del user
+        return self.additional_waiver
 
     def activity_rows(self):
         self.calls["activity"] += 1
@@ -271,6 +276,27 @@ def test_known_card_without_waiver_does_not_read_activity_or_write():
     assert result.outcome == "waiver_required"
     assert provider.calls["activity"] == 0
     assert provider.calls["append"] == 0
+
+
+def test_new_scripps_waiver_is_accepted_when_legacy_sheet_has_no_match():
+    provider = FakeProvider(users=[member()], waivers=[])
+    provider.additional_waiver = True
+    result = backend_for(provider).check_in("CARD123")
+    assert result.outcome == "success"
+    assert provider.calls["append"] == 1
+
+
+def test_legacy_waiver_still_succeeds_without_calling_new_source():
+    provider = FakeProvider(users=[member()], waivers=[signed_waiver()])
+    provider.additional_waiver = True
+    calls = {"new": 0}
+    def new_source(user):
+        del user
+        calls["new"] += 1
+        return True
+    provider.additional_waiver_found = new_source
+    assert backend_for(provider).check_in("CARD123").outcome == "success"
+    assert calls["new"] == 0
 
 
 def test_email_waiver_match_is_case_insensitive():
