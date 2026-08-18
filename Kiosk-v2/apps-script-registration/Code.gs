@@ -13,7 +13,9 @@ const REGISTRATION_CONFIG_ = {
 function doGet(event) {
   const template = HtmlService.createTemplateFromFile("Index");
   template.isKiosk = Boolean(event && event.parameter && event.parameter.mode === "kiosk");
-  return template.evaluate().setTitle("Create a Scripps Sandbox account");
+  return template.evaluate()
+    .setTitle("Create a Scripps Sandbox account")
+    .addMetaTag("viewport", "width=device-width, initial-scale=1");
 }
 
 function doPost(event) {
