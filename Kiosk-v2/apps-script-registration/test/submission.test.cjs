@@ -11,6 +11,7 @@ const appSource = fs.readFileSync(path.join(root, "Code.gs"), "utf8");
 const peopleHeaders = ["Person ID", "Status", "Display Name", "Role", "Primary Email", "Secondary Emails", "Created At", "Updated At", "Source System", "Source Rows"];
 const identifierHeaders = ["Identifier ID", "Person ID", "Type", "Value", "Normalized Value", "Primary", "Verified", "Active", "Created At", "Source System", "Source Rows"];
 const registrationHeaders = ["Registration ID", "Person ID", "Status", "Submitted At", "Reviewed By", "Reviewed At", "Program / Department", "Identifier Type", "DocuSign Status", "Consent Version", "Anticipated Graduation", "Source"];
+const fabmanProvisioningHeaders = ["Provisioning ID", "Person ID", "First Name", "Last Name", "Status", "Attempt Count", "Last Attempt At", "Next Attempt At", "FabMan Member ID", "Last Error", "Created At", "Updated At"];
 
 function makeSheet(name, headers, existingRows = []) {
   const appended = [];
@@ -36,12 +37,13 @@ function makeHarness(existingIdentifiers = []) {
   const people = makeSheet("People", peopleHeaders);
   const identifiers = makeSheet("Identifiers", identifierHeaders, existingIdentifiers);
   const registrations = makeSheet("Registrations", registrationHeaders);
+  const fabmanProvisioning = makeSheet("FabMan Provisioning", fabmanProvisioningHeaders);
   let released = false;
   let uuid = 0;
   const spreadsheet = {
     getId: () => "production-sheet-id",
     getName: () => "Scripps Sandbox Database v2 — Production",
-    getSheetByName: (name) => ({ People: people, Identifiers: identifiers, Registrations: registrations }[name]),
+    getSheetByName: (name) => ({ People: people, Identifiers: identifiers, Registrations: registrations, "FabMan Provisioning": fabmanProvisioning }[name]),
   };
   const context = vm.createContext({
     Date,
@@ -59,7 +61,8 @@ function makeHarness(existingIdentifiers = []) {
   });
   vm.runInContext(coreSource, context);
   vm.runInContext(appSource, context);
-  return { context, people, identifiers, registrations, wasReleased: () => released };
+  context.registrationProvisionFabman_ = () => ({ ok: true, status: "Complete", memberId: 123 });
+  return { context, people, identifiers, registrations, fabmanProvisioning, wasReleased: () => released };
 }
 
 function validPayload(overrides = {}) {
@@ -89,11 +92,13 @@ test("creates normalized person, identifier, email, and registration rows", () =
   assert.equal(harness.people.appended.length, 1);
   assert.equal(harness.identifiers.appended.length, 2);
   assert.equal(harness.registrations.appended.length, 1);
+  assert.equal(harness.fabmanProvisioning.appended.length, 1);
   assert.equal(harness.people.appended[0][peopleHeaders.indexOf("Role")], "Graduate Student (PhD)");
   assert.equal(harness.identifiers.appended[0][identifierHeaders.indexOf("Type")], "PID");
   assert.equal(harness.registrations.appended[0][registrationHeaders.indexOf("Program / Department")], "CASPO-O&A");
   assert.equal(harness.registrations.appended[0][registrationHeaders.indexOf("Status")], "Submitted");
   assert.equal(harness.registrations.appended[0][registrationHeaders.indexOf("Anticipated Graduation")], "2028-06");
+  assert.equal(harness.fabmanProvisioning.appended[0][fabmanProvisioningHeaders.indexOf("Status")], "Pending");
   assert.equal(harness.wasReleased(), true);
 });
 

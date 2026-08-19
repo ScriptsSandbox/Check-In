@@ -233,6 +233,7 @@ function validateRegistration_(payload, nowMs) {
     value: {
       name: displayFirstName + " " + lastName,
       firstName: displayFirstName,
+      lastName: lastName,
       role: role,
       affiliation: affiliation,
       identifierType: identifierType,

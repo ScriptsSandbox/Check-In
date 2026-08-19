@@ -411,6 +411,48 @@ class GoogleSheetsProvider:
                 return True
             return target in {str(value).strip() for value in self._visits_sheet.col_values(1)[1:]}
 
+    def _insert_verified_card(self, headers: list[str], card_values: dict[str, Any]) -> None:
+        """Insert a card as a real sheet row and confirm it survived the write.
+
+        Cards deliberately use ``insert_row`` instead of ``append_row``. Google
+        Sheets' table-range detection can occasionally choose the final existing
+        row as the append target when a sheet has formatting or partially blank
+        columns. Inserting directly below the header has an unambiguous target and
+        preserves every prior card-history row.
+
+        A network error can be ambiguous: the remote insert may have completed
+        even though the client did not receive the response. In either case we
+        read the sheet back and accept the write only when the unique Card ID,
+        person, digest, and Active status are all present together.
+        """
+        row = [card_values.get(header, "") for header in headers]
+        write_error: Exception | None = None
+        try:
+            self._cards_sheet.insert_row(row, index=2, value_input_option="USER_ENTERED")
+        except Exception as exc:  # The readback below resolves ambiguous remote writes.
+            write_error = exc
+
+        rows = self._cards_sheet.get_all_values()
+        card_id_column = headers.index("Card ID")
+        person_column = headers.index("Person ID")
+        digest_column = headers.index("Card Digest")
+        status_column = headers.index("Status")
+        verified = any(
+            len(existing) > max(card_id_column, person_column, digest_column, status_column)
+            and str(existing[card_id_column]).strip() == str(card_values["Card ID"]).strip()
+            and str(existing[person_column]).strip() == str(card_values["Person ID"]).strip()
+            and str(existing[digest_column]).strip().lower() == str(card_values["Card Digest"]).strip().lower()
+            and str(existing[status_column]).strip().lower() == "active"
+            for existing in rows[1:]
+        )
+        if verified:
+            if write_error is not None:
+                LOGGER.warning("Card insert returned an error but readback verified Card ID %s", card_values["Card ID"])
+            return
+        if write_error is not None:
+            LOGGER.error("Card insert failed and readback did not find Card ID %s: %s", card_values["Card ID"], write_error)
+        raise ValueError("The card was not saved. Ask staff to select the member and try again.")
+
     def update_user_card(self, identifier: str, card_uid: str) -> dict[str, Any]:
         normalized_identifier = normalize_person_id(identifier)
         digest = self.card_digest(card_uid)
@@ -433,9 +475,10 @@ class GoogleSheetsProvider:
             status_column = headers.index("Status")
             disabled_at_column = headers.index("Disabled At")
             rows = self._cards_sheet.get_all_values()
-            replaced_rows = [
-                row_number
-                for row_number, row in enumerate(rows[1:], start=2)
+            card_id_column = headers.index("Card ID")
+            replaced_card_ids = [
+                str(row[card_id_column]).strip()
+                for row in rows[1:]
                 if len(row) > max(person_column, status_column)
                 and str(row[person_column]).strip() == str(record["Person ID"]).strip()
                 and str(row[status_column]).strip().lower() == "active"
@@ -450,18 +493,20 @@ class GoogleSheetsProvider:
                 "Linked At": changed_at,
                 "Disabled At": "",
                 "Source": "Kiosk v2 staff replacement",
-                "Notes": f"Replaced {len(replaced_rows)} previous active card(s)",
+                "Source System": "Kiosk v2 staff replacement",
+                "Source Row": f"Replaced {len(replaced_card_ids)} previous active card(s)",
+                "Notes": f"Replaced {len(replaced_card_ids)} previous active card(s)",
             }
-            self._cards_sheet.append_row(
-                [card_values.get(header, "") for header in headers],
-                value_input_option="USER_ENTERED",
-            )
-            for row_number in replaced_rows:
-                self._cards_sheet.update_cell(row_number, status_column + 1, "Replaced")
-                self._cards_sheet.update_cell(row_number, disabled_at_column + 1, changed_at)
+            self._insert_verified_card(headers, card_values)
+            current_rows = self._cards_sheet.get_all_values()
+            replaced_card_id_set = set(replaced_card_ids)
+            for row_number, row in enumerate(current_rows[1:], start=2):
+                if len(row) > card_id_column and str(row[card_id_column]).strip() in replaced_card_id_set:
+                    self._cards_sheet.update_cell(row_number, status_column + 1, "Replaced")
+                    self._cards_sheet.update_cell(row_number, disabled_at_column + 1, changed_at)
             record["Card Digest"] = digest
             record["Card Digests"] = (digest,)
-            record["Replaced Card Count"] = len(replaced_rows)
+            record["Replaced Card Count"] = len(replaced_card_ids)
             self._cache_expires_at = time.monotonic() + self.cache_seconds
             return dict(record)
 
@@ -490,9 +535,11 @@ class GoogleSheetsProvider:
                 "Linked At": changed_at,
                 "Disabled At": "",
                 "Source": "Kiosk v2 group onboarding",
+                "Source System": "Kiosk v2 group onboarding",
+                "Source Row": "First card connected from Staff Desk queue",
                 "Notes": "First card connected from Staff Desk queue",
             }
-            self._cards_sheet.append_row([card_values.get(header, "") for header in headers], value_input_option="USER_ENTERED")
+            self._insert_verified_card(headers, card_values)
             record["Card Digest"] = digest
             record["Card Digests"] = (digest,)
             self._cache_expires_at = time.monotonic() + self.cache_seconds

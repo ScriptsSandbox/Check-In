@@ -805,10 +805,10 @@ export default function Home() {
 
         {screen === "group-link" && groupLinkRequest && (
           <div className="status-content screen-content group-link-content">
-            <p className="eyebrow">STAFF DESK READY</p>
+            <p className="eyebrow">CARD CONNECTION STARTED</p>
             <h1>{groupLinkRequest.display_name.split(/\s+/)[0]}, tap your<br />ID card now.</h1>
-            <p className="lede">Hold your card near the blue hand below. This will connect your card and check you in.</p>
-            <div className="group-link-callout"><b>CHECK THE NAME ABOVE</b><span>If this is not you, choose Cancel and ask staff for help.</span></div>
+            <p className="lede">Hold your card at the blue hand until this screen changes. Then keep watching for the result.</p>
+            <div className="group-link-callout"><b>WAIT FOR “CARD CONNECTED”</b><span>You are not finished until that confirmation appears. If this is not your name, choose Cancel and ask staff for help.</span></div>
             <button className="outline-action" onClick={reset}>Not {groupLinkRequest.display_name.split(/\s+/)[0]}? Cancel</button>
           </div>
         )}
@@ -816,8 +816,8 @@ export default function Home() {
         {screen === "group-link-error" && (
           <div className="status-content screen-content">
             <p className="eyebrow warning">CARD NOT CONNECTED</p>
-            <h1>Please ask staff<br />to try again.</h1>
-            <p className="lede">{linkError}</p>
+            <h1>Please don’t<br />leave yet.</h1>
+            <p className="lede">{linkError} Ask staff to select your name again, then tap once more.</p>
             <button className="solid-action" onClick={reset}>Return to start</button>
           </div>
         )}
@@ -1095,17 +1095,17 @@ export default function Home() {
             <div className="success-mark" aria-hidden="true">✓</div>
             <p className="eyebrow">{groupJustLinked ? "CARD CONNECTED · CHECK-IN COMPLETE" : "CHECK-IN COMPLETE"}</p>
             <h1>{groupJustLinked ? <>You’re all set,<br />{welcomeName}.</> : <>Welcome back,<br />{welcomeName}.</>}</h1>
-            <p className="lede">{groupJustLinked ? "Your ID card is connected and today’s visit has been recorded." : "You’re checked in to the Scripps Sandbox."}</p>
+            <p className="lede">{groupJustLinked ? "Your ID card was saved and verified, and today’s visit was recorded. You’re done." : "You’re checked in to the Scripps Sandbox."}</p>
           </> : closingStatus.mode === "closing-soon" ? <>
             <div className="closing-time-badge" aria-hidden="true"><b>{String(minutesUntilClose).padStart(2, "0")}</b><span>MIN</span></div>
-            <p className="eyebrow">CHECK-IN RECORDED · CLOSING SOON</p>
+            <p className="eyebrow">{groupJustLinked ? "CARD CONNECTED · CLOSING SOON" : "CHECK-IN RECORDED · CLOSING SOON"}</p>
             <h1>We close in<br />{minutesUntilClose} minutes.</h1>
-            <p className="lede">Welcome, {welcomeName}. Only begin work you can stop and clean up safely before closing.</p>
+            <p className="lede">{groupJustLinked ? "Your card was saved and verified. " : ""}Welcome, {welcomeName}. Only begin work you can stop and clean up safely before closing.</p>
           </> : <>
             <div className="closed-stripe" aria-hidden="true">CLOSED</div>
-            <p className="eyebrow">CHECK-IN RECORDED · MAKERSPACE CLOSED</p>
+            <p className="eyebrow">{groupJustLinked ? "CARD CONNECTED · MAKERSPACE CLOSED" : "CHECK-IN RECORDED · MAKERSPACE CLOSED"}</p>
             <h1>Please see<br />a staff member.</h1>
-            <p className="lede">The door may still be open, but do not begin or continue work without staff approval.</p>
+            <p className="lede">{groupJustLinked ? "Your card was saved and verified. " : ""}The door may still be open, but do not begin or continue work without staff approval.</p>
           </>}
           {closingStatus.mode !== "open" && (
             <article className={`success-closing-alert ${closingStatus.mode === "closed" ? "closed-alert" : ""}`} role="alert">

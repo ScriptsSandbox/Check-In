@@ -5,6 +5,7 @@ import time
 from sheets_backend import (
     GoogleSheetsProvider,
     SheetsCheckInBackend,
+    normalized_card_digests,
     normalize_person_id,
     user_has_card_digest,
     users_matching_identifier,
@@ -191,6 +192,7 @@ class FakeCardsSheet:
 
     def __init__(self, rows=None, headers=None):
         self.appends = []
+        self.insertions = []
         self.rows = [list(headers or self.HEADERS), *(list(row) for row in (rows or []))]
 
     def row_values(self, row_number):
@@ -203,10 +205,19 @@ class FakeCardsSheet:
         self.appends.append((list(row), value_input_option))
         self.rows.append(list(row))
 
+    def insert_row(self, row, index=1, value_input_option=None):
+        self.insertions.append((list(row), index, value_input_option))
+        self.rows.insert(index - 1, list(row))
+
     def update_cell(self, row_number, column_number, value):
         while len(self.rows[row_number - 1]) < column_number:
             self.rows[row_number - 1].append("")
         self.rows[row_number - 1][column_number - 1] = value
+
+
+class DroppedCardWriteSheet(FakeCardsSheet):
+    def insert_row(self, row, index=1, value_input_option=None):
+        self.insertions.append((list(row), index, value_input_option))
 
 
 def test_activity_cache_avoids_full_sheet_read_after_append():
@@ -234,16 +245,17 @@ def test_google_sheets_provider_replaces_the_previous_active_card():
     provider._users = [existing]
     provider._cache_expires_at = float("inf")
     updated = provider.update_user_card("12345678", "ABCDEF12345678")
-    row, option = provider._cards_sheet.appends[0]
+    row, index, option = provider._cards_sheet.insertions[0]
     assert updated["Card Digest"] == provider.card_digest("ABCDEF12345678")
     assert updated["Card Digests"] == (provider.card_digest("ABCDEF12345678"),)
     assert updated["Replaced Card Count"] == 1
-    assert provider._cards_sheet.rows[1][4] == "Replaced"
-    assert provider._cards_sheet.rows[1][6]
+    assert provider._cards_sheet.rows[2][4] == "Replaced"
+    assert provider._cards_sheet.rows[2][6]
     assert row[1] == "person_2"
     assert row[2] == provider.card_digest("ABCDEF12345678")
     assert row[3] == "5678"
     assert "ABCDEF12345678" not in row
+    assert index == 2
     assert option == "USER_ENTERED"
 
 
@@ -265,13 +277,59 @@ def test_google_sheets_provider_upgrades_legacy_cards_sheet_before_replacement()
     updated = provider.update_user_card("12345678", "ABCDEF12345678")
 
     headers = provider._cards_sheet.rows[0]
-    appended, _ = provider._cards_sheet.appends[0]
+    inserted, index, _ = provider._cards_sheet.insertions[0]
     assert headers[-1] == "Disabled At"
-    assert provider._cards_sheet.rows[1][headers.index("Status")] == "Replaced"
-    assert provider._cards_sheet.rows[1][headers.index("Disabled At")]
-    assert appended[headers.index("Source")] == "Kiosk v2 staff replacement"
-    assert appended[headers.index("Notes")] == "Replaced 1 previous active card(s)"
+    assert provider._cards_sheet.rows[2][headers.index("Status")] == "Replaced"
+    assert provider._cards_sheet.rows[2][headers.index("Disabled At")]
+    assert inserted[headers.index("Source")] == "Kiosk v2 staff replacement"
+    assert inserted[headers.index("Notes")] == "Replaced 1 previous active card(s)"
+    assert index == 2
     assert updated["Replaced Card Count"] == 1
+
+
+def test_google_sheets_provider_inserts_each_first_card_without_replacing_the_previous_one():
+    provider = GoogleSheetsProvider("credentials", "database", "waivers", "long-enough-test-secret")
+    first = member(card="", person_id="person_1", student_id="A11111111")
+    second = member(card="", person_id="person_2", student_id="A22222222")
+    provider._cards_sheet = FakeCardsSheet()
+    provider._visits_sheet = FakeVisitsSheet()
+    provider._users = [first, second]
+    provider._cache_expires_at = float("inf")
+
+    provider.update_user_card_by_person("person_1", "FIRSTCARD")
+    provider.update_user_card_by_person("person_2", "SECONDCARD")
+
+    rows = provider._cards_sheet.get_all_values()
+    headers = rows[0]
+    person_column = headers.index("Person ID")
+    digest_column = headers.index("Card Digest")
+    assert len(rows) == 3
+    assert {row[person_column] for row in rows[1:]} == {"person_1", "person_2"}
+    assert {row[digest_column] for row in rows[1:]} == {
+        provider.card_digest("FIRSTCARD"),
+        provider.card_digest("SECONDCARD"),
+    }
+    assert len(provider._cards_sheet.insertions) == 2
+    assert provider._cards_sheet.appends == []
+
+
+def test_google_sheets_provider_refuses_to_confirm_an_unverified_card_write():
+    provider = GoogleSheetsProvider("credentials", "database", "waivers", "long-enough-test-secret")
+    target = member(card="", person_id="person_1", student_id="A11111111")
+    provider._cards_sheet = DroppedCardWriteSheet()
+    provider._visits_sheet = FakeVisitsSheet()
+    provider._users = [target]
+    provider._cache_expires_at = float("inf")
+
+    try:
+        provider.update_user_card_by_person("person_1", "FIRSTCARD")
+    except ValueError as error:
+        assert "card was not saved" in str(error)
+    else:
+        raise AssertionError("An unverified card write must not be reported as successful")
+
+    assert normalized_card_digests(target) == set()
+    assert len(provider._cards_sheet.rows) == 1
 
 
 def test_warm_up_loads_all_read_heavy_sources():

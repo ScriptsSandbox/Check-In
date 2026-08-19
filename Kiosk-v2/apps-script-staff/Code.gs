@@ -11,6 +11,7 @@ const STAFF_CONFIG_ = {
     staffAccess: { name: "Staff Access", headers: ["Staff ID", "Name", "Email", "Role", "Active", "Card Linking Allowed", "Notes"] },
     training: { name: "Tool Training", headers: ["Training ID", "Person ID", "Tool", "Status", "Approved By", "Approved At", "FabMan Status", "Notes"] },
     fabmanLinks: { name: "FabMan Links", headers: ["Link ID", "Person ID", "FabMan Member ID", "Status", "Match Method", "Confirmed By", "Confirmed At", "Notes"] },
+    fabmanProvisioning: { name: "FabMan Provisioning", headers: ["Provisioning ID", "Person ID", "First Name", "Last Name", "Status", "Attempt Count", "Last Attempt At", "Next Attempt At", "FabMan Member ID", "Last Error", "Created At", "Updated At"], createIfMissing: true },
     notes: { name: "Staff Notes", headers: ["Note ID", "Note", "Created By", "Created At", "Status", "Resolved By", "Resolved At"] },
     tasks: { name: "Staff Tasks", headers: ["Task ID", "Title", "Details", "Status", "Estimated Minutes", "Suggested For", "Priority", "Created By", "Created At", "Claimed By", "Claimed At", "Updated By", "Updated At", "Completed At"], createIfMissing: true },
     kioskLinks: { name: "Kiosk Link Requests", headers: ["Request ID", "Person ID", "Display Name", "Requested By", "Requested At", "Expires At", "Status", "Completed At", "Message"], createIfMissing: true },
@@ -30,7 +31,7 @@ function doGet() {
   } catch (error) {
     const denied = HtmlService.createTemplateFromFile("AccessDenied");
     denied.email = String(Session.getActiveUser().getEmail() || "").trim().toLowerCase();
-    denied.accountChooserUrl = "https://accounts.google.com/AccountChooser?service=wise&continue=" + encodeURIComponent("https://script.google.com/macros/s/AKfycbyMvxpK2lX-Q7OjI4_qiCS6ljBplqlEl4HGcDmPgR13IwNjFLDyjK7izeXFEAynhfic/exec");
+    denied.accountChooserUrl = "https://accounts.google.com/AccountChooser?service=wise&continue=" + encodeURIComponent("https://script.google.com/macros/s/AKfycbyZOztABpgj5kVB9Aj8CD2G6N6bWUrXXA-a-7ql7ETlAEoCP8K2uUCfTt45wiGCaY2Y/exec");
     return denied.evaluate().setTitle("Staff access required").addMetaTag("viewport", "width=device-width, initial-scale=1");
   }
   const template = HtmlService.createTemplateFromFile("Index");
@@ -42,7 +43,7 @@ function setupStaffApp() {
   const actorEmail = String(Session.getActiveUser().getEmail() || "").trim().toLowerCase();
   if (!actorEmail) throw new Error("Sign in before initializing the staff app.");
   const spreadsheet = staffSpreadsheet_();
-  ["training", "notes", "tasks", "fabmanLinks", "kioskLinks"].forEach(function (key) {
+  ["training", "notes", "tasks", "fabmanLinks", "fabmanProvisioning", "kioskLinks"].forEach(function (key) {
     const definition = STAFF_CONFIG_.sheets[key];
     let sheet = spreadsheet.getSheetByName(definition.name);
     if (!sheet) sheet = spreadsheet.insertSheet(definition.name);
@@ -397,7 +398,7 @@ function staffDashboard() {
     cached.performance = { totalMs: Date.now() - started, cache: "hit" };
     return cached;
   }
-  const db = staffDatabase_(["people", "certifications", "visits", "training", "registrations", "identifiers", "fabmanLinks", "notes"]);
+  const db = staffDatabase_(["people", "certifications", "visits", "training", "registrations", "identifiers", "fabmanLinks", "fabmanProvisioning", "notes"]);
   const people = staffRecords_(db.people).filter(function (person) { return String(person.Status).toLowerCase() === "active"; });
   const establishedTraining = staffRecords_(db.certifications).filter(function (record) {
     return String(record.Status).toLowerCase() === "active";
@@ -434,6 +435,8 @@ function staffDashboard() {
   staffRecords_(db.fabmanLinks).forEach(function (record) {
     if (String(record.Status).toLowerCase() === "active") linkedPeople[record["Person ID"]] = Number(record["FabMan Member ID"]);
   });
+  const fabmanProvisioningByPerson = {};
+  staffRecords_(db.fabmanProvisioning).forEach(function (record) { fabmanProvisioningByPerson[record["Person ID"]] = record; });
   presence.present.forEach(function (person) {
     staffAttentionFlags_(registrationByPerson[person.personId], waiverByPerson[person.personId]).forEach(function (flag) {
       if (person.flags.indexOf(flag) === -1) person.flags.push(flag);
@@ -457,6 +460,7 @@ function staffDashboard() {
       attention: staffAttentionFlags_(registration, waiverByPerson[personId]),
       toolLabels: toolsByPerson[personId] || [],
       fabmanMemberId: linkedPeople[personId] || 0,
+      fabmanProvisioningStatus: fabmanProvisioningByPerson[personId] ? staffClean_(fabmanProvisioningByPerson[personId].Status, 40) : "",
       searchText: [person["Display Name"], person.Role, registration && registration["Program / Department"]].join(" ").toLowerCase(),
     };
   });
@@ -586,7 +590,12 @@ function staffPersonCard(personId) {
     };
   });
   const fabmanLink = staffActiveFabmanLink_(db, personId);
-  const fabman = fabmanLink ? { connected: true, checking: true, memberId: Number(fabmanLink["FabMan Member ID"]), label: "Checking live status…", trainingActive: false, packageActive: false, keyConnected: false } : { connected: false, checking: false, label: "No verified member link", trainingActive: false, packageActive: false, keyConnected: false };
+  const fabmanProvisioning = staffRecords_(db.fabmanProvisioning).filter(function (row) { return row["Person ID"] === personId; }).pop() || null;
+  const fabman = fabmanLink
+    ? { connected: true, checking: true, memberId: Number(fabmanLink["FabMan Member ID"]), label: "Checking live status…", trainingActive: false, packageActive: false, keyConnected: false, automatic: Boolean(fabmanProvisioning), provisioningStatus: fabmanProvisioning ? staffClean_(fabmanProvisioning.Status, 40) : "" }
+    : fabmanProvisioning
+      ? { connected: false, checking: false, label: staffFabmanProvisioningLabel_(fabmanProvisioning.Status), trainingActive: false, packageActive: false, keyConnected: false, automatic: true, provisioningStatus: staffClean_(fabmanProvisioning.Status, 40) }
+      : { connected: false, checking: false, label: "No verified member link", trainingActive: false, packageActive: false, keyConnected: false, automatic: false, provisioningStatus: "" };
   Object.keys(tools).forEach(function (key) {
     tools[key].fabmanStatus = key === "epilog_laser_cutter" ? fabman.label : "Connected; tool mapping pending";
   });
@@ -658,9 +667,18 @@ function staffFabmanStatus(personId) {
   const db = staffDatabase_();
   staffFindPerson_(db.people, personId);
   const link = staffActiveFabmanLink_(db, personId);
-  const status = link ? fabmanMemberStatus_(link["FabMan Member ID"]) : { connected: false, checking: false, label: "No verified member link", trainingActive: false, packageActive: false, keyConnected: false };
+  const provisioning = staffRecords_(db.fabmanProvisioning).filter(function (row) { return row["Person ID"] === personId; }).pop() || null;
+  const status = link ? fabmanMemberStatus_(link["FabMan Member ID"]) : provisioning ? { connected: false, checking: false, label: staffFabmanProvisioningLabel_(provisioning.Status), trainingActive: false, packageActive: false, keyConnected: false, automatic: true, provisioningStatus: staffClean_(provisioning.Status, 40) } : { connected: false, checking: false, label: "No verified member link", trainingActive: false, packageActive: false, keyConnected: false, automatic: false, provisioningStatus: "" };
   status.performance = { totalMs: Date.now() - started };
   return status;
+}
+
+function staffFabmanProvisioningLabel_(status) {
+  const value = String(status || "").trim().toLowerCase();
+  if (value === "processing") return "Automatic FabMan setup in progress";
+  if (value === "retry") return "Automatic FabMan setup will retry";
+  if (value === "complete") return "Automatic FabMan setup completed; link is refreshing";
+  return "Automatic FabMan setup pending";
 }
 
 function staffFabmanCandidates(personId) {
