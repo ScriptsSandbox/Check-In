@@ -10,9 +10,15 @@ Production web app: `https://script.google.com/macros/s/AKfycbyZOztABpgj5kVB9Aj8
 2. Copy `appsscript.json`, `StaffCore.gs`, `Code.gs`, and `Index.html` into it.
 3. Set script property `USER_DATABASE_SPREADSHEET_ID` to the normalized database ID.
 4. The Staff Desk accepts an exact ID or email match from the existing `Waiver Signatures SIO` spreadsheet as well as completed records in the production `Scripps Waivers` tab.
-4. In the `Staff Access` tab, make the deploying account active with role `administrator`.
-5. Run `setupStaffApp()` once to create `Tool Training`, `Staff Notes`, and `Staff Tasks`.
-6. Deploy from the Apps Script **Deploy → Manage deployments** interface as a **Web app** executing as the deploying account, restricted to UC San Diego users. Do not use `clasp deploy` to update the production web app: it creates a library-only deployment and breaks the `/exec` address. Use `clasp push` for source, create a numbered version, then select that version on the existing web-app deployment in the Apps Script interface.
+5. In the `Staff Access` tab, make the deploying account active with role `administrator`.
+6. Run `setupStaffApp()` once to create the operational tabs, including the formula-backed `Current Presence` feed.
+7. Deploy from the Apps Script **Deploy → Manage deployments** interface as a **Web app** executing as the deploying account, restricted to UC San Diego users. Do not use `clasp deploy` to update the production web app: it creates a library-only deployment and breaks the `/exec` address. Use `clasp push` for source, create a numbered version, then select that version on the existing web-app deployment in the Apps Script interface.
+
+## Presence performance
+
+The live dashboard reads the small `Current Presence` tab every six seconds. That tab contains only today's visit events and is derived from `Visits`; the server still computes the authoritative current/left state so checkouts and reopens retain their normal behavior. The larger account, waiver, training, identifier, and FabMan index loads separately in the background and is cached for ten minutes. Profile, training, and FabMan changes invalidate that background index immediately.
+
+The browser keeps a short-lived optimistic presence override after **Mark left** or **Undo**. This prevents a person from briefly reappearing while Google Sheets recalculates the formula-backed feed.
 
 During the DocuSign transition, the staff card-connection queue accepts either the existing registration waiver status or a completed record in the production spreadsheet's `Scripps Waivers` tab. `setupStaffApp()` creates that tab when needed. No external waiver-status service or additional Staff Desk secret is required.
 

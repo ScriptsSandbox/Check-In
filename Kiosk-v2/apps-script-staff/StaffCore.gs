@@ -236,6 +236,46 @@ function staffDerivePresence_(people, visits, training, timeZone) {
   return { present: present, left: left };
 }
 
+function staffPresenceFromSnapshotRecords_(records, timeZone) {
+  const people = {};
+  const visits = (records || []).map(function (record) {
+    const personId = staffClean_(record["Person ID"], 120);
+    if (personId && !people[personId]) {
+      people[personId] = {
+        "Person ID": personId,
+        "Display Name": staffClean_(record.Name, 120) || "Member",
+        Role: staffClean_(record.Role, 80),
+      };
+    }
+    return {
+      "Person ID": personId,
+      "Check In At": record["Check In At"],
+      "Event Type": record["Event Type"],
+      Flags: record.Flags,
+    };
+  }).filter(function (visit) { return Boolean(visit["Person ID"]); });
+  return staffDerivePresence_(Object.keys(people).map(function (personId) { return people[personId]; }), visits, [], timeZone);
+}
+
+function staffEnrichPresence_(presence, peopleIndex) {
+  const detailsByPerson = {};
+  (peopleIndex || []).forEach(function (person) { detailsByPerson[person.personId] = person; });
+  ["present", "left"].forEach(function (listName) {
+    (presence[listName] || []).forEach(function (person) {
+      const details = detailsByPerson[person.personId];
+      person.eventFlags = (person.flags || []).slice();
+      person.detailsPending = !details;
+      if (!details) return;
+      person.tools = (details.toolLabels || []).slice();
+      person.flags = person.eventFlags.slice();
+      (details.attention || []).forEach(function (flag) {
+        if (person.flags.indexOf(flag) === -1) person.flags.push(flag);
+      });
+    });
+  });
+  return presence;
+}
+
 if (typeof module !== "undefined") module.exports = {
   staffClean_: staffClean_,
   staffTrue_: staffTrue_,
@@ -250,6 +290,9 @@ if (typeof module !== "undefined") module.exports = {
   staffRoleLabel_: staffRoleLabel_,
   staffAttentionFlags_: staffAttentionFlags_,
   staffVisitFlagDetails_: staffVisitFlagDetails_,
+  staffDerivePresence_: staffDerivePresence_,
+  staffPresenceFromSnapshotRecords_: staffPresenceFromSnapshotRecords_,
+  staffEnrichPresence_: staffEnrichPresence_,
   staffValidateProfile_: staffValidateProfile_,
   staffValidateTask_: staffValidateTask_,
   staffValidateTaskStatus_: staffValidateTaskStatus_,

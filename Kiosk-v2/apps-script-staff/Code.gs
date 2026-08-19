@@ -14,6 +14,7 @@ const STAFF_CONFIG_ = {
     fabmanProvisioning: { name: "FabMan Provisioning", headers: ["Provisioning ID", "Person ID", "First Name", "Last Name", "Status", "Attempt Count", "Last Attempt At", "Next Attempt At", "FabMan Member ID", "Last Error", "Created At", "Updated At"], createIfMissing: true },
     notes: { name: "Staff Notes", headers: ["Note ID", "Note", "Created By", "Created At", "Status", "Resolved By", "Resolved At"] },
     tasks: { name: "Staff Tasks", headers: ["Task ID", "Title", "Details", "Status", "Estimated Minutes", "Suggested For", "Priority", "Created By", "Created At", "Claimed By", "Claimed At", "Updated By", "Updated At", "Completed At"], createIfMissing: true },
+    currentPresence: { name: "Current Presence", headers: ["Person ID", "Name", "Role", "Check In At", "Event Type", "Flags", "Visit ID", "Source Visit Row"], createIfMissing: true },
     kioskLinks: { name: "Kiosk Link Requests", headers: ["Request ID", "Person ID", "Display Name", "Requested By", "Requested At", "Expires At", "Status", "Completed At", "Message"], createIfMissing: true },
     scrippsWaivers: { name: "Scripps Waivers", headers: ["Received At", "Envelope ID", "Status", "Completed At", "Participant Name", "Participant Email", "Participant ID", "Normalized Identifier", "Template ID", "Source"], createIfMissing: true },
   },
@@ -22,7 +23,7 @@ const STAFF_CONFIG_ = {
 var STAFF_SPREADSHEET_MEMO_ = null;
 var STAFF_LEGACY_WAIVER_SHEET_MEMO_ = null;
 var STAFF_RECORDS_MEMO_ = {};
-const STAFF_CACHE_SECONDS_ = { dashboard: 20, onboarding: 12, tasks: 12, person: 60, search: 60, fabman: 45, access: 30 };
+const STAFF_CACHE_SECONDS_ = { dashboard: 20, presence: 5, peopleIndex: 600, onboarding: 12, tasks: 12, person: 60, search: 60, fabman: 45, access: 30 };
 
 function doGet() {
   let access;
@@ -43,7 +44,7 @@ function setupStaffApp() {
   const actorEmail = String(Session.getActiveUser().getEmail() || "").trim().toLowerCase();
   if (!actorEmail) throw new Error("Sign in before initializing the staff app.");
   const spreadsheet = staffSpreadsheet_();
-  ["training", "notes", "tasks", "fabmanLinks", "fabmanProvisioning", "kioskLinks"].forEach(function (key) {
+  ["training", "notes", "tasks", "currentPresence", "fabmanLinks", "fabmanProvisioning", "kioskLinks"].forEach(function (key) {
     const definition = STAFF_CONFIG_.sheets[key];
     let sheet = spreadsheet.getSheetByName(definition.name);
     if (!sheet) sheet = spreadsheet.insertSheet(definition.name);
@@ -51,7 +52,27 @@ function setupStaffApp() {
     staffAssertHeaders_(sheet, definition.headers, definition.allowAdditionalHeaders);
     sheet.setFrozenRows(1);
   });
+  staffEnsureCurrentPresenceFormula_(spreadsheet.getSheetByName(STAFF_CONFIG_.sheets.currentPresence.name));
   return { ok: true, actor: actorEmail };
+}
+
+function staffCurrentPresenceFormula_() {
+  return '=ARRAYFORMULA(IFERROR(QUERY({Visits!B2:B,IFNA(VLOOKUP(Visits!B2:B,People!A:D,3,FALSE),"Member"),IFNA(VLOOKUP(Visits!B2:B,People!A:D,4,FALSE),""),Visits!C2:C,Visits!D2:D,Visits!F2:F,Visits!A2:A,ROW(Visits!A2:A)},"select Col1,Col2,Col3,Col4,Col5,Col6,Col7,Col8 where Col7 is not null and Col4 >= date \'"&TEXT(TODAY(),"yyyy-mm-dd")&"\' order by Col4 asc",0),))';
+}
+
+function staffEnsureCurrentPresenceFormula_(sheet) {
+  if (!sheet) throw new Error("Run setupStaffApp to create the Current Presence sheet.");
+  staffAssertHeaders_(sheet, STAFF_CONFIG_.sheets.currentPresence.headers);
+  const expected = staffCurrentPresenceFormula_();
+  const formulaCell = sheet.getRange("A2");
+  if (formulaCell.getFormula() === expected) return false;
+  const rows = Math.max(sheet.getMaxRows() - 1, 1);
+  sheet.getRange(2, 1, rows, STAFF_CONFIG_.sheets.currentPresence.headers.length).clearContent();
+  formulaCell.setFormula(expected);
+  sheet.getRange(2, 4, rows, 1).setNumberFormat("yyyy-mm-dd hh:mm:ss");
+  sheet.getRange(2, 8, rows, 1).setNumberFormat("0");
+  sheet.setFrozenRows(1);
+  return true;
 }
 
 function staffTasks() {
@@ -389,23 +410,46 @@ function staffCancelPendingKioskLinks_(sheet, reason) {
   });
 }
 
-function staffDashboard() {
+function staffPresence() {
   const started = Date.now();
   const access = staffRequireAccess_();
-  const cached = staffCacheGetJson_("dashboard");
+  const cached = staffCacheGetJson_("presence");
   if (cached) {
     cached.actor = access;
     cached.performance = { totalMs: Date.now() - started, cache: "hit" };
     return cached;
   }
-  const db = staffDatabase_(["people", "certifications", "visits", "training", "registrations", "identifiers", "fabmanLinks", "fabmanProvisioning", "notes"]);
+  const db = staffDatabase_(["currentPresence", "notes"]);
+  if (staffEnsureCurrentPresenceFormula_(db.currentPresence)) SpreadsheetApp.flush();
+  const presence = staffPresenceFromSnapshotRecords_(staffRecords_(db.currentPresence), Session.getScriptTimeZone());
+  const cachedIndex = staffCacheGetJson_("people-index");
+  if (cachedIndex && cachedIndex.peopleIndex) staffEnrichPresence_(presence, cachedIndex.peopleIndex);
+  else staffEnrichPresence_(presence, []);
+  const notes = staffRecords_(db.notes).map(function (note) {
+    return { id: note["Note ID"], note: note.Note, createdBy: note["Created By"], createdAt: new Date(note["Created At"]).toISOString(), status: note.Status || "Open" };
+  }).sort(function (a, b) { return b.createdAt.localeCompare(a.createdAt); });
+  const result = { ok: true, actor: access, present: presence.present, left: presence.left, notes: notes, peopleIndexReady: Boolean(cachedIndex && cachedIndex.peopleIndex), refreshedAt: new Date().toISOString() };
+  staffCachePutJson_("presence", result, STAFF_CACHE_SECONDS_.presence);
+  result.performance = { totalMs: Date.now() - started, cache: "miss" };
+  return result;
+}
+
+function staffPeopleIndex() {
+  const started = Date.now();
+  const access = staffRequireAccess_();
+  const cached = staffCacheGetJson_("people-index");
+  if (cached) {
+    cached.actor = access;
+    cached.performance = { totalMs: Date.now() - started, cache: "hit" };
+    return cached;
+  }
+  const db = staffDatabase_(["people", "certifications", "registrations", "identifiers", "fabmanLinks", "fabmanProvisioning"]);
   const people = staffRecords_(db.people).filter(function (person) { return String(person.Status).toLowerCase() === "active"; });
   const establishedTraining = staffRecords_(db.certifications).filter(function (record) {
     return String(record.Status).toLowerCase() === "active";
   }).map(function (record) {
     return { "Person ID": record["Person ID"], Tool: staffToolLabel_(record["Tool Key"]), Status: "Approved" };
   });
-  const presence = staffDerivePresence_(people, staffRecords_(db.visits), staffRecords_(db.training).concat(establishedTraining), Session.getScriptTimeZone());
   const registrationByPerson = {};
   staffRecords_(db.registrations).forEach(function (record) { registrationByPerson[record["Person ID"]] = record; });
   const identifierByPerson = {};
@@ -437,14 +481,6 @@ function staffDashboard() {
   });
   const fabmanProvisioningByPerson = {};
   staffRecords_(db.fabmanProvisioning).forEach(function (record) { fabmanProvisioningByPerson[record["Person ID"]] = record; });
-  presence.present.forEach(function (person) {
-    staffAttentionFlags_(registrationByPerson[person.personId], waiverByPerson[person.personId]).forEach(function (flag) {
-      if (person.flags.indexOf(flag) === -1) person.flags.push(flag);
-    });
-  });
-  const notes = staffRecords_(db.notes).map(function (note) {
-    return { id: note["Note ID"], note: note.Note, createdBy: note["Created By"], createdAt: new Date(note["Created At"]).toISOString(), status: note.Status || "Open" };
-  }).sort(function (a, b) { return b.createdAt.localeCompare(a.createdAt); });
   const peopleIndex = people.map(function (person) {
     const personId = person["Person ID"];
     const registration = registrationByPerson[personId] || null;
@@ -464,10 +500,20 @@ function staffDashboard() {
       searchText: [person["Display Name"], person.Role, registration && registration["Program / Department"]].join(" ").toLowerCase(),
     };
   });
-  const result = { ok: true, actor: access, present: presence.present, left: presence.left, notes: notes, peopleIndex: peopleIndex, refreshedAt: new Date().toISOString() };
-  staffCachePutJson_("dashboard", result, STAFF_CACHE_SECONDS_.dashboard);
+  const result = { ok: true, actor: access, peopleIndex: peopleIndex, refreshedAt: new Date().toISOString() };
+  staffCachePutJson_("people-index", result, STAFF_CACHE_SECONDS_.peopleIndex);
   result.performance = { totalMs: Date.now() - started, cache: "miss" };
   return result;
+}
+
+function staffDashboard() {
+  const started = Date.now();
+  const presence = staffPresence();
+  const index = staffPeopleIndex();
+  presence.peopleIndex = index.peopleIndex;
+  staffEnrichPresence_(presence, index.peopleIndex);
+  presence.performance = { totalMs: Date.now() - started, cache: "compatibility" };
+  return presence;
 }
 
 function staffMarkLeft(personId) {
@@ -538,6 +584,7 @@ function staffApproveLaser(personId) {
   const link = staffActiveFabmanLink_(db, personId);
   const sync = link ? fabmanEnsureLaserTraining_(link["FabMan Member ID"], new Date(), access.email) : { ok: false, label: "Member link required" };
   staffAfterWrite_(personId);
+  staffInvalidatePeopleIndex_();
   return { ok: true, name: staffPreferredName_(person["Display Name"]), fabmanStatus: sync.label, fabmanSynced: sync.ok };
 }
 
@@ -655,6 +702,7 @@ function staffUpdateProfile(personId, payload) {
     }
     SpreadsheetApp.flush();
     staffAfterWrite_(cleanPersonId);
+    staffInvalidatePeopleIndex_();
   } finally {
     lock.releaseLock();
   }
@@ -756,6 +804,7 @@ function staffConfirmFabmanLink(personId, fabmanMemberId) {
   const method = exactEmail ? "Exact email; staff confirmed" : "Exact name; staff reviewed and confirmed";
   db.fabmanLinks.appendRow([staffId_("fmlink"), personId, memberId, "Active", method, access.email, new Date(), "Verified in the staff app."]);
   staffAfterWrite_(personId);
+  staffInvalidatePeopleIndex_();
   const certification = staffRecords_(db.certifications).find(function (row) {
     return row["Person ID"] === personId && String(row["Tool Key"]).toLowerCase() === "epilog_laser_cutter" && String(row.Status).toLowerCase() === "active";
   });
@@ -790,6 +839,7 @@ function staffAddSandboxPackageAndLink(personId, fabmanMemberId) {
   const method = member.exactEmail ? "Exact email; Sandbox package added and staff confirmed" : "Exact name; Sandbox package added after staff review";
   db.fabmanLinks.appendRow([staffId_("fmlink"), personId, memberId, "Active", method, access.email, new Date(), "Added package 9464 only; no other FabMan record fields or packages changed."]);
   staffAfterWrite_(personId);
+  staffInvalidatePeopleIndex_();
   const certification = staffRecords_(db.certifications).find(function (row) {
     return row["Person ID"] === personId && String(row["Tool Key"]).toLowerCase() === "epilog_laser_cutter" && String(row.Status).toLowerCase() === "active";
   });
@@ -1248,9 +1298,16 @@ function staffAfterWrite_(personId) {
   STAFF_RECORDS_MEMO_ = {};
   const cache = CacheService.getScriptCache();
   cache.remove("dashboard");
+  cache.remove("presence");
   cache.remove("onboarding");
   cache.remove("tasks");
   if (personId) cache.remove("person:" + staffClean_(personId, 120));
+}
+
+function staffInvalidatePeopleIndex_() {
+  const cache = CacheService.getScriptCache();
+  cache.remove("people-index");
+  cache.remove("dashboard");
 }
 
 function staffClearFabmanCache_(memberId) {

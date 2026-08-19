@@ -5,7 +5,11 @@ const vm = require("node:vm");
 
 const code = fs.readFileSync(require.resolve("../StaffCore.gs"), "utf8");
 const indexHtml = fs.readFileSync(require.resolve("../Index.html"), "utf8");
-const sandbox = { module: { exports: {} } };
+const serverCode = fs.readFileSync(require.resolve("../Code.gs"), "utf8");
+const sandbox = {
+  module: { exports: {} },
+  Utilities: { formatDate: date => new Date(date).toISOString().slice(0, 10) },
+};
 vm.runInNewContext(code, sandbox);
 const core = sandbox.module.exports;
 
@@ -97,6 +101,31 @@ test("manual check-in is provenance rather than an attention flag", () => {
   assert.equal(normal.checkInMethod, "");
 });
 
+test("compact presence records derive today's final state and reopened arrival", () => {
+  const today = new Date();
+  today.setUTCHours(16, 0, 0, 0);
+  const later = new Date(today.getTime() + 10 * 60 * 1000);
+  const reopened = new Date(today.getTime() + 12 * 60 * 1000);
+  const presence = core.staffPresenceFromSnapshotRecords_([
+    { "Person ID": "person-1", Name: "Jordan Lee", Role: "Graduate Student (MS)", "Check In At": today.toISOString(), "Event Type": "User Checkin", Flags: "" },
+    { "Person ID": "person-1", Name: "Jordan Lee", Role: "Graduate Student (MS)", "Check In At": later.toISOString(), "Event Type": "Staff Checkout", Flags: "" },
+    { "Person ID": "person-1", Name: "Jordan Lee", Role: "Graduate Student (MS)", "Check In At": reopened.toISOString(), "Event Type": "Staff Reopen", Flags: "Manual check-in" },
+  ], "UTC");
+  assert.equal(presence.present.length, 1);
+  assert.equal(presence.left.length, 0);
+  assert.equal(presence.present[0].name, "Jordan");
+  assert.equal(presence.present[0].checkedInAt, reopened.toISOString());
+  assert.equal(presence.present[0].checkInMethod, "Staff check-in");
+});
+
+test("people details enrich the compact presence feed without losing visit flags", () => {
+  const presence = { present: [{ personId: "person-1", tools: [], flags: ["Closing soon"] }], left: [] };
+  core.staffEnrichPresence_(presence, [{ personId: "person-1", attention: ["Waiver verification pending"], toolLabels: ["Laser cutter"] }]);
+  assert.deepEqual(Array.from(presence.present[0].tools), ["Laser cutter"]);
+  assert.deepEqual(Array.from(presence.present[0].flags), ["Closing soon", "Waiver verification pending"]);
+  assert.equal(presence.present[0].detailsPending, false);
+});
+
 test("staff profile edits validate role and student graduation", () => {
   const undergraduate = core.staffValidateProfile_({ role: "Undergraduate Student (UG)", affiliation: "Marine Biology", anticipatedGraduation: "2028-06" });
   assert.equal(undergraduate.ok, true);
@@ -136,4 +165,32 @@ test("staff desk includes a task board and manager-only bulk paste entry point",
   assert.match(indexHtml, /id="bulkTaskDialog"/);
   assert.match(indexHtml, /canBulkImport/);
   assert.match(indexHtml, /staffBulkCreateTasks/);
+});
+
+test("staff desk loads compact presence separately from the background people index", () => {
+  assert.match(indexHtml, /call\("staffPresence"\)/);
+  assert.match(indexHtml, /call\("staffPeopleIndex"\)/);
+  assert.match(indexHtml, /setInterval\(\(\)=>refresh\(true\),6000\)/);
+  assert.match(indexHtml, /setInterval\(\(\)=>refreshPeopleIndex\(true\),600000\)/);
+  assert.match(indexHtml, /presenceOverrides/);
+  assert.doesNotMatch(indexHtml, /call\("staffDashboard"\)/);
+});
+
+test("Mark left confirmation offers an immediate Undo action", () => {
+  assert.match(indexHtml, /toast\(`\$\{r\.name\} marked as left`,\{label:"Undo",run:\(\)=>reopenPresence\(personId\)\}\)/);
+  assert.match(indexHtml, /function reopenPresence\(personId\)/);
+  assert.match(indexHtml, /className="toast-action"/);
+});
+
+test("staff desk browser scripts remain valid JavaScript", () => {
+  const scripts = Array.from(indexHtml.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g), match => match[1]);
+  assert.ok(scripts.length >= 2);
+  scripts.forEach(script => new Function(script.replace(/<\?!=\s*bootstrap\s*\?>/g, "{}")));
+});
+
+test("server defines the formula-backed Current Presence feed", () => {
+  assert.match(serverCode, /name: "Current Presence"/);
+  assert.match(serverCode, /function staffCurrentPresenceFormula_/);
+  assert.match(serverCode, /Col4 >= date/);
+  assert.match(serverCode, /function staffPresence\(\)/);
 });
