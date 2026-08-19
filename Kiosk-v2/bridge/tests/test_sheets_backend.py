@@ -1,4 +1,5 @@
 from datetime import datetime
+from threading import Event
 import time
 
 from sheets_backend import (
@@ -21,6 +22,32 @@ def test_google_provider_matches_completed_scripps_waiver_from_production_tab():
     assert provider.additional_waiver_found({"Identifiers": ["A12345678"], "Email Address": ""})
     assert provider.additional_waiver_found({"Identifiers": [], "Email Address": "MEMBER@UCSD.EDU"})
     assert not provider.additional_waiver_found({"Identifiers": ["A87654321"], "Email Address": "voided@ucsd.edu"})
+
+
+def test_expired_people_snapshot_is_returned_while_refresh_runs_in_background():
+    provider = GoogleSheetsProvider("unused.json", "database-id", "Waiver Signatures SIO", "secret")
+    provider._users = [{"Person ID": "old", "Name": "Ready now"}]
+    provider._waivers = []
+    provider._scripps_waivers = []
+    provider._cache_expires_at = 0
+    refresh_started = Event()
+    release_refresh = Event()
+
+    def delayed_refresh():
+        refresh_started.set()
+        assert release_refresh.wait(timeout=2)
+        with provider._lock:
+            provider._users = [{"Person ID": "new", "Name": "Fresh copy"}]
+            provider._cache_expires_at = time.monotonic() + 60
+
+    provider.refresh_people_now = delayed_refresh
+    assert provider.user_records()[0]["Person ID"] == "old"
+    assert refresh_started.wait(timeout=1)
+    refresh_thread = provider._people_refresh_thread
+    assert refresh_thread is not None
+    release_refresh.set()
+    refresh_thread.join(timeout=2)
+    assert provider.user_records()[0]["Person ID"] == "new"
 
 
 class FakeProvider:

@@ -6,6 +6,41 @@ function staffTrue_(value) {
   return ["true", "1", "yes"].indexOf(String(value || "").trim().toLowerCase()) !== -1;
 }
 
+const STAFF_TASK_STATUSES_ = ["To do", "In progress", "Review / test", "Done"];
+const STAFF_TASK_PRIORITIES_ = ["Normal", "High"];
+
+function staffValidateTask_(input) {
+  const value = input || {};
+  const title = staffClean_(value.title, 160);
+  const details = staffClean_(value.details, 1000);
+  const suggestedFor = staffClean_(value.suggestedFor, 80) || "Anyone";
+  const priority = staffClean_(value.priority, 20) || "Normal";
+  const rawMinutes = String(value.estimatedMinutes == null ? "" : value.estimatedMinutes).trim();
+  const estimatedMinutes = rawMinutes ? Number(rawMinutes) : 0;
+  if (!title) return { ok: false, message: "Enter a task title." };
+  if (rawMinutes && (!Number.isFinite(estimatedMinutes) || estimatedMinutes < 5 || estimatedMinutes > 480 || Math.round(estimatedMinutes) !== estimatedMinutes)) {
+    return { ok: false, message: "Estimated time must be a whole number from 5 to 480 minutes." };
+  }
+  if (STAFF_TASK_PRIORITIES_.indexOf(priority) === -1) return { ok: false, message: "Choose Normal or High priority." };
+  return {
+    ok: true,
+    value: {
+      title: title,
+      details: details,
+      estimatedMinutes: estimatedMinutes,
+      suggestedFor: suggestedFor,
+      priority: priority,
+    },
+  };
+}
+
+function staffValidateTaskStatus_(status) {
+  const cleaned = staffClean_(status, 40);
+  return STAFF_TASK_STATUSES_.indexOf(cleaned) === -1
+    ? { ok: false, message: "Choose a valid task status." }
+    : { ok: true, value: cleaned };
+}
+
 const STAFF_PROFILE_ROLES_ = [
   "Academic",
   "Staff",
@@ -120,13 +155,13 @@ function staffRoleLabel_(role) {
   return "Visitor";
 }
 
-function staffAttentionFlags_(registration) {
+function staffAttentionFlags_(registration, waiverMatched) {
   if (!registration) return [];
   const flags = [];
   const accountStatus = staffClean_(registration.Status, 80).toLowerCase();
   const waiverStatus = staffClean_(registration["DocuSign Status"], 120).toLowerCase();
-  if (["unreviewed", "incomplete", "pending", "pending_waiver_review"].indexOf(accountStatus) !== -1) flags.push("Account incomplete");
-  if (waiverStatus && !/(signed|complete|completed|matched|verified|approved)/.test(waiverStatus)) flags.push("Waiver verification pending");
+  if (["incomplete", "pending"].indexOf(accountStatus) !== -1) flags.push("Account incomplete");
+  if (!waiverMatched && waiverStatus && !/(signed|complete|completed|matched|verified|approved)/.test(waiverStatus)) flags.push("Waiver verification pending");
   return flags;
 }
 
@@ -216,4 +251,6 @@ if (typeof module !== "undefined") module.exports = {
   staffAttentionFlags_: staffAttentionFlags_,
   staffVisitFlagDetails_: staffVisitFlagDetails_,
   staffValidateProfile_: staffValidateProfile_,
+  staffValidateTask_: staffValidateTask_,
+  staffValidateTaskStatus_: staffValidateTaskStatus_,
 };

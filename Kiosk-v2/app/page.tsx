@@ -97,6 +97,7 @@ const emptyAnnouncement: Announcement = {
 
 const INACTIVITY_SECONDS = 45;
 const INACTIVITY_NOTICE_SECONDS = 15;
+const SUCCESS_SECONDS = 3;
 
 function localDateKey(date: Date) {
   const year = date.getFullYear();
@@ -139,7 +140,7 @@ export default function Home() {
   const [linkTargetName, setLinkTargetName] = useState("Sandbox member");
   const [linkError, setLinkError] = useState("");
   const [staffCardDetected, setStaffCardDetected] = useState(false);
-  const [countdown, setCountdown] = useState(8);
+  const [countdown, setCountdown] = useState(SUCCESS_SECONDS);
   const [idleCountdown, setIdleCountdown] = useState(INACTIVITY_SECONDS);
   const [now, setNow] = useState<Date | null>(null);
   const [announcement, setAnnouncement] = useState<Announcement>(emptyAnnouncement);
@@ -217,7 +218,7 @@ export default function Home() {
       socket.addEventListener("message", (message) => {
         try {
           const event = JSON.parse(message.data) as ScannerEvent;
-          if (event.type === "card_detected" && (screenRef.current === "home" || screenRef.current === "group-link")) {
+          if (event.type === "card_detected" && screenRef.current !== "link-authorize") {
             cardDetectedAtRef.current = performance.now();
             setScannerResult(null);
             setCheckInMethod("card");
@@ -226,9 +227,9 @@ export default function Home() {
             setStaffCardDetected(true);
           } else if (
             event.type === "card_read" &&
-            (screenRef.current === "home" || screenRef.current === "reading")
+            screenRef.current !== "link-authorize"
           ) {
-            if (screenRef.current === "home") {
+            if (screenRef.current !== "reading") {
               cardDetectedAtRef.current = performance.now();
               setCheckInMethod("card");
               setScreen("reading");
@@ -297,7 +298,7 @@ export default function Home() {
     const delay = Math.max(0, minimumFeedbackMs - (performance.now() - detectedAt));
     const timer = window.setTimeout(() => {
       if (scannerResult.outcome === "demo") {
-        setCountdown(8);
+        setCountdown(SUCCESS_SECONDS);
         setScreen("success");
         return;
       }
@@ -308,14 +309,14 @@ export default function Home() {
         setVisitCount(scannerResult.visit_count);
         setProfile(incomingProfile);
         setProfileSessionAvailable(Boolean(scannerResult.person_id));
-        setCountdown(8);
+        setCountdown(SUCCESS_SECONDS);
         setScreen(hasQuestion ? "profile" : "success");
       } else if (scannerResult.outcome === "group_card_linked") {
         setWelcomeName(scannerResult.display_name || "Sandbox member");
         setVisitCount(scannerResult.visit_count);
         setGroupLinkRequest(null);
         setGroupJustLinked(true);
-        setCountdown(8);
+        setCountdown(SUCCESS_SECONDS);
         setScreen("success");
       } else if (scannerResult.outcome === "group_link_error") {
         setLinkError(scannerResult.message || "The card could not be connected. Ask staff to try again.");
@@ -340,7 +341,7 @@ export default function Home() {
         if (value <= 1) {
           window.clearInterval(interval);
           setScreen("home");
-          return 8;
+          return SUCCESS_SECONDS;
         }
         return value - 1;
       });
@@ -610,7 +611,7 @@ export default function Home() {
       setProfileAnswer("");
       setProfileOther("");
       if (!nextProfileQuestion(updatedProfile)) {
-        setCountdown(8);
+        setCountdown(SUCCESS_SECONDS);
         setScreen("success");
       }
     } catch (error) {
@@ -621,7 +622,7 @@ export default function Home() {
   }
 
   function skipProfileQuestions() {
-    setCountdown(8);
+    setCountdown(SUCCESS_SECONDS);
     setScreen("success");
   }
 

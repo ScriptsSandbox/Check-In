@@ -9,15 +9,19 @@ Responsive staff-only web app backed by the same normalized Google spreadsheet a
 3. Set script property `USER_DATABASE_SPREADSHEET_ID` to the normalized database ID.
 4. The Staff Desk accepts an exact ID or email match from the existing `Waiver Signatures SIO` spreadsheet as well as completed records in the production `Scripps Waivers` tab.
 4. In the `Staff Access` tab, make the deploying account active with role `administrator`.
-5. Run `setupStaffApp()` once to create `Tool Training` and `Staff Notes`.
+5. Run `setupStaffApp()` once to create `Tool Training`, `Staff Notes`, and `Staff Tasks`.
 6. Deploy as a web app executing as the deploying account, restricted to UC San Diego users.
 
 During the DocuSign transition, the staff card-connection queue accepts either the existing registration waiver status or a completed record in the production spreadsheet's `Scripps Waivers` tab. `setupStaffApp()` creates that tab when needed. No external waiver-status service or additional Staff Desk secret is required.
 
 The app also enforces the active `Staff Access` allowlist on every server call. Roles are `staff`, `trainer`, and `administrator`; only trainers and administrators can record laser training.
 
+Online registration is self-service and does not require staff approval. The dashboard treats legacy `Unreviewed` rows as valid submissions and checks the actual waiver records before showing a waiver warning; only explicit incomplete registrations or genuinely unmatched waivers are flagged.
+
 Any approved staff member can edit a member's profile from the person card. The update writes the role to `People` and the role-dependent affiliation and anticipated graduation to the latest `Registrations` row, with the staff reviewer and timestamp recorded.
 
 Staff whose `Staff Access` row has `Card Linking Allowed` enabled (and administrators) also see **Connect cards**. It lists the newest registered, waiver-verified accounts with no active card. A second **Not ready to connect** section shows active cardless accounts that are missing registration or a verified waiver, with a staff-facing explanation of the blocker. Selecting an eligible person creates a 45-second `Kiosk Link Requests` handoff; the kiosk revalidates the request, connects the first card, records the authorizing staff account, and checks the member in. Existing-card accounts are deliberately excluded and must use the replacement-card workflow.
+
+The **Tasks** tab is a lightweight internal board with `To do`, `In progress`, `Review / test`, and `Done` columns. Any approved staff member can add, claim, release, review, finish, or reopen a task. Administrators also see **More → Paste task list**, which previews up to 40 lines in the format `Task | Time | Suggested person | Priority` before saving them. Normal priority is intentionally unlabelled on the board; only high-priority work receives a tag.
 
 FabMan synchronization is deliberately not claimed by this MVP. A recorded approval displays `Not connected` until credentials and resource mapping are configured.

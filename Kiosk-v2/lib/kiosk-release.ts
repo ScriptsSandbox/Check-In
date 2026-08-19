@@ -1,5 +1,5 @@
 export const KIOSK_RELEASE = {
-  revision: "2026.08.17.2",
-  date: "August 17, 2026",
-  summary: "Google-only Scripps waiver records plus legacy acceptance",
+  revision: "2026.08.19.1",
+  date: "August 19, 2026",
+  summary: "Phase 1 speed improvements and rapid-arrival handoff",
 } as const;

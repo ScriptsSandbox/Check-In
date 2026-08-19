@@ -92,6 +92,7 @@ test("creates normalized person, identifier, email, and registration rows", () =
   assert.equal(harness.people.appended[0][peopleHeaders.indexOf("Role")], "Graduate Student (PhD)");
   assert.equal(harness.identifiers.appended[0][identifierHeaders.indexOf("Type")], "PID");
   assert.equal(harness.registrations.appended[0][registrationHeaders.indexOf("Program / Department")], "CASPO-O&A");
+  assert.equal(harness.registrations.appended[0][registrationHeaders.indexOf("Status")], "Submitted");
   assert.equal(harness.registrations.appended[0][registrationHeaders.indexOf("Anticipated Graduation")], "2028-06");
   assert.equal(harness.wasReleased(), true);
 });

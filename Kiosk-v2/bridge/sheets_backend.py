@@ -14,7 +14,7 @@ import hmac
 import logging
 import os
 from pathlib import Path
-from threading import Lock
+from threading import Lock, RLock, Thread
 import time
 from typing import Any, Callable, Protocol
 from uuid import uuid4
@@ -135,7 +135,15 @@ class GoogleSheetsProvider:
         self.cache_seconds = cache_seconds
         self.activity_cache_seconds = activity_cache_seconds
         self.scripps_waiver_tab_name = scripps_waiver_tab_name
-        self._lock = Lock()
+        self._lock = RLock()
+        self._connect_lock = Lock()
+        self._people_refresh_lock = Lock()
+        self._activity_refresh_lock = Lock()
+        self._group_link_lock = Lock()
+        self._people_refresh_thread: Thread | None = None
+        self._activity_refresh_thread: Thread | None = None
+        self._last_people_refresh_error = ""
+        self._last_activity_refresh_error = ""
         self._people_sheet: Any = None
         self._database: Any = None
         self._identifiers_sheet: Any = None
@@ -144,6 +152,7 @@ class GoogleSheetsProvider:
         self._visits_sheet: Any = None
         self._waiver_sheet: Any = None
         self._scripps_waiver_sheet: Any = None
+        self._kiosk_links_sheet: Any = None
         self._users: list[dict[str, Any]] | None = None
         self._waivers: list[dict[str, Any]] | None = None
         self._scripps_waivers: list[dict[str, Any]] | None = None
@@ -171,13 +180,15 @@ class GoogleSheetsProvider:
         self._refresh_people_if_needed()
         user_ids = normalized_user_identifiers(user)
         user_email = normalize_email(user.get("Email Address"))
+        with self._lock:
+            scripps_waivers = [dict(record) for record in self._scripps_waivers or []]
         return any(
             str(record.get("Status", "")).strip().lower() == "completed"
             and (
                 normalize_person_id(record.get("Normalized Identifier") or record.get("Participant ID")) in user_ids
                 or (bool(user_email) and normalize_email(record.get("Participant Email")) == user_email)
             )
-            for record in self._scripps_waivers or []
+            for record in scripps_waivers
         )
 
     def card_digest(self, card_uid: str) -> str:
@@ -188,35 +199,37 @@ class GoogleSheetsProvider:
         ).hexdigest()
 
     def _connect(self) -> None:
-        if self._visits_sheet is not None:
-            return
-        import gspread
+        with self._connect_lock:
+            if self._visits_sheet is not None:
+                return
+            import gspread
 
-        client = gspread.service_account(filename=self.credentials_path)
-        database = client.open_by_key(self.database_id)
-        self._database = database
-        self._people_sheet = database.worksheet("People")
-        self._identifiers_sheet = database.worksheet("Identifiers")
-        self._cards_sheet = database.worksheet("Cards")
-        self._registrations_sheet = database.worksheet("Registrations")
-        self._visits_sheet = database.worksheet("Visits")
-        self._waiver_sheet = client.open(self.waiver_sheet_name).sheet1
-        try:
-            self._scripps_waiver_sheet = database.worksheet(self.scripps_waiver_tab_name)
-        except gspread.WorksheetNotFound:
-            self._scripps_waiver_sheet = None
+            client = gspread.service_account(filename=self.credentials_path)
+            database = client.open_by_key(self.database_id)
+            self._database = database
+            self._people_sheet = database.worksheet("People")
+            self._identifiers_sheet = database.worksheet("Identifiers")
+            self._cards_sheet = database.worksheet("Cards")
+            self._registrations_sheet = database.worksheet("Registrations")
+            self._visits_sheet = database.worksheet("Visits")
+            self._waiver_sheet = client.open(self.waiver_sheet_name).sheet1
+            try:
+                self._scripps_waiver_sheet = database.worksheet(self.scripps_waiver_tab_name)
+            except gspread.WorksheetNotFound:
+                self._scripps_waiver_sheet = None
+            try:
+                self._kiosk_links_sheet = database.worksheet("Kiosk Link Requests")
+            except gspread.WorksheetNotFound:
+                self._kiosk_links_sheet = None
 
-    def _refresh_people_if_needed(self) -> None:
-        now = time.monotonic()
-        if self._users is not None and now < self._cache_expires_at:
-            return
+    def _load_people_snapshot(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
         self._connect()
         people = self._people_sheet.get_all_records(numericise_ignore=["all"])
         identifiers = self._identifiers_sheet.get_all_records(numericise_ignore=["all"])
         cards = self._cards_sheet.get_all_records(numericise_ignore=["all"])
         registrations = self._registrations_sheet.get_all_records(numericise_ignore=["all"])
-        self._waivers = self._waiver_sheet.get_all_records(numericise_ignore=["all"])
-        self._scripps_waivers = self._scripps_waiver_sheet.get_all_records(numericise_ignore=["all"]) if self._scripps_waiver_sheet else []
+        waivers = self._waiver_sheet.get_all_records(numericise_ignore=["all"])
+        scripps_waivers = self._scripps_waiver_sheet.get_all_records(numericise_ignore=["all"]) if self._scripps_waiver_sheet else []
         identifiers_by_person: dict[str, list[dict[str, Any]]] = {}
         cards_by_person: dict[str, list[dict[str, Any]]] = {}
         for record in identifiers:
@@ -266,30 +279,110 @@ class GoogleSheetsProvider:
                     "anticipatedGraduation": str(registration.get("Anticipated Graduation", "")).strip(),
                 },
             })
-        self._users = users
-        self._cache_expires_at = now + self.cache_seconds
+        return users, waivers, scripps_waivers
+
+    def refresh_people_now(self) -> None:
+        """Synchronously replace the people/waiver snapshot.
+
+        Normal reads use the previous snapshot while this network work happens.
+        This blocking entry point is reserved for startup and one explicit retry
+        after an unknown card or identifier.
+        """
+        with self._people_refresh_lock:
+            users, waivers, scripps_waivers = self._load_people_snapshot()
+            with self._lock:
+                self._users = users
+                self._waivers = waivers
+                self._scripps_waivers = scripps_waivers
+                self._cache_expires_at = time.monotonic() + self.cache_seconds
+                self._last_people_refresh_error = ""
+
+    def _refresh_people_in_background(self) -> None:
+        try:
+            self.refresh_people_now()
+            LOGGER.info("People and waiver snapshot refreshed in the background")
+        except Exception as error:
+            with self._lock:
+                self._last_people_refresh_error = str(error)
+            LOGGER.exception("Background people and waiver refresh failed; keeping the previous snapshot")
+        finally:
+            with self._lock:
+                self._people_refresh_thread = None
+
+    def _refresh_people_if_needed(self) -> None:
+        now = time.monotonic()
+        with self._lock:
+            has_snapshot = self._users is not None
+            fresh = has_snapshot and now < self._cache_expires_at
+            refresh_running = self._people_refresh_thread is not None
+        if fresh:
+            return
+        if not has_snapshot:
+            self.refresh_people_now()
+            return
+        if refresh_running:
+            return
+        thread = Thread(target=self._refresh_people_in_background, name="sheets-people-refresh", daemon=True)
+        with self._lock:
+            if self._people_refresh_thread is not None:
+                return
+            self._people_refresh_thread = thread
+        thread.start()
+
+    def refresh_activity_now(self) -> None:
+        with self._activity_refresh_lock:
+            self._connect()
+            rows = self._visits_sheet.get_all_values()
+            with self._lock:
+                self._activity_rows = rows
+                self._activity_cache_expires_at = time.monotonic() + self.activity_cache_seconds
+                self._last_activity_refresh_error = ""
+
+    def _refresh_activity_in_background(self) -> None:
+        try:
+            self.refresh_activity_now()
+            LOGGER.info("Visit history snapshot refreshed in the background")
+        except Exception as error:
+            with self._lock:
+                self._last_activity_refresh_error = str(error)
+            LOGGER.exception("Background visit history refresh failed; keeping the previous snapshot")
+        finally:
+            with self._lock:
+                self._activity_refresh_thread = None
 
     def _refresh_activity_if_needed(self) -> None:
         now = time.monotonic()
-        if self._activity_rows is not None and now < self._activity_cache_expires_at:
+        with self._lock:
+            has_snapshot = self._activity_rows is not None
+            fresh = has_snapshot and now < self._activity_cache_expires_at
+            refresh_running = self._activity_refresh_thread is not None
+        if fresh:
             return
-        self._connect()
-        self._activity_rows = self._visits_sheet.get_all_values()
-        self._activity_cache_expires_at = now + self.activity_cache_seconds
+        if not has_snapshot:
+            self.refresh_activity_now()
+            return
+        if refresh_running:
+            return
+        thread = Thread(target=self._refresh_activity_in_background, name="sheets-activity-refresh", daemon=True)
+        with self._lock:
+            if self._activity_refresh_thread is not None:
+                return
+            self._activity_refresh_thread = thread
+        thread.start()
 
     def user_records(self) -> list[dict[str, Any]]:
+        self._refresh_people_if_needed()
         with self._lock:
-            self._refresh_people_if_needed()
             return [dict(record) for record in self._users or []]
 
     def waiver_records(self) -> list[dict[str, Any]]:
+        self._refresh_people_if_needed()
         with self._lock:
-            self._refresh_people_if_needed()
             return [dict(record) for record in self._waivers or []]
 
     def activity_rows(self) -> list[list[Any]]:
+        self._refresh_activity_if_needed()
         with self._lock:
-            self._refresh_activity_if_needed()
             return [list(row) for row in self._activity_rows or []]
 
     def append_activity(self, row: list[Any]) -> None:
@@ -388,11 +481,10 @@ class GoogleSheetsProvider:
             return dict(record)
 
     def pending_group_link_request(self) -> dict[str, Any] | None:
-        with self._lock:
+        with self._group_link_lock:
             self._connect()
-            try:
-                sheet = self._database.worksheet("Kiosk Link Requests")
-            except Exception:
+            sheet = self._kiosk_links_sheet
+            if sheet is None:
                 return None
             records = sheet.get_all_records(numericise_ignore=["all"])
             now = datetime.now()
@@ -412,9 +504,11 @@ class GoogleSheetsProvider:
             return None
 
     def mark_group_link_request(self, request_id: str, status: str, message: str) -> None:
-        with self._lock:
+        with self._group_link_lock:
             self._connect()
-            sheet = self._database.worksheet("Kiosk Link Requests")
+            sheet = self._kiosk_links_sheet
+            if sheet is None:
+                raise ValueError("The kiosk request sheet could not be found.")
             headers = sheet.row_values(1)
             rows = sheet.get_all_values()
             id_column = headers.index("Request ID")
@@ -519,6 +613,13 @@ class SheetsCheckInBackend:
         user = next((record for record in self.provider.user_records() if user_has_card_digest(record, digest)), None)
         timings["user_lookup"] = elapsed_ms(stage_started)
         if user is None:
+            refresh = getattr(self.provider, "refresh_people_now", None)
+            if callable(refresh):
+                stage_started = time.monotonic()
+                refresh()
+                timings["unknown_card_refresh"] = elapsed_ms(stage_started)
+                user = next((record for record in self.provider.user_records() if user_has_card_digest(record, digest)), None)
+        if user is None:
             timings["total"] = elapsed_ms(total_started)
             return CheckInResult(outcome="unknown_card", message="This card is not connected to a Sandbox account.", timings_ms=timings)
         return self._check_in_user(user, total_started, timings)
@@ -530,6 +631,13 @@ class SheetsCheckInBackend:
         stage_started = time.monotonic()
         matches = users_matching_identifier(self.provider.user_records(), normalized_identifier)
         timings["user_lookup"] = elapsed_ms(stage_started)
+        if not matches:
+            refresh = getattr(self.provider, "refresh_people_now", None)
+            if callable(refresh):
+                stage_started = time.monotonic()
+                refresh()
+                timings["unknown_identifier_refresh"] = elapsed_ms(stage_started)
+                matches = users_matching_identifier(self.provider.user_records(), normalized_identifier)
         if not matches:
             timings["total"] = elapsed_ms(total_started)
             return CheckInResult(outcome="unknown_identifier", message="We could not find that PID, TSN, or employee ID.", timings_ms=timings)

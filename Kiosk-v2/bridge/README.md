@@ -12,7 +12,7 @@ This service turns the ESP32 reader's USB serial output into live browser events
 
 When the kiosk UI is served from `localhost`, it automatically connects to `ws://127.0.0.1:8765/ws`. A different endpoint can be supplied at build time with `NEXT_PUBLIC_SCANNER_WS_URL`.
 
-The Sheets backend warms its user, waiver, and activity caches at startup. The user and waiver cache defaults to five minutes; the activity cache defaults to one hour and is updated after every successful append. Override these with `SHEETS_CACHE_SECONDS` and `SHEETS_ACTIVITY_CACHE_SECONDS` when needed.
+The Sheets backend warms its user, waiver, and activity snapshots at startup. Once warm, an expired snapshot remains available to check-ins while Google refreshes it in the background; the user and waiver interval defaults to five minutes, and the activity interval defaults to one hour and is updated after every successful append. An unknown card or identifier receives one synchronous refresh before the kiosk rejects it so newly created or linked accounts are still discovered promptly. Override the intervals with `SHEETS_CACHE_SECONDS` and `SHEETS_ACTIVITY_CACHE_SECONDS` when needed. The bridge also polls `Kiosk Link Requests` once every five seconds and serves that result locally; override this with `GROUP_LINK_POLL_SECONDS`.
 
 Waiver acceptance is additive during the Scripps transition. The existing `Waiver Signatures SIO` sheet is checked first and remains sufficient indefinitely. A miss in the legacy sheet is followed by a local lookup in the production database's `Scripps Waivers` tab. The tab name defaults to `Scripps Waivers` and can be overridden with `SCRIPPS_WAIVER_TAB_NAME`; if the tab is absent, legacy checks continue normally and new-only records fail closed.
 

@@ -1,6 +1,6 @@
 # Scripps Sandbox registration web app
 
-This Google Apps Script web app writes new registrations into the normalized `People`, `Identifiers`, and `Registrations` tables. New accounts are usable immediately; registration `Status` starts as `Unreviewed` for after-the-fact staff review. It does not use a pending-registration tab or activation gate.
+This Google Apps Script web app writes new registrations into the normalized `People`, `Identifiers`, and `Registrations` tables. New accounts are usable immediately; registration `Status` starts as `Submitted` and does not require staff review. It does not use a pending-registration tab or activation gate.
 
 The kiosk still requires a matching waiver record before check-in succeeds. After registration, the form links directly to the existing DocuSign PowerForm. A redirect proves only that the user was sent to DocuSign, not that the waiver was completed.
 

@@ -31,6 +31,7 @@ BACKEND_MODE = os.getenv("SCANNER_CHECKIN_BACKEND", "demo").strip().lower()
 DUPLICATE_WINDOW_SECONDS = float(os.getenv("SCANNER_DUPLICATE_SECONDS", "15"))
 CARD_LINK_SESSION_SECONDS = float(os.getenv("CARD_LINK_SESSION_SECONDS", "300"))
 PROFILE_SESSION_SECONDS = float(os.getenv("PROFILE_SESSION_SECONDS", "300"))
+GROUP_LINK_POLL_SECONDS = max(2.0, float(os.getenv("GROUP_LINK_POLL_SECONDS", "5")))
 DESIGNATED_CARD_LINK_STAFF_IDS = {
     value.strip()
     for value in os.getenv("CARD_LINK_STAFF_IDS", "").split(",")
@@ -67,6 +68,8 @@ class BridgeState:
         self.pending_card_expires_at = 0.0
         self.card_link_identifier: str | None = None
         self.group_link_request: dict[str, Any] | None = None
+        self.group_link_checked_at = 0.0
+        self.group_link_error = ""
         self.profile_person_id: str | None = None
         self.profile_expires_at = 0.0
         self.last_success_uid: str | None = None
@@ -323,14 +326,35 @@ async def warm_backend() -> None:
     LOGGER.info("Check-in backend warm-up complete; stages=%s", timings)
 
 
+async def poll_group_link_requests() -> None:
+    """Keep the optional staff card-link request in memory.
+
+    The browser reads this local snapshot. It no longer turns every 2.5-second
+    status check into a Google Sheets request on the check-in path.
+    """
+    if not isinstance(STATE.backend, SheetsCheckInBackend):
+        return
+    while True:
+        try:
+            request = await asyncio.to_thread(STATE.backend.pending_group_link_request)
+            STATE.group_link_request = request
+            STATE.group_link_error = ""
+            STATE.group_link_checked_at = time.monotonic()
+        except Exception as error:
+            STATE.group_link_error = str(error)
+            LOGGER.exception("Background group-onboarding status check failed; keeping the previous snapshot")
+        await asyncio.sleep(GROUP_LINK_POLL_SECONDS)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     reader_task = asyncio.create_task(serial_reader())
     warm_task = asyncio.create_task(warm_backend())
+    group_link_task = asyncio.create_task(poll_group_link_requests())
     yield
-    for task in (reader_task, warm_task):
+    for task in (reader_task, warm_task, group_link_task):
         task.cancel()
-    await asyncio.gather(reader_task, warm_task, return_exceptions=True)
+    await asyncio.gather(reader_task, warm_task, group_link_task, return_exceptions=True)
 
 
 app = FastAPI(title="Scripps Sandbox Scanner Bridge", lifespan=lifespan)
@@ -354,6 +378,11 @@ async def health() -> dict[str, Any]:
         "clients": len(STATE.clients),
         "backend": "demo" if STATE.backend is None else BACKEND_MODE,
         "backend_ready": STATE.backend_ready,
+        "group_link_snapshot_age_seconds": (
+            round(max(0.0, time.monotonic() - STATE.group_link_checked_at), 1)
+            if STATE.group_link_checked_at
+            else None
+        ),
     }
 
 
@@ -452,21 +481,16 @@ async def cancel_card_link() -> dict[str, bool]:
 async def group_link_status() -> dict[str, Any]:
     if not isinstance(STATE.backend, SheetsCheckInBackend):
         return {"ok": True, "active": False}
-    try:
-        request = await asyncio.to_thread(STATE.backend.pending_group_link_request)
-    except Exception:
-        LOGGER.exception("Group-onboarding status check failed")
-        raise HTTPException(status_code=503, detail="The group-onboarding queue could not be checked")
+    request = STATE.group_link_request
     if not request:
-        STATE.group_link_request = None
-        return {"ok": True, "active": False}
-    STATE.group_link_request = request
+        return {"ok": True, "active": False, "stale": bool(STATE.group_link_error)}
     return {
         "ok": True,
         "active": True,
         "request_id": request.get("request_id"),
         "display_name": request.get("display_name"),
         "expires_at": request.get("expires_at"),
+        "stale": bool(STATE.group_link_error),
     }
 
 

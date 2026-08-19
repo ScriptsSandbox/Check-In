@@ -12,6 +12,7 @@ const STAFF_CONFIG_ = {
     training: { name: "Tool Training", headers: ["Training ID", "Person ID", "Tool", "Status", "Approved By", "Approved At", "FabMan Status", "Notes"] },
     fabmanLinks: { name: "FabMan Links", headers: ["Link ID", "Person ID", "FabMan Member ID", "Status", "Match Method", "Confirmed By", "Confirmed At", "Notes"] },
     notes: { name: "Staff Notes", headers: ["Note ID", "Note", "Created By", "Created At", "Status", "Resolved By", "Resolved At"] },
+    tasks: { name: "Staff Tasks", headers: ["Task ID", "Title", "Details", "Status", "Estimated Minutes", "Suggested For", "Priority", "Created By", "Created At", "Claimed By", "Claimed At", "Updated By", "Updated At", "Completed At"], createIfMissing: true },
     kioskLinks: { name: "Kiosk Link Requests", headers: ["Request ID", "Person ID", "Display Name", "Requested By", "Requested At", "Expires At", "Status", "Completed At", "Message"], createIfMissing: true },
     scrippsWaivers: { name: "Scripps Waivers", headers: ["Received At", "Envelope ID", "Status", "Completed At", "Participant Name", "Participant Email", "Participant ID", "Normalized Identifier", "Template ID", "Source"], createIfMissing: true },
   },
@@ -20,7 +21,7 @@ const STAFF_CONFIG_ = {
 var STAFF_SPREADSHEET_MEMO_ = null;
 var STAFF_LEGACY_WAIVER_SHEET_MEMO_ = null;
 var STAFF_RECORDS_MEMO_ = {};
-const STAFF_CACHE_SECONDS_ = { dashboard: 8, person: 30, search: 30, fabman: 45 };
+const STAFF_CACHE_SECONDS_ = { dashboard: 20, onboarding: 12, tasks: 12, person: 60, search: 60, fabman: 45, access: 30 };
 
 function doGet() {
   let access;
@@ -41,7 +42,7 @@ function setupStaffApp() {
   const actorEmail = String(Session.getActiveUser().getEmail() || "").trim().toLowerCase();
   if (!actorEmail) throw new Error("Sign in before initializing the staff app.");
   const spreadsheet = staffSpreadsheet_();
-  ["training", "notes", "fabmanLinks", "kioskLinks"].forEach(function (key) {
+  ["training", "notes", "tasks", "fabmanLinks", "kioskLinks"].forEach(function (key) {
     const definition = STAFF_CONFIG_.sheets[key];
     let sheet = spreadsheet.getSheetByName(definition.name);
     if (!sheet) sheet = spreadsheet.insertSheet(definition.name);
@@ -52,10 +53,173 @@ function setupStaffApp() {
   return { ok: true, actor: actorEmail };
 }
 
+function staffTasks() {
+  const access = staffRequireAccess_();
+  const cached = staffCacheGetJson_("tasks");
+  if (cached) {
+    cached.canBulkImport = access.role === "administrator";
+    return cached;
+  }
+  const db = staffDatabase_(["staffAccess", "tasks"]);
+  const roster = staffRecords_(db.staffAccess).filter(function (record) {
+    return staffTrue_(record.Active);
+  }).map(function (record) {
+    return { name: staffPreferredName_(record.Name || record.Email), email: staffClean_(record.Email, 254).toLowerCase() };
+  }).sort(function (a, b) { return a.name.localeCompare(b.name); });
+  const nameByEmail = {};
+  roster.forEach(function (person) { nameByEmail[person.email] = person.name; });
+  const tasks = staffRecords_(db.tasks).map(function (record) {
+    return staffTaskFromRecord_(record, nameByEmail);
+  }).sort(function (a, b) {
+    const statusOrder = STAFF_TASK_STATUSES_.indexOf(a.status) - STAFF_TASK_STATUSES_.indexOf(b.status);
+    if (statusOrder) return statusOrder;
+    if (a.status === "Done") return String(b.completedAt || b.updatedAt).localeCompare(String(a.completedAt || a.updatedAt));
+    const priorityOrder = Number(b.priority === "High") - Number(a.priority === "High");
+    return priorityOrder || String(a.createdAt).localeCompare(String(b.createdAt));
+  });
+  const result = { ok: true, tasks: tasks, roster: roster, refreshedAt: new Date().toISOString() };
+  staffCachePutJson_("tasks", result, STAFF_CACHE_SECONDS_.tasks);
+  result.canBulkImport = access.role === "administrator";
+  return result;
+}
+
+function staffCreateTask(input) {
+  const access = staffRequireAccess_();
+  const validated = staffValidateTask_(input);
+  if (!validated.ok) throw new Error(validated.message);
+  const task = staffAppendTask_(staffDatabase_(["tasks"]).tasks, validated.value, access);
+  staffAfterWrite_();
+  return { ok: true, task: task };
+}
+
+function staffBulkCreateTasks(inputs) {
+  const access = staffRequireAccess_(["administrator"]);
+  if (!Array.isArray(inputs) || !inputs.length) throw new Error("Paste at least one task first.");
+  if (inputs.length > 40) throw new Error("Add no more than 40 tasks at once.");
+  const validated = inputs.map(function (input, index) {
+    const result = staffValidateTask_(input);
+    if (!result.ok) throw new Error("Task " + (index + 1) + ": " + result.message);
+    return result.value;
+  });
+  const sheet = staffDatabase_(["tasks"]).tasks;
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const tasks = validated.map(function (task) { return staffAppendTask_(sheet, task, access); });
+    staffAfterWrite_();
+    return { ok: true, tasks: tasks };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function staffSetTaskStatus(taskId, status) {
+  const access = staffRequireAccess_();
+  const validatedStatus = staffValidateTaskStatus_(status);
+  if (!validatedStatus.ok) throw new Error(validatedStatus.message);
+  const cleanedId = staffClean_(taskId, 120);
+  const sheet = staffDatabase_(["tasks"]).tasks;
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const values = sheet.getDataRange().getDisplayValues();
+    const idColumn = values[0].indexOf("Task ID");
+    const index = values.findIndex(function (row, rowIndex) { return rowIndex > 0 && row[idColumn] === cleanedId; });
+    if (index < 1) throw new Error("Task not found.");
+    const row = index + 1;
+    const now = new Date();
+    const nextStatus = validatedStatus.value;
+    staffSetNamedCell_(sheet, row, "Status", nextStatus);
+    staffSetNamedCell_(sheet, row, "Updated By", access.email);
+    staffSetNamedCell_(sheet, row, "Updated At", now);
+    if (nextStatus === "In progress") {
+      staffSetNamedCell_(sheet, row, "Claimed By", access.email);
+      staffSetNamedCell_(sheet, row, "Claimed At", now);
+      staffSetNamedCell_(sheet, row, "Completed At", "");
+    } else if (nextStatus === "To do") {
+      staffSetNamedCell_(sheet, row, "Claimed By", "");
+      staffSetNamedCell_(sheet, row, "Claimed At", "");
+      staffSetNamedCell_(sheet, row, "Completed At", "");
+    } else if (nextStatus === "Done") {
+      staffSetNamedCell_(sheet, row, "Completed At", now);
+    } else {
+      staffSetNamedCell_(sheet, row, "Completed At", "");
+    }
+    staffAfterWrite_();
+    const record = staffRecords_(sheet).find(function (item) { return item["Task ID"] === cleanedId; });
+    const roster = staffRecords_(staffDatabase_(true).staffAccess);
+    const names = {};
+    roster.forEach(function (person) { names[staffClean_(person.Email, 254).toLowerCase()] = staffPreferredName_(person.Name || person.Email); });
+    return { ok: true, task: staffTaskFromRecord_(record, names) };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function staffAppendTask_(sheet, task, access) {
+  const now = new Date();
+  const taskId = staffId_("task");
+  staffAppendNamedRow_(sheet, {
+    "Task ID": taskId,
+    Title: task.title,
+    Details: task.details,
+    Status: "To do",
+    "Estimated Minutes": task.estimatedMinutes || "",
+    "Suggested For": task.suggestedFor,
+    Priority: task.priority,
+    "Created By": access.email,
+    "Created At": now,
+    "Updated By": access.email,
+    "Updated At": now,
+  });
+  return {
+    id: taskId,
+    title: task.title,
+    details: task.details,
+    status: "To do",
+    estimatedMinutes: task.estimatedMinutes || 0,
+    suggestedFor: task.suggestedFor,
+    priority: task.priority,
+    createdBy: access.name,
+    createdAt: now.toISOString(),
+    claimedBy: "",
+    claimedAt: "",
+    updatedAt: now.toISOString(),
+    completedAt: "",
+  };
+}
+
+function staffTaskFromRecord_(record, nameByEmail) {
+  const emailName = function (value) {
+    const cleaned = staffClean_(value, 254).toLowerCase();
+    return (nameByEmail && nameByEmail[cleaned]) || (cleaned ? staffPreferredName_(cleaned.split("@")[0].replace(/[._-]+/g, " ")) : "");
+  };
+  return {
+    id: staffClean_(record["Task ID"], 120),
+    title: staffClean_(record.Title, 160),
+    details: staffClean_(record.Details, 1000),
+    status: STAFF_TASK_STATUSES_.indexOf(record.Status) === -1 ? "To do" : record.Status,
+    estimatedMinutes: Number(record["Estimated Minutes"] || 0) || 0,
+    suggestedFor: staffClean_(record["Suggested For"], 80) || "Anyone",
+    priority: STAFF_TASK_PRIORITIES_.indexOf(record.Priority) === -1 ? "Normal" : record.Priority,
+    createdBy: emailName(record["Created By"]),
+    createdAt: staffIsoDate_(record["Created At"]),
+    claimedBy: emailName(record["Claimed By"]),
+    claimedAt: staffIsoDate_(record["Claimed At"]),
+    updatedAt: staffIsoDate_(record["Updated At"]),
+    completedAt: staffIsoDate_(record["Completed At"]),
+  };
+}
+
 function staffGroupOnboarding() {
   const access = staffRequireAccess_();
   if (!access.cardLinkingAllowed && access.role !== "administrator") throw new Error("Card Linking permission is required for group onboarding.");
-  const db = staffDatabase_();
+  const cached = staffCacheGetJson_("onboarding");
+  if (cached) {
+    cached.actor = access;
+    return cached;
+  }
+  const db = staffDatabase_(["registrations", "cards", "identifiers", "people", "kioskLinks"]);
   const now = new Date();
   const registrationByPerson = {};
   staffRecords_(db.registrations).forEach(function (record) {
@@ -138,13 +302,16 @@ function staffGroupOnboarding() {
     };
     break;
   }
-  return { ok: true, actor: access, candidates: candidates, blocked: blocked, pending: pending, refreshedAt: now.toISOString() };
+  const result = { ok: true, candidates: candidates, blocked: blocked, pending: pending, refreshedAt: now.toISOString() };
+  staffCachePutJson_("onboarding", result, STAFF_CACHE_SECONDS_.onboarding);
+  result.actor = access;
+  return result;
 }
 
 function staffStartCardConnection(personId) {
   const access = staffRequireAccess_();
   if (!access.cardLinkingAllowed && access.role !== "administrator") throw new Error("Card Linking permission is required for group onboarding.");
-  const db = staffDatabase_();
+  const db = staffDatabase_(["people", "cards", "registrations", "identifiers", "kioskLinks"]);
   const person = staffFindPerson_(db.people, staffClean_(personId, 120));
   const hasActiveCard = staffRecords_(db.cards).some(function (record) {
     return record["Person ID"] === personId && String(record.Status || "").trim().toLowerCase() === "active";
@@ -174,7 +341,7 @@ function staffStartCardConnection(personId) {
 
 function staffScrippsWaiverMatches_(queries) {
   if (!queries || !queries.length) return {};
-  return staffScrippsWaiverMatchesFromRecords_(queries, staffRecords_(staffDatabase_().scrippsWaivers));
+  return staffScrippsWaiverMatchesFromRecords_(queries, staffRecords_(staffDatabase_(["scrippsWaivers"]).scrippsWaivers));
 }
 
 function staffLegacyWaiverMatches_(queries) {
@@ -191,7 +358,7 @@ function staffWaiverMatches_(queries) {
 
 function staffCancelCardConnection(requestId) {
   staffRequireAccess_();
-  const sheet = staffDatabase_().kioskLinks;
+  const sheet = staffDatabase_(["kioskLinks"]).kioskLinks;
   const values = sheet.getDataRange().getDisplayValues();
   const idColumn = values[0].indexOf("Request ID");
   const statusColumn = values[0].indexOf("Status");
@@ -230,7 +397,7 @@ function staffDashboard() {
     cached.performance = { totalMs: Date.now() - started, cache: "hit" };
     return cached;
   }
-  const db = staffDatabase_();
+  const db = staffDatabase_(["people", "certifications", "visits", "training", "registrations", "identifiers", "fabmanLinks", "notes"]);
   const people = staffRecords_(db.people).filter(function (person) { return String(person.Status).toLowerCase() === "active"; });
   const establishedTraining = staffRecords_(db.certifications).filter(function (record) {
     return String(record.Status).toLowerCase() === "active";
@@ -244,6 +411,20 @@ function staffDashboard() {
   staffRecords_(db.identifiers).forEach(function (record) {
     if (!identifierByPerson[record["Person ID"]] && staffTrue_(record.Active) && String(record.Type).toLowerCase() !== "email") identifierByPerson[record["Person ID"]] = record;
   });
+  const waiverByPerson = staffWaiverMatches_(people.filter(function (person) {
+    const registration = registrationByPerson[person["Person ID"]];
+    if (!registration) return false;
+    const status = staffClean_(registration["DocuSign Status"], 120).toLowerCase();
+    return !/(signed|complete|completed|matched|verified|approved)/.test(status);
+  }).map(function (person) {
+    const personId = person["Person ID"];
+    const identifier = identifierByPerson[personId];
+    return {
+      requestId: personId,
+      identifiers: identifier ? [staffClean_(identifier["Normalized Value"] || identifier.Value, 80)] : [],
+      email: staffClean_(person["Primary Email"], 254).toLowerCase(),
+    };
+  }));
   const toolsByPerson = {};
   establishedTraining.forEach(function (record) {
     if (!toolsByPerson[record["Person ID"]]) toolsByPerson[record["Person ID"]] = [];
@@ -254,7 +435,7 @@ function staffDashboard() {
     if (String(record.Status).toLowerCase() === "active") linkedPeople[record["Person ID"]] = Number(record["FabMan Member ID"]);
   });
   presence.present.forEach(function (person) {
-    staffAttentionFlags_(registrationByPerson[person.personId]).forEach(function (flag) {
+    staffAttentionFlags_(registrationByPerson[person.personId], waiverByPerson[person.personId]).forEach(function (flag) {
       if (person.flags.indexOf(flag) === -1) person.flags.push(flag);
     });
   });
@@ -273,7 +454,7 @@ function staffDashboard() {
       affiliation: registration ? staffClean_(registration["Program / Department"], 80) : "",
       anticipatedGraduation: registration ? staffClean_(registration["Anticipated Graduation"], 7) : "",
       identifierHint: identifier ? staffIdentifierHint_(identifier.Value) : "",
-      attention: staffAttentionFlags_(registration),
+      attention: staffAttentionFlags_(registration, waiverByPerson[personId]),
       toolLabels: toolsByPerson[personId] || [],
       fabmanMemberId: linkedPeople[personId] || 0,
       searchText: [person["Display Name"], person.Role, registration && registration["Program / Department"]].join(" ").toLowerCase(),
@@ -287,7 +468,7 @@ function staffDashboard() {
 
 function staffMarkLeft(personId) {
   const access = staffRequireAccess_();
-  const db = staffDatabase_();
+  const db = staffDatabase_(["people", "visits"]);
   const person = staffFindPerson_(db.people, personId);
   db.visits.appendRow([staffId_("visit"), personId, new Date(), "Staff Checkout", access.email, "", "Marked left from staff app", "Staff app", ""]);
   staffAfterWrite_(personId);
@@ -373,6 +554,11 @@ function staffPersonCard(personId) {
   const identifier = staffRecords_(db.identifiers).find(function (row) {
     return row["Person ID"] === personId && staffTrue_(row.Active) && String(row.Type).toLowerCase() !== "email";
   });
+  const waiverMatched = registration && Boolean(staffWaiverMatches_([{
+    requestId: personId,
+    identifiers: identifier ? [staffClean_(identifier["Normalized Value"] || identifier.Value, 80)] : [],
+    email: staffClean_(person["Primary Email"], 254).toLowerCase(),
+  }])[personId]);
   const tools = {};
   staffRecords_(db.certifications).forEach(function (row) {
     if (row["Person ID"] !== personId || String(row.Status).toLowerCase() !== "active") return;
@@ -413,7 +599,7 @@ function staffPersonCard(personId) {
     affiliation: registration ? staffClean_(registration["Program / Department"], 80) : "",
     anticipatedGraduation: registration ? staffClean_(registration["Anticipated Graduation"], 7) : "",
     identifierHint: identifier ? staffIdentifierHint_(identifier.Value) : "",
-    attention: staffAttentionFlags_(registration),
+    attention: staffAttentionFlags_(registration, waiverMatched),
     tools: Object.keys(tools).map(function (key) { return tools[key]; }),
     canApproveTraining: ["trainer", "administrator"].indexOf(access.role) !== -1,
     fabmanConnected: fabman.connected,
@@ -871,7 +1057,11 @@ function staffResolveNote(noteId, reopen) {
 function staffRequireAccess_(roles) {
   const email = String(Session.getActiveUser().getEmail() || "").trim().toLowerCase();
   if (!email) throw new Error("Sign in with your UC San Diego Google account.");
-  const records = staffRecords_(staffDatabase_(true).staffAccess);
+  let records = staffCacheGetJson_("staff-access");
+  if (!records) {
+    records = staffRecords_(staffDatabase_(true).staffAccess);
+    staffCachePutJson_("staff-access", records, STAFF_CACHE_SECONDS_.access);
+  }
   const record = records.find(function (row) { return String(row.Email).trim().toLowerCase() === email && staffTrue_(row.Active); });
   if (!record) throw new Error("This account is not approved for the Sandbox staff app.");
   const role = String(record.Role || "staff").trim().toLowerCase();
@@ -921,9 +1111,13 @@ function staffLegacyWaiverRecords_() {
   return records;
 }
 
-function staffDatabase_(accessOnly) {
+function staffDatabase_(keysOrAccessOnly) {
   const spreadsheet = staffSpreadsheet_();
-  const keys = accessOnly ? ["staffAccess"] : Object.keys(STAFF_CONFIG_.sheets);
+  const keys = Array.isArray(keysOrAccessOnly)
+    ? keysOrAccessOnly
+    : keysOrAccessOnly
+      ? ["staffAccess"]
+      : Object.keys(STAFF_CONFIG_.sheets);
   const db = { spreadsheet: spreadsheet };
   keys.forEach(function (key) {
     const definition = STAFF_CONFIG_.sheets[key];
@@ -997,19 +1191,47 @@ function staffAppendNamedRow_(sheet, record) {
 
 function staffCacheGetJson_(key) {
   try {
-    const value = CacheService.getScriptCache().get(key);
-    return value ? JSON.parse(value) : null;
+    const cache = CacheService.getScriptCache();
+    const value = cache.get(key);
+    if (!value) return null;
+    if (value.indexOf("__chunks__:") !== 0) return JSON.parse(value);
+    const count = Number(value.slice("__chunks__:".length));
+    if (!count || count > 20) return null;
+    const keys = [];
+    for (let index = 0; index < count; index += 1) keys.push(key + ":part:" + index);
+    const parts = cache.getAll(keys);
+    const joined = keys.map(function (partKey) { return parts[partKey] || ""; }).join("");
+    return joined ? JSON.parse(joined) : null;
   } catch (error) { return null; }
 }
 
 function staffCachePutJson_(key, value, seconds) {
-  try { CacheService.getScriptCache().put(key, JSON.stringify(value), seconds); } catch (error) {}
+  try {
+    const cache = CacheService.getScriptCache();
+    const serialized = JSON.stringify(value);
+    const chunkSize = 60000;
+    if (serialized.length <= chunkSize) {
+      cache.put(key, serialized, seconds);
+      return;
+    }
+    const chunks = {};
+    const count = Math.ceil(serialized.length / chunkSize);
+    for (let index = 0; index < count; index += 1) {
+      chunks[key + ":part:" + index] = serialized.slice(index * chunkSize, (index + 1) * chunkSize);
+    }
+    cache.putAll(chunks, seconds);
+    cache.put(key, "__chunks__:" + count, seconds);
+  } catch (error) {
+    console.warn("Cache write failed for " + key + ": " + error.message);
+  }
 }
 
 function staffAfterWrite_(personId) {
   STAFF_RECORDS_MEMO_ = {};
   const cache = CacheService.getScriptCache();
   cache.remove("dashboard");
+  cache.remove("onboarding");
+  cache.remove("tasks");
   if (personId) cache.remove("person:" + staffClean_(personId, 120));
 }
 

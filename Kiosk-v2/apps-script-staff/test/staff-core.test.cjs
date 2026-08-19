@@ -82,6 +82,8 @@ test("read-only sheet validation allows added and reordered columns", () => {
 
 test("attention flags distinguish account and waiver follow-up", () => {
   assert.deepEqual(Array.from(core.staffAttentionFlags_({ Status: "Incomplete", "DocuSign Status": "Awaiting verification" })), ["Account incomplete", "Waiver verification pending"]);
+  assert.deepEqual(Array.from(core.staffAttentionFlags_({ Status: "Unreviewed", "DocuSign Status": "Awaiting verification" }, true)), []);
+  assert.deepEqual(Array.from(core.staffAttentionFlags_({ Status: "Submitted", "DocuSign Status": "Awaiting verification" }, false)), ["Waiver verification pending"]);
   assert.deepEqual(Array.from(core.staffAttentionFlags_({ Status: "Active", "DocuSign Status": "Signed" })), []);
   assert.deepEqual(Array.from(core.staffAttentionFlags_(null)), []);
 });
@@ -106,4 +108,32 @@ test("staff profile edits validate role and student graduation", () => {
   const staff = core.staffValidateProfile_({ role: "Staff", affiliation: "SIO/DO", anticipatedGraduation: "2028-06" });
   assert.equal(staff.ok, true);
   assert.equal(staff.value.anticipatedGraduation, "");
+});
+
+test("task drafts accept simple optional metadata and reject unsafe values", () => {
+  const task = core.staffValidateTask_({ title: "  Refill laser supplies ", estimatedMinutes: "10", suggestedFor: "", priority: "High" });
+  assert.equal(task.ok, true);
+  assert.deepEqual({ ...task.value }, {
+    title: "Refill laser supplies",
+    details: "",
+    estimatedMinutes: 10,
+    suggestedFor: "Anyone",
+    priority: "High",
+  });
+  assert.equal(core.staffValidateTask_({ title: "", priority: "Normal" }).ok, false);
+  assert.equal(core.staffValidateTask_({ title: "Test", estimatedMinutes: "2" }).ok, false);
+  assert.equal(core.staffValidateTask_({ title: "Test", priority: "Urgent" }).ok, false);
+});
+
+test("task workflow uses only the four board columns", () => {
+  assert.equal(core.staffValidateTaskStatus_("To do").ok, true);
+  assert.equal(core.staffValidateTaskStatus_("Review / test").ok, true);
+  assert.equal(core.staffValidateTaskStatus_("Blocked").ok, false);
+});
+
+test("staff desk includes a task board and manager-only bulk paste entry point", () => {
+  assert.match(indexHtml, /data-view="tasks"/);
+  assert.match(indexHtml, /id="bulkTaskDialog"/);
+  assert.match(indexHtml, /canBulkImport/);
+  assert.match(indexHtml, /staffBulkCreateTasks/);
 });
