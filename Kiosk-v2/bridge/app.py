@@ -8,6 +8,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 import logging
 import os
+from pathlib import Path
 import time
 from typing import Any, AsyncIterator
 
@@ -20,6 +21,7 @@ from serial.tools import list_ports
 from scanner_protocol import DuplicateGuard, normalize_uid
 from apps_script_backend import AppsScriptCheckInBackend
 from sheets_backend import CheckInResult, GoogleSheetsProvider, SheetsCheckInBackend
+from visit_outbox import VisitOutbox
 
 
 logging.basicConfig(level=os.getenv("SCANNER_LOG_LEVEL", "INFO"))
@@ -32,6 +34,7 @@ DUPLICATE_WINDOW_SECONDS = float(os.getenv("SCANNER_DUPLICATE_SECONDS", "15"))
 CARD_LINK_SESSION_SECONDS = float(os.getenv("CARD_LINK_SESSION_SECONDS", "300"))
 PROFILE_SESSION_SECONDS = float(os.getenv("PROFILE_SESSION_SECONDS", "300"))
 GROUP_LINK_POLL_SECONDS = max(2.0, float(os.getenv("GROUP_LINK_POLL_SECONDS", "5")))
+VISIT_SYNC_SECONDS = max(0.2, float(os.getenv("VISIT_SYNC_SECONDS", "0.5")))
 DESIGNATED_CARD_LINK_STAFF_IDS = {
     value.strip()
     for value in os.getenv("CARD_LINK_STAFF_IDS", "").split(",")
@@ -48,7 +51,14 @@ def build_checkin_backend() -> SheetsCheckInBackend | AppsScriptCheckInBackend |
         return None
     if BACKEND_MODE == "apps-script":
         return AppsScriptCheckInBackend.from_environment()
-    return SheetsCheckInBackend(GoogleSheetsProvider.from_environment())
+    database_path = Path(os.getenv(
+        "CHECKIN_SQLITE_PATH",
+        "~/.local/state/sandbox-kiosk/checkins.sqlite3",
+    )).expanduser()
+    return SheetsCheckInBackend(
+        GoogleSheetsProvider.from_environment(),
+        outbox=VisitOutbox(database_path),
+    )
 
 
 class BridgeState:
@@ -346,15 +356,40 @@ async def poll_group_link_requests() -> None:
         await asyncio.sleep(GROUP_LINK_POLL_SECONDS)
 
 
+async def sync_activity_outbox() -> None:
+    """Copy durable local activity rows to Sheets without delaying visitors."""
+    if not isinstance(STATE.backend, SheetsCheckInBackend):
+        return
+    while True:
+        if not STATE.backend_ready:
+            await asyncio.sleep(VISIT_SYNC_SECONDS)
+            continue
+        try:
+            result = await asyncio.to_thread(STATE.backend.sync_pending_activity)
+            if result.get("synced"):
+                LOGGER.info(
+                    "Activity outbox synced %s row(s); %s remain",
+                    result["synced"],
+                    result.get("pending", 0),
+                )
+        except Exception:
+            LOGGER.exception("Activity outbox worker failed; queued visits remain durable")
+        await asyncio.sleep(VISIT_SYNC_SECONDS)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     reader_task = asyncio.create_task(serial_reader())
     warm_task = asyncio.create_task(warm_backend())
     group_link_task = asyncio.create_task(poll_group_link_requests())
+    outbox_task = asyncio.create_task(sync_activity_outbox())
     yield
-    for task in (reader_task, warm_task, group_link_task):
+    for task in (reader_task, warm_task, group_link_task, outbox_task):
         task.cancel()
-    await asyncio.gather(reader_task, warm_task, group_link_task, return_exceptions=True)
+    await asyncio.gather(reader_task, warm_task, group_link_task, outbox_task, return_exceptions=True)
+    close_backend = getattr(STATE.backend, "close", None)
+    if callable(close_backend):
+        await asyncio.to_thread(close_backend)
 
 
 app = FastAPI(title="Scripps Sandbox Scanner Bridge", lifespan=lifespan)
@@ -371,6 +406,11 @@ app.add_middleware(
 
 @app.get("/health")
 async def health() -> dict[str, Any]:
+    activity_sync = (
+        STATE.backend.activity_sync_status()
+        if isinstance(STATE.backend, SheetsCheckInBackend)
+        else {"pending": 0, "durable": False}
+    )
     return {
         "status": "ok",
         "reader": STATE.reader_status,
@@ -378,6 +418,7 @@ async def health() -> dict[str, Any]:
         "clients": len(STATE.clients),
         "backend": "demo" if STATE.backend is None else BACKEND_MODE,
         "backend_ready": STATE.backend_ready,
+        "activity_sync": activity_sync,
         "group_link_snapshot_age_seconds": (
             round(max(0.0, time.monotonic() - STATE.group_link_checked_at), 1)
             if STATE.group_link_checked_at

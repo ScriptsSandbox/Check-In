@@ -9,6 +9,7 @@ from sheets_backend import (
     user_has_card_digest,
     users_matching_identifier,
 )
+from visit_outbox import VisitOutbox
 
 
 def test_google_provider_matches_completed_scripps_waiver_from_production_tab():
@@ -88,6 +89,9 @@ class FakeProvider:
         self.calls["append"] += 1
         self.appended_rows.append(list(row))
         self.existing_activity.append(list(row))
+
+    def activity_exists(self, visit_id):
+        return any(row and str(row[0]) == str(visit_id) for row in self.existing_activity[1:])
 
     def update_user_card(self, identifier, card_uid):
         self.calls["card_update"] += 1
@@ -177,6 +181,9 @@ class FakeVisitsSheet:
     def append_row(self, row, value_input_option=None):
         self.appends.append((list(row), value_input_option))
         self.rows.append(list(row))
+
+    def col_values(self, column_number):
+        return [row[column_number - 1] for row in self.rows if len(row) >= column_number]
 
 
 class FakeCardsSheet:
@@ -291,6 +298,58 @@ def test_known_card_with_waiver_appends_normalized_visit_shape():
     assert row[3] == "User Checkin"
     assert row[7] == "Kiosk v2"
     assert "CARD123" not in row
+
+
+def test_known_card_commits_to_durable_outbox_before_google_sync(tmp_path):
+    provider = FakeProvider(users=[member()], waivers=[signed_waiver()])
+    outbox = VisitOutbox(tmp_path / "checkins.sqlite3")
+    backend = SheetsCheckInBackend(
+        provider,
+        now=lambda: 1_723_377_600.9,
+        local_datetime=lambda: datetime(2024, 8, 11, 9, 30, 0),
+        outbox=outbox,
+    )
+
+    result = backend.check_in("CARD123")
+
+    assert result.outcome == "success"
+    assert provider.calls["append"] == 0
+    assert result.timings_ms["activity_commit"] >= 0
+    assert backend.activity_sync_status()["pending"] == 1
+    synced = backend.sync_pending_activity()
+    assert synced["synced"] == 1
+    assert synced["pending"] == 0
+    assert provider.calls["append"] == 1
+    backend.close()
+
+
+def test_retry_does_not_duplicate_an_ambiguous_google_append(tmp_path):
+    class AmbiguousProvider(FakeProvider):
+        def append_activity(self, row):
+            super().append_activity(row)
+            if self.calls["append"] == 1:
+                raise ConnectionError("response lost after append")
+
+    clock = [1000.0]
+    provider = AmbiguousProvider()
+    outbox = VisitOutbox(tmp_path / "checkins.sqlite3", now=lambda: clock[0])
+    backend = SheetsCheckInBackend(provider, outbox=outbox)
+    outbox.enqueue([
+        "visit_ambiguous", "person_1", "2026-08-19T10:00:00", "User Checkin",
+        "", "", "", "Kiosk v2", "",
+    ])
+
+    first = backend.sync_pending_activity()
+    assert first["pending"] == 1
+    assert provider.calls["append"] == 1
+
+    clock[0] += 1.1
+    second = backend.sync_pending_activity()
+    assert second["pending"] == 0
+    assert second["synced"] == 1
+    assert provider.calls["append"] == 1
+    assert len([row for row in provider.existing_activity if row and row[0] == "visit_ambiguous"]) == 1
+    backend.close()
 
 
 def test_profile_answers_can_be_corrected_during_the_active_session():

@@ -12,10 +12,13 @@ const REGISTRATION_CONFIG_ = {
 
 function doGet(event) {
   const template = HtmlService.createTemplateFromFile("Index");
-  template.isKiosk = Boolean(event && event.parameter && event.parameter.mode === "kiosk");
-  return template.evaluate()
+  const isKiosk = Boolean(event && event.parameter && event.parameter.mode === "kiosk");
+  template.isKiosk = isKiosk;
+  const output = template.evaluate()
     .setTitle("Create a Scripps Sandbox account")
     .addMetaTag("viewport", "width=device-width, initial-scale=1");
+  if (isKiosk) output.setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  return output;
 }
 
 function doPost(event) {

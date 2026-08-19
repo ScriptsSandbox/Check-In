@@ -819,4 +819,19 @@ button:focus-visible { outline: 3px solid var(--orange); outline-offset: 4px; }
 .waiver-delay-note b { font: 850 14px/1 "Jost"; letter-spacing: .13em; }
 .waiver-delay-note span { font-size: clamp(16px, 1.05vw, 20px); line-height: 1.3; }
 .waiver-qr { justify-self: end; text-align: center; }
+.registration-kiosk { width: 100%; height: 100%; padding: 24px 28px 28px; }
+.screen-register-kiosk .interaction-plane { height: 100svh; min-height: 0; margin-left: 0; padding: 82px 22px 18px; align-items: stretch; }
+.screen-register-kiosk .registration-kiosk { max-width: none; }
+.screen-register-kiosk footer { display: none; }
+.registration-kiosk-bar { display: flex; min-height: 52px; align-items: center; justify-content: space-between; gap: 24px; }
+.registration-kiosk-bar .back { position: static; }
+.registration-kiosk-bar span { font: 700 12px/1 "Jost"; letter-spacing: .1em; }
+.registration-kiosk iframe { display: block; width: 100%; height: calc(100% - 52px); border: 2px solid var(--navy); background: var(--cream); }
 @media (max-width: 900px) { .waiver-required-content { grid-template-columns: 1fr 250px; gap: 24px; } .waiver-required-content .qr-code-large { width: 250px; } .idle-return { bottom: 18px; grid-template-columns: 46px 1fr; } .idle-return button { grid-column: 1 / -1; } }
+
+.sync-card { display: grid; grid-template-columns: minmax(170px,.45fr) 1fr; gap: 22px; margin: 0 0 24px; padding: 18px 20px; border: 1px solid rgba(16,43,78,.35); background: rgba(255,255,255,.4); }
+.sync-card.pending { border-left: 8px solid var(--orange); }
+.sync-card div { display: grid; gap: 5px; }
+.sync-card small { font: 800 11px/1 "Jost"; letter-spacing: .13em; }
+.sync-card strong { font: 700 22px/1.1 "Jost"; }
+.sync-card p { margin: 0; align-self: center; font-size: 15px; line-height: 1.35; }

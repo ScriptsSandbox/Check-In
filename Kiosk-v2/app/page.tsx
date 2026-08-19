@@ -32,7 +32,8 @@ type Screen =
   | "reader-error"
   | "profile"
   | "profile-detail"
-  | "new-here";
+  | "new-here"
+  | "register-kiosk";
 
 type Announcement = {
   active: boolean;
@@ -46,6 +47,14 @@ const REGISTRATION_URL = process.env.NEXT_PUBLIC_REGISTRATION_URL?.trim() || "";
 const WAIVER_URL = process.env.NEXT_PUBLIC_WAIVER_URL?.trim() || "";
 
 type ScannerStatus = "demo" | "connecting" | "connected" | "disconnected";
+
+type ActivitySyncStatus = {
+  pending: number;
+  oldest_pending_seconds?: number | null;
+  last_synced_at?: string | null;
+  last_error?: string;
+  durable?: boolean;
+};
 
 type ScannerOutcome =
   | "demo"
@@ -146,6 +155,7 @@ export default function Home() {
   const [announcement, setAnnouncement] = useState<Announcement>(emptyAnnouncement);
   const [announcementDraft, setAnnouncementDraft] = useState<Announcement>(emptyAnnouncement);
   const [staffOpen, setStaffOpen] = useState(false);
+  const [activitySync, setActivitySync] = useState<ActivitySyncStatus | null>(null);
   const [demoClosingMinutes, setDemoClosingMinutes] = useState<number | null>(null);
   const [scannerStatus, setScannerStatus] = useState<ScannerStatus>("demo");
   const [scannerResult, setScannerResult] = useState<ScannerResultEvent | null>(null);
@@ -153,11 +163,13 @@ export default function Home() {
   const [visitCount, setVisitCount] = useState<number | null>(null);
   const [groupLinkRequest, setGroupLinkRequest] = useState<GroupLinkRequest | null>(null);
   const [groupJustLinked, setGroupJustLinked] = useState(false);
+  const [registrationComplete, setRegistrationComplete] = useState(false);
   const demoControlsEnabled = process.env.NEXT_PUBLIC_KIOSK_DEMO === "true";
   const screenRef = useRef<Screen>("home");
   const cardDetectedAtRef = useRef<number | null>(null);
   const idleDeadlineRef = useRef<number | null>(null);
   const groupLinkRequestRef = useRef<GroupLinkRequest | null>(null);
+  const registrationFrameRef = useRef<HTMLIFrameElement | null>(null);
   const profileQuestion = useMemo(
     () => profileSessionAvailable
       ? profileEditingField
@@ -174,6 +186,24 @@ export default function Home() {
   useEffect(() => {
     groupLinkRequestRef.current = groupLinkRequest;
   }, [groupLinkRequest]);
+
+  useEffect(() => {
+    const registrationMessage = (event: MessageEvent) => {
+      if (event.source !== registrationFrameRef.current?.contentWindow) return;
+      let trustedOrigin = false;
+      try {
+        const host = new URL(event.origin).hostname;
+        trustedOrigin = host === "script.google.com" || host.endsWith(".googleusercontent.com");
+      } catch {
+        return;
+      }
+      if (trustedOrigin && event.data?.type === "sandbox-registration-complete") {
+        setRegistrationComplete(true);
+      }
+    };
+    window.addEventListener("message", registrationMessage);
+    return () => window.removeEventListener("message", registrationMessage);
+  }, []);
 
   useEffect(() => {
     setNow(new Date());
@@ -290,6 +320,24 @@ export default function Home() {
     const interval = window.setInterval(pollGroupLink, 2500);
     return () => { stopped = true; window.clearInterval(interval); };
   }, [scannerStatus]);
+
+  useEffect(() => {
+    if (!staffOpen) return;
+    let stopped = false;
+    async function refreshActivitySync() {
+      try {
+        const response = await fetch("http://127.0.0.1:8765/health", { cache: "no-store" });
+        if (!response.ok || stopped) return;
+        const health = await response.json() as { activity_sync?: ActivitySyncStatus };
+        setActivitySync(health.activity_sync || null);
+      } catch {
+        if (!stopped) setActivitySync(null);
+      }
+    }
+    refreshActivitySync();
+    const interval = window.setInterval(refreshActivitySync, 5_000);
+    return () => { stopped = true; window.clearInterval(interval); };
+  }, [staffOpen]);
 
   useEffect(() => {
     if (screen !== "reading" || !scannerResult) return;
@@ -460,6 +508,7 @@ export default function Home() {
     setStaffCardDetected(false);
     setGroupLinkRequest(null);
     setGroupJustLinked(false);
+    setRegistrationComplete(false);
     setDemoOpen(false);
   }, []);
 
@@ -471,7 +520,11 @@ export default function Home() {
     return () => window.removeEventListener("keydown", returnHome);
   }, [reset]);
 
-  const idleTimerActive = screen !== "home" && screen !== "reading" && screen !== "success" && !staffOpen;
+  const idleTimerActive = screen !== "home"
+    && screen !== "reading"
+    && screen !== "success"
+    && (screen !== "register-kiosk" || registrationComplete)
+    && !staffOpen;
 
   const extendIdleTimer = useCallback(() => {
     idleDeadlineRef.current = Date.now() + INACTIVITY_SECONDS * 1000;
@@ -650,7 +703,7 @@ export default function Home() {
     }
   }
 
-  const showBrand = screen !== "success";
+  const showBrand = screen !== "success" && screen !== "register-kiosk";
 
   return (
     <main className={`kiosk screen-${screen}`}>
@@ -1014,11 +1067,26 @@ export default function Home() {
           )}
           <div className="onboarding-fallback">
             <p><b>No phone nearby?</b> You can create the account on this kiosk. The waiver must still be completed from a phone or another device.</p>
-            {REGISTRATION_URL && <a className="outline-action" href={REGISTRATION_URL + "?mode=kiosk&v=5"}>Create an account on this kiosk</a>}
+            {REGISTRATION_URL && <button className="outline-action" onClick={() => { setRegistrationComplete(false); setScreen("register-kiosk"); }}>Create an account on this kiosk</button>}
             <button className="quiet-action" onClick={() => setScreen("pid")}>I already registered</button>
           </div>
         </div>
       )}
+
+        {screen === "register-kiosk" && REGISTRATION_URL && (
+          <div className="registration-kiosk screen-content">
+            <div className="registration-kiosk-bar">
+              <button className="back" onClick={reset}><Arrow direction="left" /> Back to check-in</button>
+              <span>Press Esc at any time to return</span>
+            </div>
+            <iframe
+              ref={registrationFrameRef}
+              title="Create a Scripps Sandbox account"
+              src={REGISTRATION_URL + "?mode=kiosk&v=6"}
+              allow="clipboard-write"
+            />
+          </div>
+        )}
     </section>
 
       {screen === "success" && (
@@ -1113,6 +1181,17 @@ export default function Home() {
               </div>
               <time dateTime="2026-08-14">{KIOSK_RELEASE.date}</time>
               <p>{KIOSK_RELEASE.summary}</p>
+            </section>
+            <section className={`sync-card ${activitySync?.pending ? "pending" : "synced"}`} aria-label="Visit synchronization status">
+              <div>
+                <small>VISIT SYNC</small>
+                <strong>{activitySync ? (activitySync.pending ? `${activitySync.pending} waiting` : "Up to date") : "Unavailable"}</strong>
+              </div>
+              <p>{activitySync?.pending
+                ? "Check-ins are safely stored on this Pi and will upload automatically."
+                : activitySync?.last_synced_at
+                  ? `Last Google sync ${new Date(activitySync.last_synced_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}`
+                  : "No locally queued visits."}</p>
             </section>
             <p className="staff-intro">Keep it brief. The kiosk gives the announcement the scale and urgency of a temporary poster.</p>
             <div className="preset-row" aria-label="Message presets">

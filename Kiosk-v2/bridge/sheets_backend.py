@@ -19,6 +19,8 @@ import time
 from typing import Any, Callable, Protocol
 from uuid import uuid4
 
+from visit_outbox import VisitOutbox
+
 
 LOGGER = logging.getLogger("sandbox-scanner.sheets")
 
@@ -38,6 +40,7 @@ class SheetsProvider(Protocol):
     def user_records(self) -> list[dict[str, Any]]: ...
     def waiver_records(self) -> list[dict[str, Any]]: ...
     def activity_rows(self) -> list[list[Any]]: ...
+    def activity_exists(self, visit_id: str) -> bool: ...
     def append_activity(self, row: list[Any]) -> None: ...
     def update_user_card(self, identifier: str, card_uid: str) -> dict[str, Any]: ...
     def update_user_card_by_person(self, person_id: str, card_uid: str) -> dict[str, Any]: ...
@@ -393,6 +396,21 @@ class GoogleSheetsProvider:
                 self._activity_rows.append(list(row))
                 self._activity_cache_expires_at = time.monotonic() + self.activity_cache_seconds
 
+    def activity_exists(self, visit_id: str) -> bool:
+        """Confirm a Visit ID directly against Sheets after an ambiguous write.
+
+        Normal first-attempt writes do not pay for this read. It is used only
+        when a previous append raised and may have succeeded remotely.
+        """
+        target = str(visit_id).strip()
+        if not target:
+            return False
+        with self._lock:
+            self._connect()
+            if self._activity_rows and any(row and str(row[0]).strip() == target for row in self._activity_rows[1:]):
+                return True
+            return target in {str(value).strip() for value in self._visits_sheet.col_values(1)[1:]}
+
     def update_user_card(self, identifier: str, card_uid: str) -> dict[str, Any]:
         normalized_identifier = normalize_person_id(identifier)
         digest = self.card_digest(card_uid)
@@ -590,10 +608,53 @@ class GoogleSheetsProvider:
 
 
 class SheetsCheckInBackend:
-    def __init__(self, provider: SheetsProvider, now: Callable[[], float] = time.time, local_datetime: Callable[[], datetime] = datetime.now) -> None:
+    def __init__(
+        self,
+        provider: SheetsProvider,
+        now: Callable[[], float] = time.time,
+        local_datetime: Callable[[], datetime] = datetime.now,
+        outbox: VisitOutbox | None = None,
+    ) -> None:
         self.provider = provider
         self.now = now
         self.local_datetime = local_datetime
+        self.outbox = outbox
+
+    def record_activity(self, row: list[Any]) -> None:
+        if self.outbox is None:
+            self.provider.append_activity(row)
+            return
+        self.outbox.enqueue(row)
+
+    def sync_pending_activity(self, limit: int = 25) -> dict[str, Any]:
+        if self.outbox is None:
+            return {"pending": 0, "synced": 0, "last_error": ""}
+        synced = 0
+        last_error = ""
+        for pending in self.outbox.pending(limit=limit):
+            try:
+                if pending.attempts and self.provider.activity_exists(pending.visit_id):
+                    self.outbox.mark_synced(pending.visit_id)
+                    synced += 1
+                    continue
+                self.provider.append_activity(pending.row)
+                self.outbox.mark_synced(pending.visit_id)
+                synced += 1
+            except Exception as error:
+                last_error = str(error)
+                self.outbox.mark_failed(pending.visit_id, error)
+                LOGGER.exception("Activity outbox sync failed for %s; it will be retried", pending.visit_id)
+                break
+        return {**self.outbox.status(), "synced": synced, "last_error": last_error or self.outbox.status()["last_error"]}
+
+    def activity_sync_status(self) -> dict[str, Any]:
+        if self.outbox is None:
+            return {"pending": 0, "oldest_pending_seconds": None, "last_synced_at": None, "last_error": "", "durable": False}
+        return {**self.outbox.status(), "durable": True}
+
+    def close(self) -> None:
+        if self.outbox is not None:
+            self.outbox.close()
 
     def warm_up(self) -> dict[str, int]:
         total_started = time.monotonic()
@@ -695,7 +756,7 @@ class SheetsCheckInBackend:
         except ValueError as error:
             return CheckInResult(outcome="group_link_error", message=str(error))
         linked_at = self.local_datetime().isoformat(timespec="seconds")
-        self.provider.append_activity([
+        self.record_activity([
             "visit_" + uuid4().hex, person_id, linked_at, "Card Linked", requested_by, "Group onboarding",
             "First card connected from Staff Desk queue", "Kiosk v2", "",
         ])
@@ -740,7 +801,7 @@ class SheetsCheckInBackend:
         display_name = str(target.get("Name", "")).strip() or "Sandbox member"
         staff_name = str(staff.get("Name", "")).strip() or "Designated staff"
         replaced_count = int(target.get("Replaced Card Count", 0) or 0)
-        self.provider.append_activity([
+        self.record_activity([
             "visit_" + uuid4().hex,
             target.get("Person ID", ""),
             self.local_datetime().isoformat(timespec="seconds"),
@@ -785,6 +846,8 @@ class SheetsCheckInBackend:
             for row in activity_rows[1:]
             if len(row) >= 4 and str(row[1]).strip() == person_id and str(row[3]).strip() == "User Checkin" and str(row[2]).strip()
         }
+        if self.outbox is not None:
+            visit_dates.update(self.outbox.visit_dates(person_id))
         timings["activity_lookup"] = elapsed_ms(stage_started)
         visit_count = len(visit_dates | {today})
         row = [
@@ -799,8 +862,8 @@ class SheetsCheckInBackend:
             "",
         ]
         stage_started = time.monotonic()
-        self.provider.append_activity(row)
-        timings["activity_append"] = elapsed_ms(stage_started)
+        self.record_activity(row)
+        timings["activity_commit"] = elapsed_ms(stage_started)
         timings["total"] = elapsed_ms(total_started)
         return CheckInResult(
             outcome="success",

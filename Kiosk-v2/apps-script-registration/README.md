@@ -17,6 +17,7 @@ The kiosk still requires a matching waiver record before check-in succeeds. Afte
 - The affiliation question branches by role: undergraduates choose a major; Scripps and non-Scripps graduate students choose an appropriate program or department; MAS students choose their program; and employees or visitors choose a unit or organization.
 - Input is length-limited, normalized, and protected against spreadsheet-formula injection.
 - A script lock serializes duplicate checks and appends.
+- Kiosk mode (`?mode=kiosk`) may be embedded by the local Raspberry Pi app. The Pi retains the 45-second inactivity return, and the form adds an explicit **Done — back to check-in** control plus Escape-key navigation after account creation.
 - The form includes a honeypot and minimum-fill-time check.
 - Do not add health, birth-date, Social Security, payment, or card-UID fields.
 
