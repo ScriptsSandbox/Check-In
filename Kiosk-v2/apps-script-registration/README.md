@@ -29,6 +29,8 @@ The kiosk still requires a matching waiver record before check-in succeeds. Afte
 
 ## Setup
 
+For local Clasp use, copy `.clasp.json.example` to `.clasp.json` and insert the institutional script ID from the restricted UCSD deployment inventory. The active mapping is intentionally ignored by Git. Authenticate with `clasp login`; never copy or commit `~/.clasprc.json`. See [`../docs/apps-script-recovery.md`](../docs/apps-script-recovery.md).
+
 1. Create a standalone Apps Script project in the UCSD-managed account.
 2. Add `RegistrationCore.gs`, `Code.gs`, `Index.html`, and the manifest.
 3. In **Project Settings → Script properties**, add `USER_DATABASE_SPREADSHEET_ID` with the target user-database spreadsheet ID, `WAIVER_POWERFORM_URL` with the approved DocuSign PowerForm URL, and `FABMAN_API_KEY` with the same limited administrative integration key used by the Staff Desk. For the Scripps-owned waiver callback, also add a long random `DOCUSIGN_CONNECT_TOKEN` and the exact `DOCUSIGN_WAIVER_TEMPLATE_ID`. None of these values belongs in source control.

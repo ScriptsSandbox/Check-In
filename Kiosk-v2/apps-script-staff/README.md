@@ -6,6 +6,8 @@ Production web app: `https://script.google.com/macros/s/AKfycbyZOztABpgj5kVB9Aj8
 
 ## Deploy
 
+For local Clasp use, copy `.clasp.json.example` to `.clasp.json` and insert the institutional script ID from the restricted UCSD deployment inventory. The active mapping is intentionally ignored by Git. Authenticate with `clasp login`; never copy or commit `~/.clasprc.json`. See [`../docs/apps-script-recovery.md`](../docs/apps-script-recovery.md).
+
 1. Create a standalone Apps Script project owned by the UCSD Sandbox account.
 2. Copy `appsscript.json`, `StaffCore.gs`, `Code.gs`, and `Index.html` into it.
 3. Set script property `USER_DATABASE_SPREADSHEET_ID` to the normalized database ID.

@@ -40,3 +40,8 @@ yarn-error.log*
 /.wrangler/
 /outputs/
 /work/
+
+# Local Google Apps Script project mappings. Copy the checked-in example in
+# each Apps Script folder and fill in the institutional script ID locally.
+**/.clasp.json
+!**/.clasp.json.example
