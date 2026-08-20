@@ -173,6 +173,8 @@ test("staff desk loads compact presence separately from the background people in
   assert.match(indexHtml, /setInterval\(\(\)=>refresh\(true\),6000\)/);
   assert.match(indexHtml, /setInterval\(\(\)=>refreshPeopleIndex\(true\),600000\)/);
   assert.match(indexHtml, /presenceOverrides/);
+  assert.match(indexHtml, /async function startStaffDesk\(\)\{await refresh\(false\);diagnostics\.presenceReadyMs=Date\.now\(\)-diagnosticsStartedAt;refreshPeopleIndex\(true\);\}/);
+  assert.match(indexHtml, /window\.STAFF_DESK_PERFORMANCE/);
   assert.doesNotMatch(indexHtml, /call\("staffDashboard"\)/);
 });
 
