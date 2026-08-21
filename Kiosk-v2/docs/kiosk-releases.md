@@ -9,6 +9,7 @@ more than one revision is released on the same day.
 
 | Revision | Date | What changed |
 | --- | --- | --- |
+| 2026.08.21.1 | August 21, 2026 | The `Sandbox Access` calendar now automatically drives open, closing-soon, and closed kiosk states. Reservations and explicit closures override open blocks, adjacent open blocks are treated continuously, stale status is visible to staff, and the existing closing-time control remains available as a same-day manual override. |
 | 2026.08.19.3 | August 19, 2026 | Card connections now insert a distinct card-history row and verify that exact record by reading it back before the kiosk can report success. Staff Desk and kiosk instructions now require the explicit CARD CONNECTED result before moving to the next person, with clear retry language on failure. |
 | 2026.08.19.2 | August 19, 2026 | Phase 2 records each accepted visit to a durable SQLite outbox before confirmation, synchronizes queued rows to Google Sheets in the background with retry and Visit ID deduplication, exposes queue health in Staff controls, and keeps kiosk-created registrations inside the kiosk shell with an explicit return control and the normal 45-second inactivity reset. |
 | 2026.08.19.1 | August 19, 2026 | Phase 1 performance work keeps expired account, waiver, and visit snapshots usable while Google refreshes in the background; card-link status is polled once by the bridge instead of once per browser request; every accepted card now receives a visible result; and the confirmation screen resets after three seconds for faster lines. |

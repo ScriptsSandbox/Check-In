@@ -20,6 +20,7 @@ from serial.tools import list_ports
 
 from scanner_protocol import DuplicateGuard, normalize_uid
 from apps_script_backend import AppsScriptCheckInBackend
+from calendar_access import AccessStatus, CalendarAccessProvider
 from sheets_backend import CheckInResult, GoogleSheetsProvider, SheetsCheckInBackend
 from visit_outbox import VisitOutbox
 
@@ -35,6 +36,7 @@ CARD_LINK_SESSION_SECONDS = float(os.getenv("CARD_LINK_SESSION_SECONDS", "300"))
 PROFILE_SESSION_SECONDS = float(os.getenv("PROFILE_SESSION_SECONDS", "300"))
 GROUP_LINK_POLL_SECONDS = max(2.0, float(os.getenv("GROUP_LINK_POLL_SECONDS", "5")))
 VISIT_SYNC_SECONDS = max(0.2, float(os.getenv("VISIT_SYNC_SECONDS", "0.5")))
+CALENDAR_POLL_SECONDS = max(15.0, float(os.getenv("CALENDAR_POLL_SECONDS", "30")))
 DESIGNATED_CARD_LINK_STAFF_IDS = {
     value.strip()
     for value in os.getenv("CARD_LINK_STAFF_IDS", "").split(",")
@@ -61,11 +63,16 @@ def build_checkin_backend() -> SheetsCheckInBackend | AppsScriptCheckInBackend |
     )
 
 
+def build_calendar_provider() -> CalendarAccessProvider | None:
+    return CalendarAccessProvider.from_environment()
+
+
 class BridgeState:
     def __init__(
         self,
         backend: SheetsCheckInBackend | AppsScriptCheckInBackend | None = None,
         designated_card_link_staff_ids: set[str] | None = None,
+        calendar_provider: CalendarAccessProvider | None = None,
     ) -> None:
         self.reader_status = "simulation" if SIMULATION_ENABLED else "searching"
         self.reader_port: str | None = None
@@ -73,7 +80,17 @@ class BridgeState:
         self.clients: set[asyncio.Queue[dict[str, Any]]] = set()
         self.guard = DuplicateGuard(window_seconds=DUPLICATE_WINDOW_SECONDS)
         self.backend = backend
+        self.calendar_provider = calendar_provider
         self.backend_ready = backend is None
+        self.access_status = AccessStatus(
+            mode="unknown",
+            minutes_until_close=None,
+            closes_at=None,
+            checked_at=datetime.now(timezone.utc),
+            source="sandbox_access_calendar",
+            stale=True,
+            reason="not_configured" if calendar_provider is None else "starting",
+        )
         self.pending_card_uid: str | None = None
         self.pending_card_expires_at = 0.0
         self.card_link_identifier: str | None = None
@@ -281,7 +298,10 @@ class BridgeState:
         return True
 
 
-STATE = BridgeState(build_checkin_backend())
+STATE = BridgeState(
+    build_checkin_backend(),
+    calendar_provider=build_calendar_provider(),
+)
 
 
 def choose_serial_port() -> str | None:
@@ -377,16 +397,45 @@ async def sync_activity_outbox() -> None:
         await asyncio.sleep(VISIT_SYNC_SECONDS)
 
 
+async def poll_calendar_access() -> None:
+    """Refresh the public access state without putting Google on the check-in path."""
+    if STATE.calendar_provider is None:
+        return
+    while True:
+        try:
+            STATE.access_status = await asyncio.to_thread(STATE.calendar_provider.refresh)
+        except Exception:
+            LOGGER.exception("Sandbox Access calendar refresh failed; keeping the last known state")
+            STATE.access_status = replace(
+                STATE.access_status,
+                stale=True,
+                reason=(
+                    "refresh_failed"
+                    if STATE.access_status.mode != "unknown"
+                    else "calendar_unavailable"
+                ),
+            )
+        await asyncio.sleep(CALENDAR_POLL_SECONDS)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     reader_task = asyncio.create_task(serial_reader())
     warm_task = asyncio.create_task(warm_backend())
     group_link_task = asyncio.create_task(poll_group_link_requests())
     outbox_task = asyncio.create_task(sync_activity_outbox())
+    calendar_task = asyncio.create_task(poll_calendar_access())
     yield
-    for task in (reader_task, warm_task, group_link_task, outbox_task):
+    for task in (reader_task, warm_task, group_link_task, outbox_task, calendar_task):
         task.cancel()
-    await asyncio.gather(reader_task, warm_task, group_link_task, outbox_task, return_exceptions=True)
+    await asyncio.gather(
+        reader_task,
+        warm_task,
+        group_link_task,
+        outbox_task,
+        calendar_task,
+        return_exceptions=True,
+    )
     close_backend = getattr(STATE.backend, "close", None)
     if callable(close_backend):
         await asyncio.to_thread(close_backend)
@@ -419,12 +468,18 @@ async def health() -> dict[str, Any]:
         "backend": "demo" if STATE.backend is None else BACKEND_MODE,
         "backend_ready": STATE.backend_ready,
         "activity_sync": activity_sync,
+        "access_status": STATE.access_status.as_dict(),
         "group_link_snapshot_age_seconds": (
             round(max(0.0, time.monotonic() - STATE.group_link_checked_at), 1)
             if STATE.group_link_checked_at
             else None
         ),
     }
+
+
+@app.get("/access-status")
+async def access_status() -> dict[str, Any]:
+    return STATE.access_status.as_dict()
 
 
 @app.websocket("/ws")

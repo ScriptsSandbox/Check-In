@@ -1,5 +1,5 @@
 export const KIOSK_RELEASE = {
-  revision: "2026.08.19.3",
-  date: "August 19, 2026",
-  summary: "Verified card-history writes and clearer card-connection protocol",
+  revision: "2026.08.21.1",
+  date: "August 21, 2026",
+  summary: "Automatic open, closing-soon, and closed states from Sandbox Access",
 } as const;

@@ -56,6 +56,16 @@ type ActivitySyncStatus = {
   durable?: boolean;
 };
 
+type CalendarAccessStatus = {
+  mode: "open" | "closing-soon" | "closed" | "unknown";
+  minutes_until_close: number | null;
+  closes_at: string | null;
+  checked_at: string;
+  source: string;
+  stale: boolean;
+  reason: string;
+};
+
 type ScannerOutcome =
   | "demo"
   | "success"
@@ -156,6 +166,7 @@ export default function Home() {
   const [announcementDraft, setAnnouncementDraft] = useState<Announcement>(emptyAnnouncement);
   const [staffOpen, setStaffOpen] = useState(false);
   const [activitySync, setActivitySync] = useState<ActivitySyncStatus | null>(null);
+  const [calendarAccess, setCalendarAccess] = useState<CalendarAccessStatus | null>(null);
   const [demoClosingMinutes, setDemoClosingMinutes] = useState<number | null>(null);
   const [scannerStatus, setScannerStatus] = useState<ScannerStatus>("demo");
   const [scannerResult, setScannerResult] = useState<ScannerResultEvent | null>(null);
@@ -340,6 +351,24 @@ export default function Home() {
   }, [staffOpen]);
 
   useEffect(() => {
+    const isLocalKiosk = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+    if (!isLocalKiosk) return;
+    let stopped = false;
+    async function refreshCalendarAccess() {
+      try {
+        const response = await fetch("http://127.0.0.1:8765/access-status", { cache: "no-store" });
+        if (!response.ok || stopped) return;
+        setCalendarAccess(await response.json() as CalendarAccessStatus);
+      } catch {
+        if (!stopped) setCalendarAccess(null);
+      }
+    }
+    refreshCalendarAccess();
+    const interval = window.setInterval(refreshCalendarAccess, 30_000);
+    return () => { stopped = true; window.clearInterval(interval); };
+  }, []);
+
+  useEffect(() => {
     if (screen !== "reading" || !scannerResult) return;
     const detectedAt = cardDetectedAtRef.current ?? performance.now();
     const minimumFeedbackMs = 500;
@@ -410,18 +439,26 @@ export default function Home() {
         minutes: Math.max(0, demoClosingMinutes),
       };
     }
-    if (!now || !announcement.closingTime || announcement.closingDate !== localDateKey(now)) {
-      return { mode: "open" as const, minutes: null };
+    if (!now) return { mode: "open" as const, minutes: null };
+    if (announcement.closingTime && announcement.closingDate === localDateKey(now)) {
+      const [hours, minutes] = announcement.closingTime.split(":").map(Number);
+      if (Number.isFinite(hours) && Number.isFinite(minutes)) {
+        const closes = new Date(now);
+        closes.setHours(hours, minutes, 0, 0);
+        const difference = Math.ceil((closes.getTime() - now.getTime()) / 60_000);
+        if (difference <= 0) return { mode: "closed" as const, minutes: 0 };
+        if (difference <= 30) return { mode: "closing-soon" as const, minutes: difference };
+        return { mode: "open" as const, minutes: null };
+      }
     }
-    const [hours, minutes] = announcement.closingTime.split(":").map(Number);
-    if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return { mode: "open" as const, minutes: null };
-    const closes = new Date(now);
-    closes.setHours(hours, minutes, 0, 0);
-    const difference = Math.ceil((closes.getTime() - now.getTime()) / 60_000);
-    if (difference <= 0) return { mode: "closed" as const, minutes: 0 };
-    if (difference <= 30) return { mode: "closing-soon" as const, minutes: difference };
+    if (calendarAccess?.mode === "closed") return { mode: "closed" as const, minutes: 0 };
+    if (calendarAccess?.closes_at && ["open", "closing-soon"].includes(calendarAccess.mode)) {
+      const difference = Math.ceil((new Date(calendarAccess.closes_at).getTime() - now.getTime()) / 60_000);
+      if (difference <= 0) return { mode: "closed" as const, minutes: 0 };
+      if (difference <= 30) return { mode: "closing-soon" as const, minutes: difference };
+    }
     return { mode: "open" as const, minutes: null };
-  }, [announcement.closingDate, announcement.closingTime, demoClosingMinutes, now]);
+  }, [announcement.closingDate, announcement.closingTime, calendarAccess, demoClosingMinutes, now]);
 
   const minutesUntilClose = closingStatus.minutes;
 
@@ -1179,7 +1216,7 @@ export default function Home() {
                 <small>CURRENT KIOSK REV</small>
                 <strong>{KIOSK_RELEASE.revision}</strong>
               </div>
-              <time dateTime="2026-08-14">{KIOSK_RELEASE.date}</time>
+              <time dateTime="2026-08-21">{KIOSK_RELEASE.date}</time>
               <p>{KIOSK_RELEASE.summary}</p>
             </section>
             <section className={`sync-card ${activitySync?.pending ? "pending" : "synced"}`} aria-label="Visit synchronization status">
@@ -1193,6 +1230,27 @@ export default function Home() {
                   ? `Last Google sync ${new Date(activitySync.last_synced_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}`
                   : "No locally queued visits."}</p>
             </section>
+            <section className={`sync-card ${calendarAccess?.stale || !calendarAccess ? "pending" : "synced"}`} aria-label="Sandbox Access calendar status">
+              <div>
+                <small>SANDBOX ACCESS CALENDAR</small>
+                <strong>{calendarAccess
+                  ? calendarAccess.mode === "closing-soon"
+                    ? `Closing in ${calendarAccess.minutes_until_close} min`
+                    : calendarAccess.mode === "closed"
+                      ? "Closed"
+                      : calendarAccess.mode === "open"
+                        ? "Open"
+                        : "Unavailable"
+                  : "Unavailable"}</strong>
+              </div>
+              <p>{announcement.closingTime && announcement.closingDate === localDateKey(new Date())
+                ? `Manual override active: ${announcement.closingTime}`
+                : calendarAccess?.stale
+                  ? "Calendar refresh is delayed; the kiosk is retaining the last known state."
+                  : calendarAccess?.checked_at
+                    ? `Automatic hours checked ${new Date(calendarAccess.checked_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
+                    : "Automatic hours are not configured on this Pi."}</p>
+            </section>
             <p className="staff-intro">Keep it brief. The kiosk gives the announcement the scale and urgency of a temporary poster.</p>
             <div className="preset-row" aria-label="Message presets">
               <button type="button" onClick={() => setAnnouncementDraft({ ...announcementDraft, active: true, heading: "CHECK IN WITH STAFF", body: "Please check in with me upstairs before starting work." })}>Upstairs</button>
@@ -1203,9 +1261,9 @@ export default function Home() {
             <input id="announcement-heading" maxLength={34} value={announcementDraft.heading} onChange={(event) => setAnnouncementDraft({ ...announcementDraft, heading: event.target.value })} />
             <label htmlFor="announcement-body">MESSAGE</label>
             <textarea id="announcement-body" maxLength={120} value={announcementDraft.body} onChange={(event) => setAnnouncementDraft({ ...announcementDraft, body: event.target.value })} />
-            <label htmlFor="closing-time">TODAY’S CLOSING TIME <span>optional</span></label>
+            <label htmlFor="closing-time">TODAY’S CLOSING-TIME OVERRIDE <span>optional</span></label>
             <input id="closing-time" type="time" value={announcementDraft.closingTime} onChange={(event) => setAnnouncementDraft({ ...announcementDraft, closingTime: event.target.value })} />
-            <p className="field-note">Within 30 minutes, check-ins receive a full closing-soon screen. At closing, they are told to see staff. This setting expires at midnight.</p>
+            <p className="field-note">Leave blank to use the Sandbox Access calendar. Use this only when today differs from the calendar; it expires at midnight.</p>
             <label className="message-switch">
               <input type="checkbox" checked={announcementDraft.active} onChange={(event) => setAnnouncementDraft({ ...announcementDraft, active: event.target.checked })} />
               <span>Show the staff message now</span>
