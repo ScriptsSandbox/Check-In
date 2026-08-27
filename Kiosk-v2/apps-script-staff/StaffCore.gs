@@ -276,6 +276,50 @@ function staffEnrichPresence_(presence, peopleIndex) {
   return presence;
 }
 
+function staffVisitSnapshotRecords_(visits, people, registrations, capturedAt, captureMode, timeZone) {
+  const peopleById = {};
+  (people || []).forEach(function (person) {
+    const personId = staffClean_(person["Person ID"], 120);
+    if (personId) peopleById[personId] = person;
+  });
+
+  const registrationsByPerson = {};
+  (registrations || []).forEach(function (registration) {
+    const personId = staffClean_(registration["Person ID"], 120);
+    if (personId) registrationsByPerson[personId] = registration;
+  });
+
+  const captured = new Date(capturedAt);
+  return (visits || []).map(function (visit) {
+    const sourceRow = Number(visit._sourceRow || 0);
+    const visitId = staffClean_(visit["Visit ID"], 160);
+    const personId = staffClean_(visit["Person ID"], 120);
+    const eventAt = new Date(visit["Check In At"]);
+    if (!sourceRow || !visitId || isNaN(eventAt.getTime())) return null;
+    const person = peopleById[personId] || {};
+    const registration = registrationsByPerson[personId] || {};
+    return {
+      snapshotId: "snapshot_" + sourceRow + "_" + visitId,
+      sourceVisitRow: sourceRow,
+      visitId: visitId,
+      personId: personId,
+      eventAt: eventAt,
+      eventDateKey: Utilities.formatDate(eventAt, timeZone, "yyyy-MM-dd"),
+      eventType: staffClean_(visit["Event Type"], 80),
+      displayName: staffClean_(person["Display Name"], 120),
+      role: staffClean_(person.Role, 80),
+      program: staffClean_(registration["Program / Department"], 160),
+      registrationStatus: staffClean_(registration.Status, 80),
+      waiverStatus: staffClean_(registration["DocuSign Status"], 120),
+      authorizingEntity: staffClean_(visit["Authorizing Entity"], 160),
+      flags: staffClean_(visit.Flags, 300),
+      sourceSystem: staffClean_(visit["Source System"], 120),
+      capturedAt: captured,
+      captureMode: staffClean_(captureMode, 80),
+    };
+  }).filter(Boolean);
+}
+
 if (typeof module !== "undefined") module.exports = {
   staffClean_: staffClean_,
   staffTrue_: staffTrue_,
@@ -293,6 +337,7 @@ if (typeof module !== "undefined") module.exports = {
   staffDerivePresence_: staffDerivePresence_,
   staffPresenceFromSnapshotRecords_: staffPresenceFromSnapshotRecords_,
   staffEnrichPresence_: staffEnrichPresence_,
+  staffVisitSnapshotRecords_: staffVisitSnapshotRecords_,
   staffValidateProfile_: staffValidateProfile_,
   staffValidateTask_: staffValidateTask_,
   staffValidateTaskStatus_: staffValidateTaskStatus_,

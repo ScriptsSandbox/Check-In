@@ -118,6 +118,35 @@ test("compact presence records derive today's final state and reopened arrival",
   assert.equal(presence.present[0].checkInMethod, "Staff check-in");
 });
 
+test("visit snapshots freeze the current profile and latest registration with source provenance", () => {
+  const capturedAt = new Date("2026-08-27T17:00:00Z");
+  const snapshots = core.staffVisitSnapshotRecords_([
+    {
+      _sourceRow: 3498,
+      "Visit ID": "visit-1",
+      "Person ID": "person-1",
+      "Check In At": "2026-08-27T16:15:05Z",
+      "Event Type": "User Checkin",
+      "Authorizing Entity": "staff@ucsd.edu",
+      Flags: "Manual check-in",
+      "Source System": "Staff app",
+    },
+  ], [
+    { "Person ID": "person-1", "Display Name": "Jordan Lee", Role: "Graduate Student (MS)" },
+  ], [
+    { "Person ID": "person-1", Status: "Unreviewed", "Program / Department": "Old program", "DocuSign Status": "Awaiting verification" },
+    { "Person ID": "person-1", Status: "Approved", "Program / Department": "Applied Ocean Sciences", "DocuSign Status": "Completed" },
+  ], capturedAt, "Initial backfill", "UTC");
+  assert.equal(snapshots.length, 1);
+  assert.equal(snapshots[0].snapshotId, "snapshot_3498_visit-1");
+  assert.equal(snapshots[0].displayName, "Jordan Lee");
+  assert.equal(snapshots[0].role, "Graduate Student (MS)");
+  assert.equal(snapshots[0].program, "Applied Ocean Sciences");
+  assert.equal(snapshots[0].waiverStatus, "Completed");
+  assert.equal(snapshots[0].eventDateKey, "2026-08-27");
+  assert.equal(snapshots[0].captureMode, "Initial backfill");
+});
+
 test("people details enrich the compact presence feed without losing visit flags", () => {
   const presence = { present: [{ personId: "person-1", tools: [], flags: ["Closing soon"] }], left: [] };
   core.staffEnrichPresence_(presence, [{ personId: "person-1", attention: ["Waiver verification pending"], toolLabels: ["Laser cutter"] }]);
@@ -195,4 +224,14 @@ test("server defines the formula-backed Current Presence feed", () => {
   assert.match(serverCode, /function staffCurrentPresenceFormula_/);
   assert.match(serverCode, /Col4 >= date/);
   assert.match(serverCode, /function staffPresence\(\)/);
+});
+
+test("server defines protected visit snapshots and the rolling audit dashboard", () => {
+  assert.match(serverCode, /name: "Visit Snapshots"/);
+  assert.match(serverCode, /function setupAuditDashboard\(\)/);
+  assert.match(serverCode, /function captureVisitSnapshots\(\)/);
+  assert.match(serverCode, /everyMinutes\(5\)/);
+  assert.match(serverCode, /Read-only Scripps Sandbox audit dashboard/);
+  assert.match(serverCode, /Visits by day/);
+  assert.match(serverCode, /Visits by role/);
 });

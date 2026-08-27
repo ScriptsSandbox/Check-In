@@ -8,6 +8,7 @@ const STAFF_CONFIG_ = {
     registrations: { name: "Registrations", headers: ["Registration ID", "Person ID", "Status", "Submitted At", "Reviewed By", "Reviewed At", "Program / Department", "Identifier Type", "DocuSign Status", "Consent Version", "Anticipated Graduation", "Source"], allowAdditionalHeaders: true },
     cards: { name: "Cards", headers: ["Person ID", "Status"], allowAdditionalHeaders: true },
     visits: { name: "Visits", headers: ["Visit ID", "Person ID", "Check In At", "Event Type", "Authorizing Entity", "Flags", "Notes", "Source System", "Source Row"] },
+    visitSnapshots: { name: "Visit Snapshots", headers: ["Snapshot ID", "Source Visit Row", "Visit ID", "Person ID", "Event At", "Event Date", "Event Type", "Display Name", "Role", "Program / Department", "Registration Status", "Waiver Status", "Authorizing Entity", "Flags", "Source System", "Captured At", "Capture Mode"], createIfMissing: true },
     staffAccess: { name: "Staff Access", headers: ["Staff ID", "Name", "Email", "Role", "Active", "Card Linking Allowed", "Notes"] },
     training: { name: "Tool Training", headers: ["Training ID", "Person ID", "Tool", "Status", "Approved By", "Approved At", "FabMan Status", "Notes"] },
     fabmanLinks: { name: "FabMan Links", headers: ["Link ID", "Person ID", "FabMan Member ID", "Status", "Match Method", "Confirmed By", "Confirmed At", "Notes"] },
@@ -19,6 +20,9 @@ const STAFF_CONFIG_ = {
     scrippsWaivers: { name: "Scripps Waivers", headers: ["Received At", "Envelope ID", "Status", "Completed At", "Participant Name", "Participant Email", "Participant ID", "Normalized Identifier", "Template ID", "Source"], createIfMissing: true },
   },
 };
+
+const STAFF_AUDIT_DASHBOARD_SHEET_ = "Audit Dashboard";
+const STAFF_AUDIT_TRIGGER_FUNCTION_ = "captureVisitSnapshots";
 
 var STAFF_SPREADSHEET_MEMO_ = null;
 var STAFF_LEGACY_WAIVER_SHEET_MEMO_ = null;
@@ -73,6 +77,267 @@ function staffEnsureCurrentPresenceFormula_(sheet) {
   sheet.getRange(2, 8, rows, 1).setNumberFormat("0");
   sheet.setFrozenRows(1);
   return true;
+}
+
+function setupAuditDashboard() {
+  const access = staffRequireAccess_();
+  if (access.role !== "administrator" && access.email !== "scripps-sandbox@ucsd.edu") {
+    throw new Error("Administrator access is required to initialize audit reporting.");
+  }
+  const db = staffDatabase_(["visits", "people", "registrations", "visitSnapshots"]);
+  staffPrepareVisitSnapshotsSheet_(db.visitSnapshots);
+  const capture = staffCaptureVisitSnapshots_("Initial backfill");
+  const dashboard = staffBuildAuditDashboard_();
+  const triggerInstalled = staffInstallAuditSnapshotTrigger_();
+  staffProtectAuditSheet_(db.visitSnapshots, "Immutable visit-event snapshots maintained by the Staff Desk audit service");
+  staffProtectAuditSheet_(dashboard, "Read-only Scripps Sandbox audit dashboard");
+  return {
+    ok: true,
+    actor: access.email,
+    captured: capture.captured,
+    sourceEvents: capture.sourceEvents,
+    triggerInstalled: triggerInstalled,
+    dashboard: STAFF_AUDIT_DASHBOARD_SHEET_,
+  };
+}
+
+function captureVisitSnapshots() {
+  return staffCaptureVisitSnapshots_("Scheduled capture");
+}
+
+function staffCaptureVisitSnapshots_(requestedMode) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const db = staffDatabase_(["visits", "people", "registrations", "visitSnapshots"]);
+    staffAssertHeaders_(db.visitSnapshots, STAFF_CONFIG_.sheets.visitSnapshots.headers);
+    const visitLastRow = db.visits.getLastRow();
+    const snapshotLastRow = db.visitSnapshots.getLastRow();
+    let lastSourceRow = 1;
+    if (snapshotLastRow > 1) {
+      db.visitSnapshots.getRange(2, 2, snapshotLastRow - 1, 1).getValues().forEach(function (row) {
+        lastSourceRow = Math.max(lastSourceRow, Number(row[0]) || 0);
+      });
+    }
+    const startRow = Math.max(2, lastSourceRow + 1);
+    if (visitLastRow < startRow) {
+      return { ok: true, captured: 0, sourceEvents: Math.max(visitLastRow - 1, 0), lastSourceRow: lastSourceRow };
+    }
+
+    const visitHeaders = db.visits.getRange(1, 1, 1, db.visits.getLastColumn()).getDisplayValues()[0];
+    const visitValues = db.visits.getRange(startRow, 1, visitLastRow - startRow + 1, visitHeaders.length).getValues();
+    const visits = visitValues.map(function (row, index) {
+      const record = { _sourceRow: startRow + index };
+      visitHeaders.forEach(function (header, column) { record[header] = row[column]; });
+      return record;
+    });
+    const capturedAt = new Date();
+    const captureMode = snapshotLastRow > 1 ? "Scheduled capture" : staffClean_(requestedMode, 80) || "Initial backfill";
+    const snapshots = staffVisitSnapshotRecords_(
+      visits,
+      staffRecords_(db.people),
+      staffRecords_(db.registrations),
+      capturedAt,
+      captureMode,
+      Session.getScriptTimeZone()
+    );
+    if (!snapshots.length) return { ok: true, captured: 0, sourceEvents: Math.max(visitLastRow - 1, 0), lastSourceRow: lastSourceRow };
+
+    const rows = snapshots.map(function (snapshot) {
+      const dateParts = snapshot.eventDateKey.split("-").map(Number);
+      return [
+        snapshot.snapshotId,
+        snapshot.sourceVisitRow,
+        snapshot.visitId,
+        snapshot.personId,
+        snapshot.eventAt,
+        new Date(dateParts[0], dateParts[1] - 1, dateParts[2]),
+        snapshot.eventType,
+        staffSheetSafe_(snapshot.displayName),
+        staffSheetSafe_(snapshot.role),
+        staffSheetSafe_(snapshot.program),
+        staffSheetSafe_(snapshot.registrationStatus),
+        staffSheetSafe_(snapshot.waiverStatus),
+        staffSheetSafe_(snapshot.authorizingEntity),
+        staffSheetSafe_(snapshot.flags),
+        staffSheetSafe_(snapshot.sourceSystem),
+        snapshot.capturedAt,
+        snapshot.captureMode,
+      ];
+    });
+    staffEnsureSheetRows_(db.visitSnapshots, snapshotLastRow + rows.length);
+    const width = STAFF_CONFIG_.sheets.visitSnapshots.headers.length;
+    for (let offset = 0; offset < rows.length; offset += 500) {
+      const chunk = rows.slice(offset, offset + 500);
+      db.visitSnapshots.getRange(snapshotLastRow + 1 + offset, 1, chunk.length, width).setValues(chunk);
+    }
+    db.visitSnapshots.getRange(snapshotLastRow + 1, 5, rows.length, 2).setNumberFormats(rows.map(function () { return ["yyyy-mm-dd hh:mm:ss", "yyyy-mm-dd"]; }));
+    db.visitSnapshots.getRange(snapshotLastRow + 1, 16, rows.length, 1).setNumberFormat("yyyy-mm-dd hh:mm:ss");
+    SpreadsheetApp.flush();
+    return {
+      ok: true,
+      captured: rows.length,
+      sourceEvents: Math.max(visitLastRow - 1, 0),
+      lastSourceRow: snapshots[snapshots.length - 1].sourceVisitRow,
+      capturedAt: capturedAt.toISOString(),
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function staffPrepareVisitSnapshotsSheet_(sheet) {
+  staffAssertHeaders_(sheet, STAFF_CONFIG_.sheets.visitSnapshots.headers);
+  sheet.setFrozenRows(1);
+  sheet.setHiddenGridlines(true);
+  const header = sheet.getRange(1, 1, 1, STAFF_CONFIG_.sheets.visitSnapshots.headers.length);
+  header.setBackground("#123b5d").setFontColor("#ffffff").setFontWeight("bold").setWrap(true);
+  [150, 100, 240, 220, 150, 100, 130, 180, 170, 220, 140, 160, 190, 180, 140, 150, 130].forEach(function (width, index) {
+    sheet.setColumnWidth(index + 1, width);
+  });
+  if (sheet.getMaxRows() > 1) {
+    sheet.getRange(2, 5, sheet.getMaxRows() - 1, 1).setNumberFormat("yyyy-mm-dd hh:mm:ss");
+    sheet.getRange(2, 6, sheet.getMaxRows() - 1, 1).setNumberFormat("yyyy-mm-dd");
+    sheet.getRange(2, 16, sheet.getMaxRows() - 1, 1).setNumberFormat("yyyy-mm-dd hh:mm:ss");
+  }
+}
+
+function staffBuildAuditDashboard_() {
+  const spreadsheet = staffSpreadsheet_();
+  let sheet = spreadsheet.getSheetByName(STAFF_AUDIT_DASHBOARD_SHEET_);
+  if (!sheet) sheet = spreadsheet.insertSheet(STAFF_AUDIT_DASHBOARD_SHEET_);
+  if (sheet.getMaxRows() < 50) sheet.insertRowsAfter(sheet.getMaxRows(), 50 - sheet.getMaxRows());
+  if (sheet.getMaxColumns() < 14) sheet.insertColumnsAfter(sheet.getMaxColumns(), 14 - sheet.getMaxColumns());
+  sheet.getRange(1, 1, 50, 14).breakApart().clear({ contentsOnly: false });
+  sheet.getCharts().forEach(function (chart) { sheet.removeChart(chart); });
+  sheet.showColumns(1, Math.min(sheet.getMaxColumns(), 14));
+  sheet.setHiddenGridlines(true);
+  sheet.setFrozenRows(2);
+
+  sheet.getRange("A1:H1").merge().setValue("Scripps Sandbox Audit Dashboard");
+  sheet.getRange("A2:H2").merge().setValue("Rolling 30-day usage and data-quality view · formulas update automatically");
+  sheet.getRange("A4").setValue("Period start");
+  sheet.getRange("B4").setFormula("=TODAY()-29").setNumberFormat("mmm d, yyyy");
+  sheet.getRange("D4").setValue("Period end");
+  sheet.getRange("E4").setFormula("=TODAY()").setNumberFormat("mmm d, yyyy");
+  sheet.getRange("G4").setValue("Last snapshot");
+  sheet.getRange("H4").setFormula("=IFERROR(MAX('Visit Snapshots'!P2:P),\"\")").setNumberFormat("mmm d, yyyy h:mm am/pm");
+
+  const metricLabels = [
+    ["Visits", "Unique visitors", "Manual check-ins", "Pending snapshots"],
+    ["Days with activity", "Avg visits / active day", "Check-ins missing role", "Duplicate visit IDs"],
+  ];
+  const metricFormulas = [
+    [
+      "=COUNTIFS('Visit Snapshots'!G2:G,\"User Checkin\",'Visit Snapshots'!F2:F,\">=\"&$B$4,'Visit Snapshots'!F2:F,\"<=\"&$E$4)",
+      "=IFERROR(COUNTUNIQUE(FILTER('Visit Snapshots'!D2:D,'Visit Snapshots'!G2:G=\"User Checkin\",'Visit Snapshots'!F2:F>=$B$4,'Visit Snapshots'!F2:F<=$E$4)),0)",
+      "=COUNTIFS('Visit Snapshots'!G2:G,\"User Checkin\",'Visit Snapshots'!N2:N,\"*Manual check-in*\",'Visit Snapshots'!F2:F,\">=\"&$B$4,'Visit Snapshots'!F2:F,\"<=\"&$E$4)",
+      "=MAX(0,COUNTA(Visits!A2:A)-COUNTA('Visit Snapshots'!C2:C))",
+    ],
+    [
+      "=IFERROR(COUNTUNIQUE(FILTER('Visit Snapshots'!F2:F,'Visit Snapshots'!G2:G=\"User Checkin\",'Visit Snapshots'!F2:F>=$B$4,'Visit Snapshots'!F2:F<=$E$4)),0)",
+      "=IFERROR(A7/A11,0)",
+      "=COUNTIFS('Visit Snapshots'!G2:G,\"User Checkin\",'Visit Snapshots'!I2:I,\"\",'Visit Snapshots'!F2:F,\">=\"&$B$4,'Visit Snapshots'!F2:F,\"<=\"&$E$4)",
+      "=IFERROR(COUNTA(FILTER(UNIQUE(FILTER('Visit Snapshots'!C2:C,'Visit Snapshots'!C2:C<>\"\")),COUNTIF('Visit Snapshots'!C2:C,UNIQUE(FILTER('Visit Snapshots'!C2:C,'Visit Snapshots'!C2:C<>\"\")))>1)),0)",
+    ],
+  ];
+  [6, 10].forEach(function (labelRow, groupIndex) {
+    [1, 3, 5, 7].forEach(function (column, metricIndex) {
+      sheet.getRange(labelRow, column, 1, 2).merge().setValue(metricLabels[groupIndex][metricIndex]);
+      sheet.getRange(labelRow + 1, column, 2, 2).merge();
+      sheet.getRange(labelRow + 1, column).setFormula(metricFormulas[groupIndex][metricIndex]);
+    });
+  });
+  sheet.getRange("C11:D12").setNumberFormat("0.0");
+
+  sheet.getRange("J1").setFormula("=QUERY({'Visit Snapshots'!F2:F,'Visit Snapshots'!D2:D,'Visit Snapshots'!G2:G},\"select Col1,count(Col2) where Col3='User Checkin' and Col1 >= date '\"&TEXT($B$4,\"yyyy-mm-dd\")&\"' and Col1 <= date '\"&TEXT($E$4,\"yyyy-mm-dd\")&\"' group by Col1 order by Col1 label Col1 'Date', count(Col2) 'Visits'\",0)");
+  sheet.getRange("M1").setFormula("=QUERY({'Visit Snapshots'!I2:I,'Visit Snapshots'!D2:D,'Visit Snapshots'!F2:F,'Visit Snapshots'!G2:G},\"select Col1,count(Col2) where Col4='User Checkin' and Col3 >= date '\"&TEXT($B$4,\"yyyy-mm-dd\")&\"' and Col3 <= date '\"&TEXT($E$4,\"yyyy-mm-dd\")&\"' and Col1 is not null group by Col1 order by count(Col2) desc label Col1 'Role', count(Col2) 'Visits'\",0)");
+
+  sheet.getRange("A35:H37").merge().setValue("Audit note: historical events created during the initial backfill use the latest profile data available at setup. New snapshots preserve the profile and registration state captured within about five minutes of each event.");
+  staffStyleAuditDashboard_(sheet);
+
+  const dailyChart = sheet.newChart()
+    .setChartType(Charts.ChartType.COLUMN)
+    .addRange(sheet.getRange("J1:K32"))
+    .setNumHeaders(1)
+    .setPosition(14, 1, 0, 0)
+    .setOption("title", "Visits by day")
+    .setOption("legend", { position: "none" })
+    .setOption("colors", ["#ff981f"])
+    .setOption("backgroundColor", "#f7f3e8")
+    .setOption("width", 520)
+    .setOption("height", 360)
+    .build();
+  sheet.insertChart(dailyChart);
+  const roleChart = sheet.newChart()
+    .setChartType(Charts.ChartType.BAR)
+    .addRange(sheet.getRange("M1:N20"))
+    .setNumHeaders(1)
+    .setPosition(14, 5, 0, 0)
+    .setOption("title", "Visits by role")
+    .setOption("legend", { position: "none" })
+    .setOption("colors", ["#0a7898"])
+    .setOption("backgroundColor", "#f7f3e8")
+    .setOption("width", 520)
+    .setOption("height", 360)
+    .build();
+  sheet.insertChart(roleChart);
+  sheet.hideColumns(10, 5);
+  SpreadsheetApp.flush();
+  return sheet;
+}
+
+function staffStyleAuditDashboard_(sheet) {
+  const navy = "#123b5d";
+  const orange = "#ff981f";
+  const cream = "#f7f3e8";
+  const paleBlue = "#e4f2f5";
+  sheet.getRange("A1:H37").setFontFamily("Arial").setFontColor(navy).setBackground(cream);
+  sheet.getRange("A1:H1").setBackground(navy).setFontColor("#ffffff").setFontSize(20).setFontWeight("bold").setHorizontalAlignment("left");
+  sheet.getRange("A2:H2").setBackground(navy).setFontColor("#ffffff").setFontSize(10).setHorizontalAlignment("left");
+  sheet.getRange("A4:H4").setFontWeight("bold").setBorder(false, false, true, false, false, false, orange, SpreadsheetApp.BorderStyle.SOLID_THICK);
+  [6, 10].forEach(function (row) {
+    sheet.getRange(row, 1, 1, 8).setBackground(navy).setFontColor("#ffffff").setFontWeight("bold").setHorizontalAlignment("center");
+    sheet.getRange(row + 1, 1, 2, 8).setBackground("#ffffff").setFontSize(22).setFontWeight("bold").setHorizontalAlignment("center").setVerticalAlignment("middle");
+  });
+  sheet.getRange("G7:H8").setBackground(paleBlue);
+  sheet.getRange("E11:H12").setBackground(paleBlue);
+  sheet.getRange("A35:H37").setBackground("#ffffff").setWrap(true).setVerticalAlignment("middle").setFontSize(10).setFontStyle("italic");
+  for (let column = 1; column <= 8; column += 1) sheet.setColumnWidth(column, 135);
+  sheet.setRowHeight(1, 38);
+  sheet.setRowHeight(2, 24);
+  sheet.setRowHeights(7, 2, 36);
+  sheet.setRowHeights(11, 2, 36);
+  sheet.setRowHeights(35, 3, 30);
+}
+
+function staffInstallAuditSnapshotTrigger_() {
+  const matches = ScriptApp.getProjectTriggers().filter(function (trigger) {
+    return trigger.getHandlerFunction() === STAFF_AUDIT_TRIGGER_FUNCTION_;
+  });
+  matches.slice(1).forEach(function (trigger) { ScriptApp.deleteTrigger(trigger); });
+  if (matches.length) return false;
+  ScriptApp.newTrigger(STAFF_AUDIT_TRIGGER_FUNCTION_).timeBased().everyMinutes(5).create();
+  return true;
+}
+
+function staffProtectAuditSheet_(sheet, description) {
+  let protection = sheet.getProtections(SpreadsheetApp.ProtectionType.SHEET).filter(function (item) {
+    return item.getDescription() === description;
+  })[0];
+  if (!protection) protection = sheet.protect().setDescription(description);
+  protection.setWarningOnly(false);
+  const effectiveEmail = String(Session.getEffectiveUser().getEmail() || "").trim().toLowerCase();
+  const otherEditors = protection.getEditors().filter(function (user) {
+    return String(user.getEmail() || "").trim().toLowerCase() !== effectiveEmail;
+  });
+  if (otherEditors.length) protection.removeEditors(otherEditors);
+  if (effectiveEmail) protection.addEditor(effectiveEmail);
+  if (protection.canDomainEdit()) protection.setDomainEdit(false);
+}
+
+function staffEnsureSheetRows_(sheet, requiredRows) {
+  if (sheet.getMaxRows() < requiredRows) sheet.insertRowsAfter(sheet.getMaxRows(), requiredRows - sheet.getMaxRows());
 }
 
 function staffTasks() {
