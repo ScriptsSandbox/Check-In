@@ -45,7 +45,8 @@ const REGISTRATION_CONFIG_ = {
 function doGet() {
   return HtmlService.createTemplateFromFile("Index")
     .evaluate()
-    .setTitle("Create a Scripps Sandbox account");
+    .setTitle("Create a Scripps Sandbox account")
+    .setFaviconUrl("https://drive.usercontent.google.com/download?id=1Veyf_XNGNz5ZVD6AVTPOkZeeuAg0J7d_&export=view&filename=scripps-sandbox-favicon.png");
 }
 
 function setupRegistrationSheet() {

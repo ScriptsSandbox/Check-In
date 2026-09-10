@@ -2,19 +2,17 @@
 
 ## Recommended: a normal WordPress button
 
-Use a standard WordPress **Buttons** block with the label **Create your Sandbox account** and link it to the public `/join` URL. Set the link to open in a new tab.
+Use a standard WordPress **Buttons** block with the label **Create your Sandbox account** and link it to the production registration web app. Set the link to open in a new tab.
 
 This is the most reliable option under IT controls, works well on phones, and gives the form the full screen it needs. The button can sit beneath a short first-visit explanation or beside a QR code.
 
-The current owner-only staging destination is:
+The production destination is:
 
-`https://scripps-sandbox-check-in.rjatplay.chatgpt.site/join`
-
-Replace that address with the approved public hostname before the page is promoted to visitors.
+`https://script.google.com/macros/s/AKfycbyIQrU1P7aIlg8unnRADdi6kpTlChyVEI_mWZ8-oArR8WNRpv1WJZyxwsvshGvpJLLnOw/exec`
 
 ## If the classic 4:3 iframe is allowed
 
-Embed the purpose-built `/join/embed` route rather than the full form. It is a concise 4:3 entry card; its button opens the complete registration form in a new tab.
+The production Google Apps Script form is intended to open as a normal page, not inside an iframe. If a future public Sites deployment replaces it, embed the purpose-built `/join/embed` route rather than the full form.
 
 ```html
 <iframe
