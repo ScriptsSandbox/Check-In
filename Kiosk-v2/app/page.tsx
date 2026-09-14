@@ -44,6 +44,9 @@ type Announcement = {
 };
 
 const REGISTRATION_URL = process.env.NEXT_PUBLIC_REGISTRATION_URL?.trim() || "";
+const REGISTRATION_LANDING_URL =
+  process.env.NEXT_PUBLIC_REGISTRATION_LANDING_URL?.trim() ||
+  "https://scrippssandbox.ucsd.edu/start_here/";
 const WAIVER_URL = process.env.NEXT_PUBLIC_WAIVER_URL?.trim() || "";
 
 type ScannerStatus = "demo" | "connecting" | "connected" | "disconnected";
@@ -1050,7 +1053,14 @@ export default function Home() {
           {REGISTRATION_URL ? (
             <div className="onboarding-primary">
               <div className="qr-code qr-code-large" aria-label="QR code for the Scripps Sandbox registration form">
-                <QRCodeSVG value={REGISTRATION_URL + "?v=5"} size={286} level="M" bgColor="#f2eee3" fgColor="#092235" />
+                <QRCodeSVG
+                  value={REGISTRATION_LANDING_URL}
+                  size={286}
+                  level="L"
+                  marginSize={4}
+                  bgColor="#f2eee3"
+                  fgColor="#092235"
+                />
                 <span>SCAN TO CREATE YOUR ACCOUNT</span>
               </div>
               <div>
