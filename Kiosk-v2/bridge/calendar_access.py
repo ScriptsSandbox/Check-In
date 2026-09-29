@@ -14,7 +14,12 @@ from zoneinfo import ZoneInfo
 
 
 CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly"
-DEFAULT_OPEN_MARKERS = ("door open", "independent access", "open access")
+DEFAULT_OPEN_MARKERS = (
+    "makerspace open",
+    "door open",
+    "independent access",
+    "open access",
+)
 DEFAULT_CLOSED_MARKERS = ("makerspace closed", "sandbox closed", "closed")
 
 

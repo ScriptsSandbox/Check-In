@@ -24,6 +24,15 @@ def test_real_open_title_with_nonbreaking_space_is_open() -> None:
     assert classify_title("Door Open –\u00a0Independent Access") == "open"
 
 
+def test_makerspace_open_event_is_open() -> None:
+    result = determine_access_status(
+        [event("Makerspace Open", at(9), at(17))], at(10)
+    )
+    assert result.mode == "open"
+    assert result.minutes_until_close == 420
+    assert result.closes_at == at(17)
+
+
 def test_final_thirty_minutes_are_closing_soon() -> None:
     result = determine_access_status(
         [event("Door Open – Independent Access", at(12), at(14))], at(13, 31)
